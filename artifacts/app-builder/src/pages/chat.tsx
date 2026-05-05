@@ -6,8 +6,7 @@ import {
   Play, Monitor, Globe, AlignJustify, LayoutPanelLeft,
   Lock, Database, UserPlus, ChevronDown, ChevronUp,
   Folder, X, Search, History, Share2, MoreHorizontal,
-  ArrowUpDown, Clock, Square, BookOpen, GitBranch,
-  Zap, Code2, FileCode
+  ArrowUpDown, Clock, Square, BookOpen
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -47,18 +46,122 @@ const AGENT_MODES: { id: AgentMode; label: string; desc: string; color: string; 
   { id: "Lite", label: "Lite", desc: "Fast and lightweight. Great for simple edits.", color: "text-muted-foreground" },
 ];
 
-const WORKING_ICONS = [
-  <BookOpen size={14} className="text-muted-foreground" />,
-  <AlignJustify size={14} className="text-muted-foreground" />,
-  <span className="text-muted-foreground text-[13px]">⠿</span>,
-  <Plus size={14} className="text-muted-foreground" />,
-  <span className="text-muted-foreground text-[13px]">⠿</span>,
-  <span className="text-purple-400 text-[13px]">⠿⠿</span>,
-];
-
-function AgentDots({ size = 18, className = "" }: { size?: number; className?: string }) {
+/* ── Replit Agent SVG icon (3×2 grid of dots) ── */
+function AgentIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+  const s = size;
+  const r = s * 0.13;
+  const gap = s * 0.33;
+  const offX = s * 0.115;
+  const offY = s * 0.2;
+  const dots = [
+    [0, 0], [1, 0], [2, 0],
+    [0, 1], [1, 1], [2, 1],
+  ];
   return (
-    <span className={cn("font-bold", className)} style={{ fontSize: size }}>⠿⠿</span>
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} fill="none" className={className}>
+      {dots.map(([col, row], i) => (
+        <circle
+          key={i}
+          cx={offX + col * gap}
+          cy={offY + row * gap}
+          r={r}
+          fill="currentColor"
+        />
+      ))}
+    </svg>
+  );
+}
+
+/* Legacy text dots used for timestamps only */
+function AgentDots({ size = 18, className = "" }: { size?: number; className?: string }) {
+  return <AgentIcon size={size} className={className} />;
+}
+
+/* "Thinking." card — exact Replit style */
+function ThinkingCard() {
+  const [dots, setDots] = useState(".");
+  useEffect(() => {
+    const t = setInterval(() => setDots(d => d.length >= 3 ? "." : d + "."), 500);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.2 }}
+      className="flex items-center gap-3 px-3 py-3 bg-[#1e1e2e] border border-border/50 rounded-2xl w-fit"
+      data-testid="thinking-indicator"
+    >
+      <div className="w-9 h-9 rounded-xl bg-[#2a1f4e] border border-purple-500/30 flex items-center justify-center shrink-0">
+        <motion.div
+          animate={{ scale: [1, 1.15, 1], opacity: [0.8, 1, 0.8] }}
+          transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <AgentIcon size={20} className="text-purple-400" />
+        </motion.div>
+      </div>
+      <span className="text-sm font-medium text-foreground">
+        Thinking{dots}
+      </span>
+    </motion.div>
+  );
+}
+
+/* "Working.." card — exact Replit style */
+function WorkingCard() {
+  const [dots, setDots] = useState("..");
+  useEffect(() => {
+    const t = setInterval(() => setDots(d => d.length >= 3 ? "." : d + "."), 400);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.2 }}
+      className="flex items-center gap-3 px-3 py-3 bg-[#1e1e2e] border border-border/50 rounded-2xl w-fit"
+      data-testid="working-indicator"
+    >
+      <div className="w-9 h-9 rounded-xl bg-[#2a1f4e] border border-purple-500/30 flex items-center justify-center shrink-0">
+        <motion.div
+          animate={{ rotate: [0, 15, -15, 0] }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <AgentIcon size={20} className="text-purple-400" />
+        </motion.div>
+      </div>
+      <span className="text-sm font-medium text-foreground">
+        Working{dots}
+      </span>
+    </motion.div>
+  );
+}
+
+/* Planning step row (shows between messages while planning) */
+function PlanningStep({ label, elapsed }: { label: string; elapsed: number }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <motion.button
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      onClick={() => setOpen(v => !v)}
+      className="flex items-center gap-2 text-left w-full py-1"
+    >
+      <div className="w-6 h-6 rounded-lg bg-secondary/60 border border-border/50 flex items-center justify-center shrink-0">
+        <motion.div
+          animate={{ rotate: [0, 360] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+        >
+          <AgentIcon size={13} className="text-muted-foreground" />
+        </motion.div>
+      </div>
+      <span className="flex-1 text-xs text-muted-foreground truncate">
+        {label} ({elapsed} sec...)
+      </span>
+      <ChevronDown size={13} className={cn("text-muted-foreground/50 shrink-0 transition-transform", open && "rotate-180")} />
+    </motion.button>
   );
 }
 
@@ -79,57 +182,16 @@ function TimeStamp({ date }: { date?: Date }) {
   );
 }
 
-function ActionsBadge({ count, isWorking }: { count: number; isWorking?: boolean }) {
+function ActionsBadge({ count }: { count: number }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex items-center gap-2 px-3 py-2 bg-card border border-border/60 rounded-xl w-full"
+      className="flex items-center gap-2 py-1"
     >
-      <motion.span
-        className="text-muted-foreground"
-        animate={isWorking ? { rotate: [0, 180, 360] } : {}}
-        transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-      >
-        <AgentDots size={14} className="text-primary/70" />
-      </motion.span>
-      <motion.span
-        className="text-muted-foreground text-xs"
-        animate={{ opacity: [0.7, 1, 0.7] }}
-        transition={{ duration: 1.4, repeat: Infinity }}
-      >
-        →
-      </motion.span>
-      <AgentDots size={14} className="text-muted-foreground/60" />
-      <span className="text-xs text-muted-foreground font-medium">{count} actions</span>
-    </motion.div>
-  );
-}
-
-function WorkingBar() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      className="flex items-center gap-2 px-3 py-2.5 bg-card border border-border/60 rounded-xl"
-    >
-      {WORKING_ICONS.map((icon, i) => (
-        <motion.span
-          key={i}
-          animate={{ opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.15 }}
-        >
-          {icon}
-        </motion.span>
-      ))}
-      <motion.span
-        className="text-xs text-muted-foreground ml-1 font-medium"
-        animate={{ opacity: [0.5, 1, 0.5] }}
-        transition={{ duration: 1.5, repeat: Infinity }}
-      >
-        Working..
-      </motion.span>
+      <BookOpen size={14} className="text-muted-foreground/60" />
+      <AgentIcon size={14} className="text-muted-foreground/60" />
+      <span className="text-xs text-muted-foreground/70 font-medium">{count} actions</span>
     </motion.div>
   );
 }
@@ -529,11 +591,22 @@ export default function Chat() {
           )}
         </AnimatePresence>
 
-        {/* Working bar (replaces old thinking dots) */}
+        {/* Thinking / Working cards */}
         <AnimatePresence>
           {isThinking && !showBuildProgress && (
-            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-              <WorkingBar />
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="space-y-2"
+            >
+              {actionCount < 3 ? <ThinkingCard /> : <WorkingCard />}
+              {actionCount >= 3 && (
+                <PlanningStep
+                  label="Planning UI element implementation"
+                  elapsed={Math.max(actionCount * 4, 1)}
+                />
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -739,38 +812,57 @@ export default function Chat() {
 
       {/* ── Workspace Toolbar ── */}
       <div className="shrink-0 border-t border-border bg-card/90">
-        <div className="flex items-center justify-around h-12 px-1">
-          {[
-            { icon: <Play size={19} />, testId: "toolbar-run", label: "Run", active: false },
-            { icon: <Monitor size={19} />, testId: "toolbar-webview", label: "Webview", active: false },
-            {
-              icon: (
-                <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-purple-500/20 border border-purple-400/40">
-                  <AgentDots size={13} className="text-purple-400" />
-                </div>
-              ),
-              testId: "toolbar-agent", label: "Agent", active: true
-            },
-            { icon: <Globe size={19} />, testId: "toolbar-deploy", label: "Deploy", active: false },
-            { icon: <Plus size={19} />, testId: "toolbar-new-tab", label: "New Tab", active: false },
-            { icon: <AlignJustify size={19} />, testId: "toolbar-files", label: "Files", active: false },
-            { icon: <LayoutPanelLeft size={19} />, testId: "toolbar-split", label: "Split", active: false },
-          ].map((item) => (
-            <motion.button
-              key={item.testId}
-              whileTap={{ scale: 0.88 }}
-              className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-lg transition-colors",
-                item.active
-                  ? "text-purple-400"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-              )}
-              data-testid={item.testId}
-              title={item.label}
+        <div className="flex items-center justify-around h-13 px-1 py-1 relative">
+
+          {/* Run */}
+          <motion.button whileTap={{ scale: 0.88 }} className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-lg transition-colors" data-testid="toolbar-run" title="Run">
+            <Play size={19} />
+          </motion.button>
+
+          {/* Webview */}
+          <motion.button whileTap={{ scale: 0.88 }} className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-lg transition-colors" data-testid="toolbar-webview" title="Webview">
+            <Monitor size={19} />
+          </motion.button>
+
+          {/* Agent — active with glow + underline indicator */}
+          <motion.button
+            whileTap={{ scale: 0.88 }}
+            className="relative w-11 h-11 flex flex-col items-center justify-center gap-0.5 rounded-xl bg-[#2a1f4e]/70 border border-purple-500/30 transition-colors"
+            data-testid="toolbar-agent"
+            title="Agent"
+          >
+            <motion.div
+              animate={{ scale: [1, 1.08, 1], opacity: [0.85, 1, 0.85] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
             >
-              {item.icon}
-            </motion.button>
-          ))}
+              <AgentIcon size={22} className="text-purple-400" />
+            </motion.div>
+            {/* Active underline */}
+            <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-purple-400" />
+          </motion.button>
+
+          {/* Separator */}
+          <div className="w-px h-6 bg-border/50 mx-1" />
+
+          {/* Deploy */}
+          <motion.button whileTap={{ scale: 0.88 }} className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-lg transition-colors" data-testid="toolbar-deploy" title="Deploy">
+            <Globe size={19} />
+          </motion.button>
+
+          {/* New Tab */}
+          <motion.button whileTap={{ scale: 0.88 }} className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-lg transition-colors" data-testid="toolbar-new-tab" title="New Tab">
+            <Plus size={19} />
+          </motion.button>
+
+          {/* Files */}
+          <motion.button whileTap={{ scale: 0.88 }} className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-lg transition-colors" data-testid="toolbar-files" title="Files">
+            <AlignJustify size={19} />
+          </motion.button>
+
+          {/* Split */}
+          <motion.button whileTap={{ scale: 0.88 }} className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-lg transition-colors" data-testid="toolbar-split" title="Split Screen">
+            <LayoutPanelLeft size={19} />
+          </motion.button>
         </div>
       </div>
     </motion.div>
