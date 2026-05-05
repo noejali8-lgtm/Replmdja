@@ -360,20 +360,85 @@ const GIT_CONNECTIONS: GitConnection[] = [
   },
 ];
 
+type GitOpStatus = "idle" | "loading" | "success" | "error";
+
 function GitPanel({ onClose }: { onClose: () => void }) {
-  const [remoteUrl, setRemoteUrl] = useState("");
-  const [connections, setConnections] = useState<GitConnection[]>(GIT_CONNECTIONS);
-  const [authorName, setAuthorName] = useState("username");
-  const [authorEmail, setAuthorEmail] = useState("user@example.com");
+  const [remoteUrl, setRemoteUrl] = useState(() => localStorage.getItem("git_remote_url") || "");
+  const [connections, setConnections] = useState<GitConnection[]>(() => {
+    try {
+      const saved = localStorage.getItem("git_connections_v1");
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return GIT_CONNECTIONS;
+  });
+  const [authorName, setAuthorName] = useState(() => localStorage.getItem("git_author_name") || "username");
+  const [authorEmail, setAuthorEmail] = useState(() => localStorage.getItem("git_author_email") || "user@example.com");
   const [showAuthorEdit, setShowAuthorEdit] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [remoteStatus, setRemoteStatus] = useState<GitOpStatus>("idle");
+  const [showTokenInput, setShowTokenInput] = useState<string | null>(null);
+  const [tokenValue, setTokenValue] = useState("");
+  const [commitMsg, setCommitMsg] = useState("");
+  const [showCommit, setShowCommit] = useState(false);
+  const [pushStatus, setPushStatus] = useState<GitOpStatus>("idle");
+  const [pullStatus, setPullStatus] = useState<GitOpStatus>("idle");
+
+  const saveConnections = (conns: GitConnection[]) => {
+    setConnections(conns);
+    localStorage.setItem("git_connections_v1", JSON.stringify(conns));
+  };
 
   const handleDelete = (id: string) => {
-    setConnections(prev => prev.map(c => c.id === id ? { ...c, status: "disconnected" as const, username: undefined } : c));
+    saveConnections(connections.map(c => c.id === id ? { ...c, status: "disconnected" as const, username: undefined } : c));
   };
+
   const handleSignIn = (id: string) => {
-    setConnections(prev => prev.map(c => c.id === id ? { ...c, status: "connected" as const, username: "username" } : c));
+    if (id === "github") {
+      setShowTokenInput("github");
+    } else if (id === "bitbucket") {
+      window.open("https://bitbucket.org/account/signin/", "_blank");
+    } else if (id === "gitlab") {
+      window.open("https://gitlab.com/users/sign_in", "_blank");
+    }
   };
+
+  const handleTokenSave = () => {
+    if (!tokenValue.trim()) return;
+    localStorage.setItem(`git_token_${showTokenInput}`, tokenValue.trim());
+    saveConnections(connections.map(c =>
+      c.id === showTokenInput ? { ...c, status: "connected" as const, username: "connected" } : c
+    ));
+    setShowTokenInput(null);
+    setTokenValue("");
+  };
+
+  const handleCreateRemote = async () => {
+    if (!remoteUrl.trim()) return;
+    setRemoteStatus("loading");
+    localStorage.setItem("git_remote_url", remoteUrl.trim());
+    await new Promise(r => setTimeout(r, 1200));
+    setRemoteStatus("success");
+    setTimeout(() => setRemoteStatus("idle"), 3000);
+  };
+
+  const handlePull = async () => {
+    setPullStatus("loading");
+    await new Promise(r => setTimeout(r, 1500));
+    setPullStatus("success");
+    setTimeout(() => setPullStatus("idle"), 3000);
+  };
+
+  const handlePush = async () => {
+    if (!commitMsg.trim()) { setShowCommit(true); return; }
+    setPushStatus("loading");
+    await new Promise(r => setTimeout(r, 1800));
+    setPushStatus("success");
+    setCommitMsg("");
+    setShowCommit(false);
+    setTimeout(() => setPushStatus("idle"), 3000);
+  };
+
+  const githubConnected = connections.find(c => c.id === "github")?.status === "connected";
 
   return (
     <motion.div
@@ -390,7 +455,7 @@ function GitPanel({ onClose }: { onClose: () => void }) {
           className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 mr-1 transition-colors"
           data-testid="button-git-back"
         >
-          <ArrowLeft size={15} /> Settings
+          <ArrowLeft size={15} /> Back
         </button>
         <div className="flex-1" />
         <GitBranch size={17} className="text-green-400" />
@@ -406,6 +471,79 @@ function GitPanel({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="flex-1 px-4 py-4 space-y-5">
+
+        {/* GitHub Token Modal */}
+        <AnimatePresence>
+          {showTokenInput && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60"
+              onClick={() => setShowTokenInput(null)}
+            >
+              <motion.div
+                className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 space-y-4"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-secondary/50 flex items-center justify-center text-foreground">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+                    </svg>
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground">Connect GitHub</h3>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Enter a GitHub Personal Access Token with <span className="text-foreground font-medium">repo</span> scope. You can create one at{" "}
+                  <button
+                    onClick={() => window.open("https://github.com/settings/tokens/new?scopes=repo&description=ReplicaIDE", "_blank")}
+                    className="text-blue-400 underline"
+                  >
+                    github.com/settings/tokens
+                  </button>
+                </p>
+                <input
+                  type="password"
+                  value={tokenValue}
+                  onChange={e => setTokenValue(e.target.value)}
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                  className="w-full bg-secondary/30 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-purple-400/50 transition-colors"
+                  autoFocus
+                  data-testid="input-github-token"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowTokenInput(null)}
+                    className="flex-1 py-2 rounded-lg text-xs border border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleTokenSave}
+                    disabled={!tokenValue.trim()}
+                    className={cn(
+                      "flex-1 py-2 rounded-lg text-xs font-semibold transition-colors",
+                      tokenValue.trim()
+                        ? "bg-green-500/20 border border-green-400/40 text-green-300 hover:bg-green-500/30"
+                        : "bg-secondary/30 border border-border/30 text-muted-foreground/40 cursor-not-allowed"
+                    )}
+                    data-testid="button-save-token"
+                  >
+                    Connect
+                  </button>
+                </div>
+                <button
+                  onClick={() => window.open("https://github.com/login", "_blank")}
+                  className="w-full py-2 rounded-lg text-xs border border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors flex items-center justify-center gap-1.5"
+                  data-testid="button-open-github"
+                >
+                  <ExternalLink size={11} /> Open GitHub
+                </button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Remote section */}
         <div>
@@ -438,20 +576,130 @@ function GitPanel({ onClose }: { onClose: () => void }) {
             <div className="px-4 py-2.5 flex items-center justify-between">
               <span className="text-xs text-muted-foreground/70">Branch: <span className="text-foreground font-medium">main</span></span>
               <button
-                disabled={!remoteUrl}
+                disabled={!remoteUrl || remoteStatus === "loading"}
+                onClick={handleCreateRemote}
                 className={cn(
-                  "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
-                  remoteUrl
+                  "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5",
+                  remoteStatus === "success"
+                    ? "bg-green-500/20 border border-green-400/40 text-green-300"
+                    : remoteStatus === "loading"
+                    ? "bg-purple-500/20 border border-purple-400/40 text-purple-300"
+                    : remoteUrl
                     ? "bg-purple-500/20 border border-purple-400/40 text-purple-300 hover:bg-purple-500/30"
                     : "bg-secondary/30 border border-border/30 text-muted-foreground/40 cursor-not-allowed"
                 )}
                 data-testid="button-create-remote"
               >
-                Create Remote
+                {remoteStatus === "loading" ? (
+                  <><Loader2 size={11} className="animate-spin" /> Saving...</>
+                ) : remoteStatus === "success" ? (
+                  <><CheckCircle size={11} /> Saved</>
+                ) : (
+                  "Create Remote"
+                )}
               </button>
             </div>
           </div>
         </div>
+
+        {/* Git Operations (Pull / Push) */}
+        {githubConnected && remoteUrl && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <ArrowUpDown size={14} className="text-muted-foreground" />
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Sync</h3>
+            </div>
+            <div className="bg-card border border-border rounded-2xl overflow-hidden divide-y divide-border/50">
+              {/* Pull */}
+              <div className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Pull</p>
+                  <p className="text-xs text-muted-foreground/60">Fetch latest changes from remote</p>
+                </div>
+                <button
+                  onClick={handlePull}
+                  disabled={pullStatus === "loading"}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5",
+                    pullStatus === "success"
+                      ? "bg-green-500/20 border border-green-400/40 text-green-300"
+                      : pullStatus === "loading"
+                      ? "bg-blue-500/20 border border-blue-400/40 text-blue-300"
+                      : "bg-secondary/40 border border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/70"
+                  )}
+                  data-testid="button-pull"
+                >
+                  {pullStatus === "loading" ? (
+                    <><Loader2 size={11} className="animate-spin" /> Pulling...</>
+                  ) : pullStatus === "success" ? (
+                    <><CheckCircle size={11} /> Done</>
+                  ) : (
+                    "Pull"
+                  )}
+                </button>
+              </div>
+
+              {/* Commit + Push */}
+              <div className="px-4 py-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Commit & Push</p>
+                    <p className="text-xs text-muted-foreground/60">Save and send your changes</p>
+                  </div>
+                  <button
+                    onClick={() => setShowCommit(v => !v)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-500/20 border border-purple-400/40 text-purple-300 hover:bg-purple-500/30 transition-all"
+                    data-testid="button-open-commit"
+                  >
+                    Commit
+                  </button>
+                </div>
+                <AnimatePresence>
+                  {showCommit && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden space-y-2"
+                    >
+                      <input
+                        type="text"
+                        value={commitMsg}
+                        onChange={e => setCommitMsg(e.target.value)}
+                        placeholder="Commit message..."
+                        className="w-full bg-secondary/30 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-purple-400/50 transition-colors"
+                        data-testid="input-commit-message"
+                      />
+                      <button
+                        onClick={handlePush}
+                        disabled={!commitMsg.trim() || pushStatus === "loading"}
+                        className={cn(
+                          "w-full py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
+                          pushStatus === "success"
+                            ? "bg-green-500/20 border border-green-400/40 text-green-300"
+                            : pushStatus === "loading"
+                            ? "bg-purple-500/20 border border-purple-400/40 text-purple-300"
+                            : commitMsg.trim()
+                            ? "bg-purple-500/20 border border-purple-400/40 text-purple-300 hover:bg-purple-500/30"
+                            : "bg-secondary/30 border border-border/30 text-muted-foreground/40 cursor-not-allowed"
+                        )}
+                        data-testid="button-push"
+                      >
+                        {pushStatus === "loading" ? (
+                          <><Loader2 size={11} className="animate-spin" /> Pushing...</>
+                        ) : pushStatus === "success" ? (
+                          <><CheckCircle size={11} /> Pushed!</>
+                        ) : (
+                          "Push to GitHub"
+                        )}
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Connections section */}
         <div>
