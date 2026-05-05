@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Replit IDE Workspace"
+version = "1.0.0"
+id = "artifacts/replit-ide"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25212
+
+[services.development]
+run = "pnpm --filter @workspace/replit-ide run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/replit-ide", "run", "build" ]
+publicDir = "artifacts/replit-ide/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25212"
+BASE_PATH = "/"
