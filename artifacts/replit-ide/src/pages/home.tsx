@@ -1,168 +1,284 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import { useLocation } from "wouter";
 import { WorkspaceLayout } from "@/components/layout/WorkspaceLayout";
 import { MOCK_PROJECTS } from "@/lib/mock-data";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { Send, Terminal, LayoutTemplate, Database, Globe, Smartphone, Gamepad2, Blocks, Github } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { useLocation } from "wouter";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Send, Globe, Smartphone, Gamepad2, Blocks, Database,
+  LayoutTemplate, Terminal, Github, Sparkles, Play, Circle,
+  ArrowRight, Plus, Star, Clock, Zap
+} from "lucide-react";
 
 const CATEGORIES = ["All", "Design", "Slides", "Animation", "Data", "Web App", "Mobile", "Game", "API"];
 
 function getCategoryIcon(type: string) {
+  const cls = "h-4 w-4";
   switch (type) {
-    case "Web App": return <Globe className="h-4 w-4" />;
-    case "Mobile": return <Smartphone className="h-4 w-4" />;
-    case "Game": return <Gamepad2 className="h-4 w-4" />;
-    case "API": return <Blocks className="h-4 w-4" />;
-    case "Data": return <Database className="h-4 w-4" />;
-    case "Design": return <LayoutTemplate className="h-4 w-4" />;
-    default: return <Terminal className="h-4 w-4" />;
+    case "Web App": return <Globe className={cls} />;
+    case "Mobile": return <Smartphone className={cls} />;
+    case "Game": return <Gamepad2 className={cls} />;
+    case "API": return <Blocks className={cls} />;
+    case "Data": return <Database className={cls} />;
+    case "Design": return <LayoutTemplate className={cls} />;
+    default: return <Terminal className={cls} />;
   }
 }
+
+const TEMPLATES = [
+  { name: "React App", icon: <Globe className="h-5 w-5" />, color: "from-blue-500/20 to-blue-600/10", border: "border-blue-500/20", badge: "Popular" },
+  { name: "Python Script", icon: <Terminal className="h-5 w-5" />, color: "from-green-500/20 to-green-600/10", border: "border-green-500/20", badge: "" },
+  { name: "Node.js API", icon: <Blocks className="h-5 w-5" />, color: "from-emerald-500/20 to-emerald-600/10", border: "border-emerald-500/20", badge: "" },
+  { name: "Mobile App", icon: <Smartphone className="h-5 w-5" />, color: "from-purple-500/20 to-purple-600/10", border: "border-purple-500/20", badge: "New" },
+  { name: "Game (JS)", icon: <Gamepad2 className="h-5 w-5" />, color: "from-orange-500/20 to-orange-600/10", border: "border-orange-500/20", badge: "" },
+  { name: "Data Science", icon: <Database className="h-5 w-5" />, color: "from-cyan-500/20 to-cyan-600/10", border: "border-cyan-500/20", badge: "" },
+];
 
 export default function Home() {
   const [, setLocation] = useLocation();
   const [activeCategory, setActiveCategory] = useState("All");
   const [idea, setIdea] = useState("");
   const [isPlanMode, setIsPlanMode] = useState(false);
-  const [isGithubModalOpen, setIsGithubModalOpen] = useState(false);
+  const [isGithubOpen, setIsGithubOpen] = useState(false);
+  const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [githubUrl, setGithubUrl] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState("Web App");
 
-  const filteredProjects = MOCK_PROJECTS.filter(p => activeCategory === "All" || p.type === activeCategory).slice(0, 4);
+  const filtered = MOCK_PROJECTS.filter(p => activeCategory === "All" || p.type === activeCategory);
 
   const handleSend = () => {
     if (!idea.trim()) return;
     setLocation("/editor");
   };
 
-  const handleImportGithub = () => {
+  const handleImport = () => {
     if (!githubUrl.trim()) return;
-    setIsGithubModalOpen(false);
+    setIsGithubOpen(false);
+    setLocation("/editor");
+  };
+
+  const handleCreate = () => {
+    if (!newName.trim()) return;
+    setIsNewProjectOpen(false);
     setLocation("/editor");
   };
 
   return (
     <WorkspaceLayout>
-      <div className="max-w-4xl mx-auto px-4 py-8 md:py-12 space-y-12">
-        <section className="space-y-6 text-center max-w-2xl mx-auto">
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground" data-testid="heading-hero">
-            Hi N, what do you want to make?
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-10 pb-24">
+
+        {/* ── Hero ── */}
+        <section className="text-center space-y-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1f6feb]/10 border border-[#1f6feb]/20 text-[#58a6ff] text-xs mb-2">
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>AI-powered development</span>
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight" data-testid="heading-hero">
+            Hi N, what do you<br />
+            <span className="bg-gradient-to-r from-[#58a6ff] to-[#a371f7] bg-clip-text text-transparent">
+              want to make?
+            </span>
           </h1>
-          
-          <div className="relative group">
-            <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/50 to-primary rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
-            <div className="relative flex flex-col bg-card border border-border rounded-2xl p-2 shadow-xl">
-              <textarea 
+
+          {/* Idea input */}
+          <div className="relative max-w-2xl mx-auto">
+            <div className="absolute -inset-px rounded-2xl bg-gradient-to-r from-[#1f6feb]/30 to-[#a371f7]/30 blur" />
+            <div className="relative flex flex-col bg-[#161b22] border border-[#30363d] rounded-2xl overflow-hidden shadow-xl shadow-black/30">
+              <textarea
                 value={idea}
-                onChange={(e) => setIdea(e.target.value)}
-                placeholder="Describe your idea..." 
-                className="w-full bg-transparent border-none focus:ring-0 resize-none h-24 p-3 text-lg placeholder:text-muted-foreground/60"
+                onChange={e => setIdea(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey) { e.preventDefault(); handleSend(); } }}
+                placeholder="Describe your idea, Replit will bring it to life..."
+                rows={3}
+                className="w-full bg-transparent px-4 pt-4 pb-2 text-sm text-[#e6edf3] placeholder-[#484f58] outline-none resize-none"
                 data-testid="input-idea"
               />
-              <div className="flex items-center justify-between p-2 border-t border-border/50 mt-2">
-                <div className="flex items-center space-x-3 bg-muted/30 py-1.5 px-3 rounded-lg border border-border/50">
-                  <Switch 
-                    id="plan-mode" 
-                    checked={isPlanMode} 
-                    onCheckedChange={setIsPlanMode}
-                    data-testid="toggle-plan"
-                  />
-                  <Label htmlFor="plan-mode" className="text-sm font-medium cursor-pointer">Plan</Label>
+              <div className="flex items-center justify-between px-3 py-2 border-t border-[#21262d]">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setIsGithubOpen(true)}
+                    className="flex items-center gap-1.5 text-xs text-[#8b949e] hover:text-[#e6edf3] px-2 py-1 rounded hover:bg-[#21262d] transition-colors"
+                    data-testid="button-add-files">
+                    <Plus className="h-3.5 w-3.5" /> Add files
+                  </button>
+                  <button
+                    onClick={() => setIsPlanMode(!isPlanMode)}
+                    className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors ${isPlanMode ? "bg-[#a371f7]/20 text-[#a371f7] border border-[#a371f7]/30" : "text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"}`}
+                    data-testid="toggle-plan">
+                    <div className={`h-3.5 w-6 rounded-full border transition-colors ${isPlanMode ? "bg-[#a371f7] border-[#a371f7]" : "bg-transparent border-[#484f58]"} relative`}>
+                      <div className={`absolute top-0.5 h-2 w-2 rounded-full bg-white transition-all ${isPlanMode ? "left-[14px]" : "left-[1px]"}`} />
+                    </div>
+                    Plan
+                  </button>
                 </div>
-                <Button 
-                  size="icon" 
-                  className="rounded-xl h-10 w-10 shrink-0" 
+                <button
                   onClick={handleSend}
-                  data-testid="button-send-idea"
-                >
-                  <Send className="h-5 w-5" />
-                </Button>
+                  disabled={!idea.trim()}
+                  className="h-8 w-8 rounded-xl bg-[#a371f7] hover:bg-[#8957e5] disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                  data-testid="button-send-idea">
+                  <Send className="h-4 w-4 text-white" />
+                </button>
               </div>
             </div>
           </div>
 
-          <div className="flex justify-center">
-            <Dialog open={isGithubModalOpen} onOpenChange={setIsGithubModalOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="rounded-full shadow-sm" data-testid="button-import-github">
-                  <Github className="mr-2 h-4 w-4" />
-                  Import from GitHub
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Import from GitHub</DialogTitle>
-                </DialogHeader>
-                <div className="py-4">
-                  <Input 
-                    placeholder="https://github.com/username/repo" 
-                    value={githubUrl}
-                    onChange={(e) => setGithubUrl(e.target.value)}
-                    data-testid="input-github-url"
-                  />
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsGithubModalOpen(false)}>Cancel</Button>
-                  <Button onClick={handleImportGithub} data-testid="button-confirm-import">Import</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+          {/* Quick actions */}
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button onClick={() => setIsGithubOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#161b22] border border-[#30363d] text-xs text-[#8b949e] hover:text-[#e6edf3] hover:border-[#58a6ff]/50 transition-all"
+              data-testid="button-import-github">
+              <Github className="h-3.5 w-3.5" /> Import from GitHub
+            </button>
+            <button onClick={() => setIsNewProjectOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#161b22] border border-[#30363d] text-xs text-[#8b949e] hover:text-[#e6edf3] hover:border-[#a371f7]/50 transition-all"
+              data-testid="button-use-template">
+              <Zap className="h-3.5 w-3.5" /> Use a template
+            </button>
           </div>
         </section>
 
-        <section className="space-y-6">
-          <div className="flex overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0 gap-2 snap-x">
-            {CATEGORIES.map(category => (
-              <button
-                key={category}
-                onClick={() => setActiveCategory(category)}
-                className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-all snap-start ${
-                  activeCategory === category 
-                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
-                    : "bg-card/80 text-muted-foreground hover:bg-accent hover:text-foreground border border-border"
-                }`}
-                data-testid={`tab-category-${category.toLowerCase().replace(" ", "-")}`}
-              >
-                {category}
+        {/* ── Templates ── */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-[#8b949e] uppercase tracking-widest">Start from a template</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {TEMPLATES.map(t => (
+              <button key={t.name} onClick={() => setLocation("/editor")}
+                className={`group relative text-left p-4 rounded-xl bg-gradient-to-br ${t.color} border ${t.border} hover:border-[#58a6ff]/40 transition-all`}
+                data-testid={`template-${t.name.toLowerCase().replace(/[^a-z]/g, "-")}`}>
+                {t.badge && (
+                  <span className="absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full bg-[#a371f7]/20 text-[#a371f7] border border-[#a371f7]/30">{t.badge}</span>
+                )}
+                <div className="text-[#58a6ff] mb-2">{t.icon}</div>
+                <div className="text-xs font-medium text-[#e6edf3] group-hover:text-white">{t.name}</div>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Recent projects ── */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-[#8b949e] uppercase tracking-widest flex items-center gap-2">
+              <Clock className="h-4 w-4" /> Recent Projects
+            </h2>
+            <button onClick={() => setLocation("/projects")}
+              className="flex items-center gap-1 text-xs text-[#58a6ff] hover:text-[#79c0ff] transition-colors"
+              data-testid="link-view-all">
+              View all <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Category tabs */}
+          <div className="flex overflow-x-auto pb-1 gap-2 scrollbar-hide">
+            {CATEGORIES.map(cat => (
+              <button key={cat} onClick={() => setActiveCategory(cat)}
+                className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 ${activeCategory === cat ? "bg-[#1f6feb] text-white" : "bg-[#161b22] text-[#8b949e] border border-[#30363d] hover:text-[#e6edf3] hover:border-[#8b949e]"}`}
+                data-testid={`tab-${cat.toLowerCase().replace(" ", "-")}`}>
+                {cat}
               </button>
             ))}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {filteredProjects.map((project) => (
-              <Card 
-                key={project.id} 
-                className="group overflow-hidden bg-card/40 hover:bg-card/80 border-border/50 hover:border-primary/30 transition-all cursor-pointer"
-                onClick={() => setLocation("/editor")}
-                data-testid={`card-project-${project.id}`}
-              >
-                <CardContent className="p-5 flex items-start gap-4">
-                  <div className="h-12 w-12 rounded-xl bg-accent flex items-center justify-center text-primary group-hover:scale-110 group-hover:bg-primary/20 transition-all shrink-0">
-                    {getCategoryIcon(project.type)}
+          {/* Project cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {filtered.slice(0, 6).map(p => (
+              <button key={p.id} onClick={() => setLocation("/editor")}
+                className="group text-left flex items-center gap-3 p-4 rounded-xl bg-[#161b22] border border-[#21262d] hover:border-[#30363d] hover:bg-[#21262d] transition-all"
+                data-testid={`card-project-${p.id}`}>
+                <div className="h-10 w-10 rounded-lg bg-[#21262d] group-hover:bg-[#30363d] flex items-center justify-center text-[#58a6ff] shrink-0 transition-colors">
+                  {getCategoryIcon(p.type)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-medium text-[#e6edf3] truncate group-hover:text-white">{p.name}</span>
+                    {p.status === "running" && (
+                      <Circle className="h-2 w-2 text-green-400 fill-green-400 shrink-0" />
+                    )}
                   </div>
-                  <div className="space-y-1 flex-1 min-w-0">
-                    <h3 className="font-semibold text-base truncate group-hover:text-primary transition-colors">{project.name}</h3>
-                    <div className="flex items-center text-xs text-muted-foreground gap-2">
-                      <span className="truncate">{project.language}</span>
-                      <span>•</span>
-                      <span className="truncate">{project.lastModified}</span>
-                    </div>
+                  <div className="flex items-center gap-2 text-xs text-[#8b949e]">
+                    <span>{p.language}</span>
+                    <span>·</span>
+                    <span>{p.lastModified}</span>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+                <Play className="h-4 w-4 text-[#8b949e] group-hover:text-[#58a6ff] opacity-0 group-hover:opacity-100 transition-all shrink-0" />
+              </button>
             ))}
-            {filteredProjects.length === 0 && (
-              <div className="col-span-1 sm:col-span-2 text-center py-12 text-muted-foreground">
-                No projects found in this category.
+            {filtered.length === 0 && (
+              <div className="col-span-2 py-12 text-center text-[#484f58] text-sm">
+                No projects in this category.
               </div>
             )}
           </div>
         </section>
       </div>
+
+      {/* ── Import from GitHub modal ── */}
+      <Dialog open={isGithubOpen} onOpenChange={setIsGithubOpen}>
+        <DialogContent className="bg-[#161b22] border-[#30363d] text-[#e6edf3]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Github className="h-5 w-5" /> Import from GitHub
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Label className="text-[#8b949e] text-xs">Repository URL</Label>
+            <Input placeholder="https://github.com/username/repo"
+              value={githubUrl} onChange={e => setGithubUrl(e.target.value)}
+              className="mt-2 bg-[#0d1117] border-[#30363d] text-[#e6edf3] placeholder-[#484f58]"
+              data-testid="input-github-url" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsGithubOpen(false)}
+              className="border-[#30363d] text-[#8b949e] hover:text-[#e6edf3]">Cancel</Button>
+            <Button onClick={handleImport} className="bg-[#238636] hover:bg-[#2ea043] text-white"
+              data-testid="button-confirm-import">Import Repository</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── New project modal ── */}
+      <Dialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen}>
+        <DialogContent className="bg-[#161b22] border-[#30363d] text-[#e6edf3]">
+          <DialogHeader>
+            <DialogTitle>Create New Project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-[#8b949e] text-xs">Project Name</Label>
+              <Input placeholder="my-awesome-project" value={newName}
+                onChange={e => setNewName(e.target.value)}
+                className="bg-[#0d1117] border-[#30363d] text-[#e6edf3] placeholder-[#484f58]"
+                data-testid="input-project-name" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[#8b949e] text-xs">Project Type</Label>
+              <Select value={newType} onValueChange={setNewType}>
+                <SelectTrigger className="bg-[#0d1117] border-[#30363d] text-[#e6edf3]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[#161b22] border-[#30363d]">
+                  <SelectItem value="Web App">Web App</SelectItem>
+                  <SelectItem value="Mobile">Mobile</SelectItem>
+                  <SelectItem value="Game">Game</SelectItem>
+                  <SelectItem value="API">API</SelectItem>
+                  <SelectItem value="Data">Data Science</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsNewProjectOpen(false)}
+              className="border-[#30363d] text-[#8b949e] hover:text-[#e6edf3]">Cancel</Button>
+            <Button onClick={handleCreate} className="bg-[#1f6feb] hover:bg-[#388bfd] text-white"
+              data-testid="button-create-project">Create Project</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </WorkspaceLayout>
   );
 }
