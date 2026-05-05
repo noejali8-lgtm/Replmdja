@@ -6,10 +6,64 @@ import {
   Palette, Zap, Keyboard, Bot, Layers, Database,
   Activity, Search, Star, Download, Check, Package,
   Code2, LayoutTemplate, GitBranch, Terminal, RefreshCw,
-  Sparkles, ChevronRight, X
+  Sparkles, ChevronRight, X, Eye, ArrowLeft, CheckCircle2
 } from "lucide-react";
 
 type ExtensionCategory = "All" | "Themes" | "Linters" | "Keymaps" | "AI" | "UI Libraries" | "State" | "Animation";
+
+/* ── Theme palette type ── */
+interface ThemePalette {
+  bg: string;
+  sidebar: string;
+  editor: string;
+  accent: string;
+  text: string;
+  comment: string;
+  keyword: string;
+  string: string;
+  number: string;
+  function: string;
+}
+
+const THEME_PALETTES: Record<string, ThemePalette> = {
+  cobalt2: {
+    bg: "#193549", sidebar: "#122738", editor: "#193549",
+    accent: "#ffc600", text: "#ffffff", comment: "#0088ff",
+    keyword: "#ff9d00", string: "#a5ff90", number: "#ff628c", function: "#ffc600",
+  },
+  dracula: {
+    bg: "#282a36", sidebar: "#21222c", editor: "#282a36",
+    accent: "#bd93f9", text: "#f8f8f2", comment: "#6272a4",
+    keyword: "#ff79c6", string: "#f1fa8c", number: "#bd93f9", function: "#50fa7b",
+  },
+  "solarized-dark": {
+    bg: "#002b36", sidebar: "#073642", editor: "#002b36",
+    accent: "#268bd2", text: "#839496", comment: "#586e75",
+    keyword: "#859900", string: "#2aa198", number: "#d33682", function: "#268bd2",
+  },
+  "one-dark": {
+    bg: "#282c34", sidebar: "#21252b", editor: "#282c34",
+    accent: "#61afef", text: "#abb2bf", comment: "#5c6370",
+    keyword: "#c678dd", string: "#98c379", number: "#d19a66", function: "#61afef",
+  },
+  "night-owl": {
+    bg: "#011627", sidebar: "#010e1a", editor: "#011627",
+    accent: "#82aaff", text: "#d6deeb", comment: "#637777",
+    keyword: "#c792ea", string: "#ecc48d", number: "#f78c6c", function: "#82aaff",
+  },
+  "tokyo-night": {
+    bg: "#1a1b26", sidebar: "#16161e", editor: "#1a1b26",
+    accent: "#7aa2f7", text: "#c0caf5", comment: "#565f89",
+    keyword: "#bb9af7", string: "#9ece6a", number: "#ff9e64", function: "#7aa2f7",
+  },
+};
+
+const THEME_SAMPLE_CODE = `function greet(name) {
+  // Welcome message
+  const msg = "Hello, " + name;
+  const count = 42;
+  return msg;
+}`;
 
 interface Extension {
   id: string;
@@ -65,6 +119,45 @@ const EXTENSIONS: Extension[] = [
     iconColor: "text-yellow-400",
     iconBg: "bg-yellow-400/10",
     tags: ["dark", "classic"],
+  },
+  {
+    id: "one-dark",
+    name: "One Dark Pro",
+    description: "Atom's iconic One Dark theme ported to editors. Most downloaded theme ever.",
+    category: "Themes",
+    author: "binaryify",
+    stars: 4.9,
+    installs: 310000,
+    icon: <Palette className="h-5 w-5" />,
+    iconColor: "text-cyan-400",
+    iconBg: "bg-cyan-400/10",
+    tags: ["dark", "atom", "popular"],
+  },
+  {
+    id: "night-owl",
+    name: "Night Owl",
+    description: "A VS Code theme for night owls. Fine-tuned for people who love late-night coding.",
+    category: "Themes",
+    author: "Sarah Drasner",
+    stars: 4.8,
+    installs: 88000,
+    icon: <Palette className="h-5 w-5" />,
+    iconColor: "text-blue-300",
+    iconBg: "bg-blue-300/10",
+    tags: ["dark", "night", "accessible"],
+  },
+  {
+    id: "tokyo-night",
+    name: "Tokyo Night",
+    description: "A clean, dark theme that celebrates the lights of downtown Tokyo at night.",
+    category: "Themes",
+    author: "enkia",
+    stars: 4.9,
+    installs: 195000,
+    icon: <Palette className="h-5 w-5" />,
+    iconColor: "text-indigo-400",
+    iconBg: "bg-indigo-400/10",
+    tags: ["dark", "minimal", "popular"],
   },
   {
     id: "eslint",
@@ -327,7 +420,146 @@ function formatCount(n: number): string {
   return String(n);
 }
 
-function ExtensionCard({ ext, onToggle }: { ext: Extension; onToggle: (id: string) => void }) {
+/* ── Theme Preview Panel ── */
+function ThemePreviewPanel({
+  ext,
+  onClose,
+  onToggle,
+}: {
+  ext: Extension;
+  onClose: () => void;
+  onToggle: (id: string) => void;
+}) {
+  const palette = THEME_PALETTES[ext.id];
+  const [applied, setApplied] = useState(ext.installed ?? false);
+
+  const handleApply = () => {
+    setApplied(true);
+    if (!ext.installed) onToggle(ext.id);
+  };
+
+  // Tokenise the sample code into colored spans
+  const tokenize = (code: string, p: ThemePalette) => {
+    return code.split("\n").map((line, li) => {
+      const parts: React.ReactNode[] = [];
+      let remaining = line;
+      let ki = 0;
+
+      const push = (text: string, color: string) => {
+        parts.push(<span key={ki++} style={{ color }}>{text}</span>);
+      };
+
+      while (remaining.length) {
+        // comment
+        if (remaining.startsWith("//")) { push(remaining, p.comment); remaining = ""; continue; }
+        // string
+        const sq = remaining.match(/^(".*?"|'.*?')/);
+        if (sq) { push(sq[0], p.string); remaining = remaining.slice(sq[0].length); continue; }
+        // number
+        const nq = remaining.match(/^(\d+)/);
+        if (nq) { push(nq[0], p.number); remaining = remaining.slice(nq[0].length); continue; }
+        // keyword
+        const kw = ["function", "const", "return", "let", "var"].find(k => remaining.startsWith(k) && !/\w/.test(remaining[k.length] ?? ""));
+        if (kw) { push(kw, p.keyword); remaining = remaining.slice(kw.length); continue; }
+        // function name
+        const fn = remaining.match(/^(\w+)(?=\()/);
+        if (fn) { push(fn[0], p.function); remaining = remaining.slice(fn[0].length); continue; }
+        // plain
+        const plain = remaining.match(/^[^\w"'\/0-9]+|\w+/);
+        if (plain) { push(plain[0], p.text); remaining = remaining.slice(plain[0].length); continue; }
+        push(remaining[0], p.text); remaining = remaining.slice(1);
+      }
+      return <div key={li} className="leading-6">{parts.length ? parts : <span>&nbsp;</span>}</div>;
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+      data-testid="theme-preview-backdrop"
+    >
+      <div
+        className="w-full max-w-3xl rounded-t-2xl overflow-hidden shadow-2xl"
+        style={{ background: palette?.bg ?? "#1e1e2e" }}
+        onClick={e => e.stopPropagation()}
+        data-testid={`theme-preview-${ext.id}`}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 text-sm opacity-60 hover:opacity-100 transition-opacity"
+            style={{ color: palette?.text ?? "#ffffff" }}
+            data-testid="button-close-theme-preview"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back
+          </button>
+          <div className={`h-8 w-8 rounded-lg ${ext.iconBg} flex items-center justify-center shrink-0 ${ext.iconColor}`}>
+            {ext.icon}
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold" style={{ color: palette?.text ?? "#fff" }}>{ext.name}</h3>
+            <p className="text-xs opacity-50" style={{ color: palette?.text ?? "#fff" }}>by {ext.author}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Color swatches */}
+            {palette && [palette.keyword, palette.string, palette.number, palette.function, palette.comment].map((c, i) => (
+              <div key={i} className="w-4 h-4 rounded-full border border-white/10" style={{ background: c }} title={c} />
+            ))}
+          </div>
+        </div>
+
+        {/* Editor mock */}
+        {palette ? (
+          <div className="flex" style={{ minHeight: "220px" }}>
+            {/* Sidebar */}
+            <div className="w-10 shrink-0" style={{ background: palette.sidebar }} />
+            {/* Line numbers + code */}
+            <div className="flex flex-1 overflow-hidden">
+              <div className="px-3 py-3 text-right select-none" style={{ color: palette.comment, fontSize: "12px", lineHeight: "24px", minWidth: "36px" }}>
+                {THEME_SAMPLE_CODE.split("\n").map((_, i) => <div key={i}>{i + 1}</div>)}
+              </div>
+              <pre className="flex-1 py-3 px-2 overflow-x-auto" style={{ background: palette.editor, fontFamily: "monospace", fontSize: "13px" }}>
+                {tokenize(THEME_SAMPLE_CODE, palette)}
+              </pre>
+            </div>
+          </div>
+        ) : (
+          <div className="h-48 flex items-center justify-center opacity-40" style={{ color: "#aaa" }}>
+            No preview available
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="flex items-center gap-3 px-5 py-4 border-t" style={{ borderColor: "rgba(255,255,255,0.08)", background: palette?.sidebar ?? "#1a1a2e" }}>
+          <div className="flex gap-2 flex-1 flex-wrap">
+            {ext.tags.map(t => (
+              <span key={t} className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: "rgba(255,255,255,0.08)", color: palette?.accent ?? "#aaa" }}>
+                {t}
+              </span>
+            ))}
+          </div>
+          <button
+            onClick={handleApply}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+            style={{
+              background: applied ? "rgba(50,215,75,0.15)" : palette?.accent ?? "#6366f1",
+              color: applied ? "#3fb950" : (palette ? "#000" : "#fff"),
+              border: applied ? "1px solid rgba(50,215,75,0.3)" : "1px solid transparent",
+            }}
+            data-testid={`button-apply-theme-${ext.id}`}
+          >
+            {applied ? <><CheckCircle2 className="h-4 w-4" /> Applied</> : <><Palette className="h-4 w-4" /> Apply Theme</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExtensionCard({ ext, onToggle, onPreview }: { ext: Extension; onToggle: (id: string) => void; onPreview?: (id: string) => void }) {
+  const isTheme = ext.category === "Themes";
   return (
     <div
       className="group p-4 rounded-xl bg-[#161b22] border border-[#21262d] hover:border-[#30363d] transition-all"
@@ -343,6 +575,16 @@ function ExtensionCard({ ext, onToggle }: { ext: Extension; onToggle: (id: strin
               <h3 className="text-sm font-semibold text-[#e6edf3] leading-tight">{ext.name}</h3>
               <p className="text-[11px] text-[#484f58] mt-0.5">by {ext.author}</p>
             </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {isTheme && THEME_PALETTES[ext.id] && (
+                <button
+                  onClick={() => onPreview?.(ext.id)}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-[#21262d] text-[#8b949e] border border-[#30363d] hover:text-[#e6edf3] hover:border-[#8b949e] transition-all"
+                  data-testid={`button-preview-${ext.id}`}
+                >
+                  <Eye className="h-3 w-3" /> Preview
+                </button>
+              )}
             <button
               onClick={() => onToggle(ext.id)}
               className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
@@ -358,6 +600,7 @@ function ExtensionCard({ ext, onToggle }: { ext: Extension; onToggle: (id: strin
                 <><Download className="h-3 w-3" /> Install</>
               )}
             </button>
+            </div>
           </div>
           <p className="text-xs text-[#8b949e] leading-relaxed mb-3">{ext.description}</p>
           <div className="flex items-center gap-3 text-[11px] text-[#484f58]">
@@ -389,6 +632,7 @@ export default function Extensions() {
   const [activeCategory, setActiveCategory] = useState<ExtensionCategory>("All");
   const [search, setSearch] = useState("");
   const [extensions, setExtensions] = useState<Extension[]>(EXTENSIONS);
+  const [previewThemeId, setPreviewThemeId] = useState<string | null>(null);
 
   const filtered = extensions.filter(ext => {
     const matchCat = activeCategory === "All" || ext.category === activeCategory;
@@ -481,7 +725,7 @@ export default function Extensions() {
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {extensions.filter(e => e.installed).map(ext => (
-                <ExtensionCard key={ext.id} ext={ext} onToggle={handleToggle} />
+                <ExtensionCard key={ext.id} ext={ext} onToggle={handleToggle} onPreview={setPreviewThemeId} />
               ))}
             </div>
           </section>
@@ -499,7 +743,7 @@ export default function Extensions() {
               {filtered
                 .filter(ext => activeCategory !== "All" || search || !ext.installed)
                 .map(ext => (
-                  <ExtensionCard key={ext.id} ext={ext} onToggle={handleToggle} />
+                  <ExtensionCard key={ext.id} ext={ext} onToggle={handleToggle} onPreview={setPreviewThemeId} />
                 ))}
             </div>
           ) : (
@@ -511,6 +755,20 @@ export default function Extensions() {
         </section>
 
       </div>
+
+      {/* Theme Preview Modal */}
+      {previewThemeId && (() => {
+        const ext = extensions.find(e => e.id === previewThemeId);
+        if (!ext) return null;
+        return (
+          <ThemePreviewPanel
+            ext={ext}
+            onClose={() => setPreviewThemeId(null)}
+            onToggle={handleToggle}
+          />
+        );
+      })()}
+
     </WorkspaceLayout>
   );
 }
