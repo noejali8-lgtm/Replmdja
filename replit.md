@@ -39,6 +39,9 @@ A mobile-first Replit clone with two apps: **App Builder** (mobile UI matching t
 ## Product
 
 - **App Builder**: Mobile Replit-like UI — create projects via AI chat, browse projects, account page
+  - **Toolbar panels**: Secrets, Database, Auth, Git (all functional slide-up panels)
+  - **Git panel**: GitHub token auth, remote URL + repo browser (via GitHub API), Pull/Push with real Git Trees API commit flow, file staging view (checkboxes per file, select-all, M/A status badges), commit author editor
+  - **Import from GitHub**: animated importing screen (Connecting → Cloning → Reading → Setting up → Launching) then navigates to chat
 - **Replit IDE**: Desktop IDE — code editor with syntax highlighting, file tree, AI agent, live preview, extensions store, projects page, profile page
 - **Extensions Store**: Browse/install Themes, Linters, Keymaps, AI tools, UI Libraries, State Management, Animation packages
 

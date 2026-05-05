@@ -1,15 +1,147 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { MoreVertical, Lock, Globe, Download, ChevronDown, X } from "lucide-react";
+import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, GitBranch, FileText, Package, Zap } from "lucide-react";
 import { SiGithub } from "react-icons/si";
 import { CategoryChips } from "@/components/CategoryChips";
 import { CreateInput } from "@/components/CreateInput";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
-function ImportFromGitHubSheet({ onClose }: { onClose: () => void }) {
-  const [, setLocation] = useLocation();
+/* ── Import loading screen (full-screen, Replit-style) ── */
+const IMPORT_STEPS = [
+  { icon: <SiGithub size={14} />, label: "Connecting to GitHub" },
+  { icon: <GitBranch size={14} />, label: "Cloning repository" },
+  { icon: <FileText size={14} />, label: "Reading file tree" },
+  { icon: <Package size={14} />, label: "Setting up workspace" },
+  { icon: <Zap size={14} />, label: "Launching editor" },
+];
+
+function ImportingScreen({ repoUrl, onDone }: { repoUrl: string; onDone: () => void }) {
+  const repoName = repoUrl.trim()
+    .replace(/^https?:\/\//, "")
+    .replace(/^github\.com\//, "")
+    .replace(/\.git$/, "");
+  const owner = repoName.split("/")[0] ?? "user";
+  const repo = repoName.split("/")[1] ?? repoName;
+
+  const [doneIdx, setDoneIdx] = useState(-1);
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  useEffect(() => {
+    let idx = 0;
+    const advance = () => {
+      if (idx >= IMPORT_STEPS.length) {
+        setTimeout(onDone, 500);
+        return;
+      }
+      setActiveIdx(idx);
+      const delay = 600 + Math.random() * 500;
+      setTimeout(() => {
+        setDoneIdx(idx);
+        idx++;
+        setTimeout(advance, 200);
+      }, delay);
+    };
+    setTimeout(advance, 300);
+  }, [onDone]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-background flex flex-col"
+    >
+      {/* Top bar */}
+      <div className="flex items-center gap-3 px-5 pt-12 pb-4 border-b border-border/40">
+        <div className="w-8 h-8 rounded-lg bg-foreground/10 border border-border/50 flex items-center justify-center">
+          <SiGithub size={16} className="text-foreground" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground truncate">{repo || repoName}</p>
+          <p className="text-xs text-muted-foreground/60 truncate">github.com/{owner}</p>
+        </div>
+        <div className="text-[10px] bg-blue-500/15 border border-blue-400/25 text-blue-400 px-2 py-1 rounded-full font-semibold">Importing</div>
+      </div>
+
+      {/* Steps */}
+      <div className="flex-1 flex flex-col justify-center px-8 gap-1">
+        {IMPORT_STEPS.map((step, i) => {
+          const isDone = i <= doneIdx;
+          const isActive = i === activeIdx && i > doneIdx;
+          return (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, x: -12 }}
+              animate={{ opacity: i <= activeIdx ? 1 : 0.3, x: 0 }}
+              transition={{ delay: i * 0.06, duration: 0.3 }}
+              className="flex items-center gap-3 py-3"
+            >
+              <div className={cn(
+                "w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 transition-all duration-300",
+                isDone
+                  ? "bg-green-500/20 border-green-400/40 text-green-400"
+                  : isActive
+                  ? "bg-blue-500/20 border-blue-400/40 text-blue-400"
+                  : "bg-secondary/30 border-border/40 text-muted-foreground/40"
+              )}>
+                {isDone ? (
+                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 500 }}>
+                    <CheckCircle2 size={14} className="text-green-400" />
+                  </motion.div>
+                ) : isActive ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  step.icon
+                )}
+              </div>
+              <span className={cn(
+                "text-sm font-medium transition-colors duration-200",
+                isDone ? "text-green-400" : isActive ? "text-foreground" : "text-muted-foreground/40"
+              )}>
+                {step.label}
+                {i === 1 && isActive && (
+                  <span className="text-xs text-muted-foreground/50 ml-2 font-normal font-mono">
+                    {repoName}
+                  </span>
+                )}
+              </span>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* File tree preview (animates in) */}
+      <AnimatePresence>
+        {doneIdx >= 2 && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mx-5 mb-5 bg-card border border-border/50 rounded-2xl px-4 py-3 space-y-1.5"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-2">File Tree</p>
+            {["src/", "src/App.tsx", "src/main.tsx", "package.json", "README.md"].map((f, i) => (
+              <motion.div
+                key={f}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.07 }}
+                className="flex items-center gap-2"
+              >
+                <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", f.endsWith("/") ? "bg-yellow-400/60" : "bg-blue-400/60")} />
+                <span className="text-xs font-mono text-muted-foreground/70">{f}</span>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+/* ── Import from GitHub bottom sheet ── */
+function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onImport: (url: string) => void }) {
   const [repoUrl, setRepoUrl] = useState("");
   const [privacy, setPrivacy] = useState<"private" | "public">("private");
   const [importing, setImporting] = useState(false);
@@ -20,24 +152,22 @@ function ImportFromGitHubSheet({ onClose }: { onClose: () => void }) {
     "username";
   const initial = username[0]?.toUpperCase() || "U";
 
-  const normalizeUrl = (raw: string) => {
-    const trimmed = raw.trim().replace(/^https?:\/\//, "").replace(/^github\.com\//, "");
-    return trimmed;
+  const normalize = (raw: string) => {
+    return raw.trim()
+      .replace(/^https?:\/\//, "")
+      .replace(/^github\.com\//, "");
   };
 
   const handleImport = async () => {
-    const slug = normalizeUrl(repoUrl);
+    const slug = normalize(repoUrl);
     if (!slug || !slug.includes("/")) {
-      setError("Please enter a valid GitHub URL (e.g. github.com/user/repo)");
+      setError("Enter a valid GitHub URL — e.g. github.com/user/repo");
       return;
     }
     setError("");
     setImporting(true);
-    await new Promise(r => setTimeout(r, 1400));
-    setImporting(false);
-    onClose();
-    sessionStorage.setItem("chat_prompt", `Import GitHub repo: https://github.com/${slug}`);
-    setLocation("/chat");
+    await new Promise(r => setTimeout(r, 400));
+    onImport(`https://github.com/${slug}`);
   };
 
   return (
@@ -47,10 +177,7 @@ function ImportFromGitHubSheet({ onClose }: { onClose: () => void }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
     >
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <motion.div
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
@@ -80,9 +207,7 @@ function ImportFromGitHubSheet({ onClose }: { onClose: () => void }) {
 
           {/* GitHub URL */}
           <div>
-            <label className="block text-sm font-semibold text-white text-right mb-2">
-              GitHub URL
-            </label>
+            <label className="block text-sm font-semibold text-white text-right mb-2">GitHub URL</label>
             <input
               type="text"
               value={repoUrl}
@@ -95,16 +220,12 @@ function ImportFromGitHubSheet({ onClose }: { onClose: () => void }) {
               data-testid="input-github-repo-url"
               autoFocus
             />
-            {error && (
-              <p className="text-xs text-red-400 mt-1.5">{error}</p>
-            )}
+            {error && <p className="text-xs text-red-400 mt-1.5">{error}</p>}
           </div>
 
           {/* Owner */}
           <div>
-            <label className="block text-sm font-semibold text-white text-right mb-2">
-              Owner
-            </label>
+            <label className="block text-sm font-semibold text-white text-right mb-2">Owner</label>
             <div className="flex items-center justify-between border border-white/15 rounded-xl px-4 py-3 bg-transparent">
               <ChevronDown size={16} className="text-white/50" />
               <div className="flex items-center gap-2.5">
@@ -118,17 +239,13 @@ function ImportFromGitHubSheet({ onClose }: { onClose: () => void }) {
 
           {/* Privacy */}
           <div>
-            <label className="block text-sm font-semibold text-white text-right mb-2">
-              Privacy
-            </label>
+            <label className="block text-sm font-semibold text-white text-right mb-2">Privacy</label>
             <div className="grid grid-cols-2 gap-2 p-1 bg-white/5 border border-white/10 rounded-xl">
               <button
                 onClick={() => setPrivacy("private")}
                 className={cn(
                   "flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all",
-                  privacy === "private"
-                    ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
-                    : "text-white/50 hover:text-white/80"
+                  privacy === "private" ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "text-white/50 hover:text-white/80"
                 )}
                 data-testid="button-privacy-private"
               >
@@ -139,9 +256,7 @@ function ImportFromGitHubSheet({ onClose }: { onClose: () => void }) {
                 onClick={() => setPrivacy("public")}
                 className={cn(
                   "flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all",
-                  privacy === "public"
-                    ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
-                    : "text-white/50 hover:text-white/80"
+                  privacy === "public" ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "text-white/50 hover:text-white/80"
                 )}
                 data-testid="button-privacy-public"
               >
@@ -159,29 +274,21 @@ function ImportFromGitHubSheet({ onClose }: { onClose: () => void }) {
           {/* Import button */}
           <button
             onClick={handleImport}
-            disabled={importing}
+            disabled={importing || !repoUrl.trim()}
             className={cn(
               "w-full flex items-center justify-center gap-2.5 py-4 rounded-xl text-sm font-semibold transition-all",
               importing
                 ? "bg-white/10 text-white/50 cursor-not-allowed"
-                : "bg-white/10 border border-white/20 text-white hover:bg-white/15 active:scale-[0.98]"
+                : repoUrl.trim()
+                ? "bg-blue-600 text-white hover:bg-blue-500 active:scale-[0.98] shadow-lg shadow-blue-500/20"
+                : "bg-white/8 border border-white/10 text-white/40 cursor-not-allowed"
             )}
             data-testid="button-import-repo"
           >
             {importing ? (
-              <>
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
-                />
-                Importing...
-              </>
+              <><Loader2 size={15} className="animate-spin" /> Preparing...</>
             ) : (
-              <>
-                Import
-                <Download size={15} />
-              </>
+              <><Download size={15} /> Import</>
             )}
           </button>
         </div>
@@ -190,15 +297,16 @@ function ImportFromGitHubSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
+/* ── Main Home page ── */
 export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [showMenu, setShowMenu] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [importingRepo, setImportingRepo] = useState<string | null>(null);
   const [, setLocation] = useLocation();
 
   const handleChipSelect = (category: string) => {
-    const newText =
-      prompt.length > 0 ? `${prompt} ${category}` : `I want to make a ${category}`;
+    const newText = prompt.length > 0 ? `${prompt} ${category}` : `I want to make a ${category}`;
     setPrompt(newText);
   };
 
@@ -212,6 +320,18 @@ export default function Home() {
   const handleImportGithub = () => {
     setShowMenu(false);
     setShowImport(true);
+  };
+
+  const handleStartImport = (url: string) => {
+    setShowImport(false);
+    setImportingRepo(url);
+  };
+
+  const handleImportDone = () => {
+    const slug = importingRepo!.replace("https://github.com/", "");
+    sessionStorage.setItem("chat_prompt", `I've imported the GitHub repo https://github.com/${slug}. Analyze the project structure, explain what it does, and suggest what we can build or improve.`);
+    sessionStorage.setItem("imported_repo", importingRepo!);
+    setLocation("/chat");
   };
 
   return (
@@ -235,11 +355,7 @@ export default function Home() {
           <AnimatePresence>
             {showMenu && (
               <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowMenu(false)}
-                  data-testid="overlay-dismiss-menu"
-                />
+                <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} data-testid="overlay-dismiss-menu" />
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95, y: -4 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -254,12 +370,8 @@ export default function Home() {
                   >
                     <SiGithub size={18} className="text-foreground shrink-0" />
                     <div>
-                      <p className="text-sm font-medium text-foreground leading-tight">
-                        Import from GitHub
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Bring in your existing repositories
-                      </p>
+                      <p className="text-sm font-medium text-foreground leading-tight">Import from GitHub</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Bring in your existing repositories</p>
                     </div>
                   </button>
                 </motion.div>
@@ -270,13 +382,8 @@ export default function Home() {
 
         <span className="text-sm font-medium text-muted-foreground">N's workspace</span>
 
-        <Avatar
-          className="w-8 h-8 border border-border cursor-pointer"
-          data-testid="avatar-user"
-        >
-          <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
-            N
-          </AvatarFallback>
+        <Avatar className="w-8 h-8 border border-border cursor-pointer" data-testid="avatar-user">
+          <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">N</AvatarFallback>
         </Avatar>
       </header>
 
@@ -297,13 +404,9 @@ export default function Home() {
       {/* Input Area */}
       <div className="mt-8 space-y-4">
         <CreateInput value={prompt} onChange={setPrompt} onSubmit={handleSubmit} />
-
         <div className="flex flex-col items-center gap-1 text-xs pb-4">
           <span className="text-muted-foreground">Start creating for free</span>
-          <a
-            href="#"
-            className="text-primary hover:underline font-medium decoration-primary/50 underline-offset-4"
-          >
+          <a href="#" className="text-primary hover:underline font-medium decoration-primary/50 underline-offset-4">
             Join Replit Core to unlock more usage
           </a>
         </div>
@@ -312,7 +415,17 @@ export default function Home() {
       {/* Import from GitHub sheet */}
       <AnimatePresence>
         {showImport && (
-          <ImportFromGitHubSheet onClose={() => setShowImport(false)} />
+          <ImportFromGitHubSheet
+            onClose={() => setShowImport(false)}
+            onImport={handleStartImport}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Full-screen importing animation */}
+      <AnimatePresence>
+        {importingRepo && (
+          <ImportingScreen repoUrl={importingRepo} onDone={handleImportDone} />
         )}
       </AnimatePresence>
     </motion.div>

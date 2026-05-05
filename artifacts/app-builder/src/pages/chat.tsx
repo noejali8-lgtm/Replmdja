@@ -384,6 +384,17 @@ function GitPanel({ onClose }: { onClose: () => void }) {
   const [showCommit, setShowCommit] = useState(false);
   const [pushStatus, setPushStatus] = useState<GitOpStatus>("idle");
   const [pullStatus, setPullStatus] = useState<GitOpStatus>("idle");
+  const [stagedFiles, setStagedFiles] = useState<Set<string>>(() => new Set([
+    "src/index.tsx", "src/App.tsx", "src/pages/home.tsx",
+  ]));
+  const MOCK_CHANGED_FILES = [
+    { path: "src/index.tsx", status: "M" },
+    { path: "src/App.tsx", status: "M" },
+    { path: "src/pages/home.tsx", status: "M" },
+    { path: "src/pages/chat.tsx", status: "M" },
+    { path: "src/components/ui/button.tsx", status: "A" },
+    { path: "package.json", status: "M" },
+  ];
 
   const saveConnections = (conns: GitConnection[]) => {
     setConnections(conns);
@@ -684,19 +695,23 @@ function GitPanel({ onClose }: { onClose: () => void }) {
 
               {/* Commit + Push */}
               <div className="px-4 py-3 space-y-2.5">
+                {/* Header row */}
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-foreground">Commit & Push</p>
-                    <p className="text-xs text-muted-foreground/60">Save and send your changes</p>
+                    <p className="text-xs text-muted-foreground/60">{stagedFiles.size} file{stagedFiles.size !== 1 ? "s" : ""} staged</p>
                   </div>
                   <button
                     onClick={() => setShowCommit(v => !v)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-500/20 border border-purple-400/40 text-purple-300 hover:bg-purple-500/30 transition-all"
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-500/20 border border-purple-400/40 text-purple-300 hover:bg-purple-500/30 transition-all flex items-center gap-1.5"
                     data-testid="button-open-commit"
                   >
-                    Commit
+                    <ChevronDown size={11} className={cn("transition-transform", showCommit && "rotate-180")} />
+                    Stage files
                   </button>
                 </div>
+
+                {/* File staging list */}
                 <AnimatePresence>
                   {showCommit && (
                     <motion.div
@@ -705,6 +720,60 @@ function GitPanel({ onClose }: { onClose: () => void }) {
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden space-y-2"
                     >
+                      {/* Select all row */}
+                      <div className="flex items-center justify-between py-1">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={stagedFiles.size === MOCK_CHANGED_FILES.length}
+                            onChange={e => setStagedFiles(e.target.checked ? new Set(MOCK_CHANGED_FILES.map(f => f.path)) : new Set())}
+                            className="w-3.5 h-3.5 accent-purple-500 cursor-pointer"
+                            data-testid="checkbox-stage-all"
+                          />
+                          <span className="text-[11px] text-muted-foreground font-medium">Select all ({MOCK_CHANGED_FILES.length} changed)</span>
+                        </label>
+                      </div>
+
+                      {/* File list */}
+                      <div className="bg-secondary/20 border border-border/40 rounded-xl overflow-hidden divide-y divide-border/30">
+                        {MOCK_CHANGED_FILES.map(file => {
+                          const staged = stagedFiles.has(file.path);
+                          const filename = file.path.split("/").pop() || file.path;
+                          const dir = file.path.includes("/") ? file.path.substring(0, file.path.lastIndexOf("/")) : "";
+                          return (
+                            <label
+                              key={file.path}
+                              className={cn(
+                                "flex items-center gap-2.5 px-3 py-2 cursor-pointer select-none transition-colors",
+                                staged ? "bg-purple-500/5" : "opacity-50"
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={staged}
+                                onChange={e => {
+                                  const next = new Set(stagedFiles);
+                                  if (e.target.checked) next.add(file.path);
+                                  else next.delete(file.path);
+                                  setStagedFiles(next);
+                                }}
+                                className="w-3.5 h-3.5 accent-purple-500 cursor-pointer shrink-0"
+                                data-testid={`checkbox-file-${file.path.replace(/\//g, "-")}`}
+                              />
+                              <span className={cn(
+                                "text-[10px] font-bold w-4 shrink-0 text-center",
+                                file.status === "A" ? "text-green-400" : "text-yellow-400"
+                              )}>{file.status}</span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs text-foreground font-medium truncate">{filename}</p>
+                                {dir && <p className="text-[10px] text-muted-foreground/50 truncate">{dir}</p>}
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      {/* Commit message */}
                       <input
                         type="text"
                         value={commitMsg}
@@ -713,27 +782,34 @@ function GitPanel({ onClose }: { onClose: () => void }) {
                         className="w-full bg-secondary/30 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-purple-400/50 transition-colors"
                         data-testid="input-commit-message"
                       />
+
+                      {/* Push error */}
+                      {pushError && (
+                        <p className="text-[11px] text-red-400 bg-red-500/10 border border-red-400/20 rounded-lg px-3 py-2">{pushError}</p>
+                      )}
+
+                      {/* Push button */}
                       <button
                         onClick={handlePush}
-                        disabled={!commitMsg.trim() || pushStatus === "loading"}
+                        disabled={!commitMsg.trim() || stagedFiles.size === 0 || pushStatus === "loading"}
                         className={cn(
                           "w-full py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
                           pushStatus === "success"
                             ? "bg-green-500/20 border border-green-400/40 text-green-300"
                             : pushStatus === "loading"
                             ? "bg-purple-500/20 border border-purple-400/40 text-purple-300"
-                            : commitMsg.trim()
+                            : commitMsg.trim() && stagedFiles.size > 0
                             ? "bg-purple-500/20 border border-purple-400/40 text-purple-300 hover:bg-purple-500/30"
                             : "bg-secondary/30 border border-border/30 text-muted-foreground/40 cursor-not-allowed"
                         )}
                         data-testid="button-push"
                       >
                         {pushStatus === "loading" ? (
-                          <><Loader2 size={11} className="animate-spin" /> Pushing...</>
+                          <><Loader2 size={11} className="animate-spin" /> Pushing {stagedFiles.size} file{stagedFiles.size !== 1 ? "s" : ""}...</>
                         ) : pushStatus === "success" ? (
-                          <><CheckCircle size={11} /> Pushed!</>
+                          <><CheckCircle size={11} /> Pushed to GitHub!</>
                         ) : (
-                          "Push to GitHub"
+                          <>Push {stagedFiles.size > 0 ? `${stagedFiles.size} file${stagedFiles.size !== 1 ? "s" : ""}` : "—"} to GitHub</>
                         )}
                       </button>
                     </motion.div>
