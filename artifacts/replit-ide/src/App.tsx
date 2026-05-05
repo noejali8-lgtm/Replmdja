@@ -8,6 +8,7 @@ import Home from "@/pages/home";
 import Editor from "@/pages/editor";
 import Projects from "@/pages/projects";
 import Profile from "@/pages/profile";
+import Extensions from "@/pages/extensions";
 
 const queryClient = new QueryClient();
 
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/editor" component={Editor} />
       <Route path="/projects" component={Projects} />
       <Route path="/profile" component={Profile} />
+      <Route path="/extensions" component={Extensions} />
       <Route component={NotFound} />
     </Switch>
   );

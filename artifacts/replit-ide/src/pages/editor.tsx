@@ -548,10 +548,16 @@ export default function Editor() {
             { icon: <FileCode className="h-4 w-4" />, label: "Files", panel: "files" as Panel },
             { icon: <Search className="h-4 w-4" />, label: "Search", panel: "files" as Panel },
             { icon: <GitBranch className="h-4 w-4" />, label: "Git", panel: "files" as Panel },
-            { icon: <Package className="h-4 w-4" />, label: "Packages", panel: "files" as Panel },
+            { icon: <Package className="h-4 w-4" />, label: "Extensions", panel: "files" as Panel },
           ].map(item => (
             <button key={item.label}
-              onClick={() => setActivePanel(item.panel)}
+              onClick={() => {
+                if (item.label === "Extensions") {
+                  setLocation("/extensions");
+                } else {
+                  setActivePanel(item.panel);
+                }
+              }}
               title={item.label}
               className="h-8 w-8 flex items-center justify-center rounded text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d] transition-colors"
               data-testid={`sidebar-${item.label.toLowerCase()}`}>
