@@ -201,7 +201,7 @@ Open [http://localhost:5173](http://localhost:5173).
 
 /* ─── AI agent messages ──────────────────────────────── */
 const INITIAL_AI_MSGS = [
-  { role: "agent", text: "Hi! I'm your AI Agent. I can help you build, debug, and improve your project. What would you like to create?" },
+  { role: "agent", text: "Hi! I'm your AI Agent powered by **Claude Opus** — the most capable AI available.\n\nI can see your current file and help you:\n- 🐛 Debug errors\n- ✨ Add new features\n- 🔄 Refactor code\n- 📖 Explain any code\n\nWhat would you like to do?" },
 ];
 
 /* ─── Syntax highlight (simple) ─────────────────────── */
@@ -316,6 +316,7 @@ export default function Editor() {
   const [agentMessages, setAgentMessages] = useState(INITIAL_AI_MSGS);
   const [agentInput, setAgentInput] = useState("");
   const [agentTyping, setAgentTyping] = useState(false);
+  const [chatHistory, setChatHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [terminalLines, setTerminalLines] = useState([
     { text: "> Ready. Press Run to start your project.", color: "#8b949e" },
   ]);
@@ -401,24 +402,77 @@ export default function Editor() {
     setTimeout(() => toast({ title: "Deployed!", description: "Live at https://my-web-app.replit.app" }), 2500);
   };
 
-  const sendAgentMessage = () => {
-    if (!agentInput.trim()) return;
+  const sendAgentMessage = async () => {
+    if (!agentInput.trim() || agentTyping) return;
     const userMsg = agentInput.trim();
     setAgentMessages(p => [...p, { role: "user", text: userMsg }]);
     setAgentInput("");
     setAgentTyping(true);
-    setTimeout(() => {
-      const replies: Record<string, string> = {
-        default: "I can help with that! Let me analyze your code and suggest improvements. Try adding more components or modifying the styling.",
-        button: "To add a button, use: `<button onClick={() => {}}>Click me</button>`. Style it with inline styles or CSS classes.",
-        error: "I see the issue! Check that your component returns valid JSX. Every element needs a single root wrapper.",
-        style: "To update the styling, modify the `index.css` file or use inline styles in your component. Try changing the background color!",
-        run: "Click the green Run button at the top to start your development server and see the live preview on the right!",
-      };
-      const key = Object.keys(replies).find(k => userMsg.toLowerCase().includes(k)) || "default";
-      setAgentMessages(p => [...p, { role: "agent", text: replies[key] }]);
+
+    const newHistory: { role: "user" | "assistant"; content: string }[] = [
+      ...chatHistory,
+      { role: "user", content: userMsg },
+    ];
+
+    // Add empty streaming message placeholder
+    setAgentMessages(p => [...p, { role: "agent", text: "" }]);
+
+    try {
+      const response = await fetch("/api/anthropic/code-assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userMsg,
+          code: selectedFile.content || "",
+          language: selectedFile.language || "txt",
+          filename: selectedFile.name || "unknown",
+          history: chatHistory,
+        }),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.content) {
+              fullText += data.content;
+              const snapshot = fullText;
+              setAgentMessages(p => {
+                const msgs = [...p];
+                msgs[msgs.length - 1] = { role: "agent", text: snapshot };
+                return msgs;
+              });
+            }
+            if (data.done || data.error) break;
+          } catch {/* ignore parse errors */}
+        }
+      }
+
+      setChatHistory([...newHistory, { role: "assistant", content: fullText }]);
+    } catch (err) {
+      setAgentMessages(p => {
+        const msgs = [...p];
+        msgs[msgs.length - 1] = { role: "agent", text: "Sorry, I couldn't connect to the AI. Make sure the API server is running." };
+        return msgs;
+      });
+    } finally {
       setAgentTyping(false);
-    }, 1200);
+    }
   };
 
   const codeLines = (selectedFile.content || "").split("\n");
@@ -793,6 +847,106 @@ function PreviewPanel({ previewHtml, isRunning, iframeRef, url, onRefresh, onRun
   );
 }
 
+/* ─── Markdown renderer (no external deps) ───────────── */
+function renderMarkdown(text: string) {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Code block
+    if (line.startsWith("```")) {
+      const lang = line.slice(3).trim();
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith("```")) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      elements.push(
+        <div key={i} className="my-2 rounded-lg overflow-hidden border border-[#30363d]">
+          {lang && (
+            <div className="flex items-center gap-2 px-3 py-1 bg-[#161b22] border-b border-[#30363d]">
+              <span className="text-[10px] font-mono text-[#8b949e] uppercase">{lang}</span>
+            </div>
+          )}
+          <pre className="bg-[#0d1117] p-3 overflow-x-auto">
+            <code className="text-xs font-mono text-[#e6edf3] leading-relaxed whitespace-pre">
+              {codeLines.join("\n")}
+            </code>
+          </pre>
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // Bullet
+    if (line.match(/^[-*•]\s/)) {
+      elements.push(
+        <div key={i} className="flex gap-2 text-sm leading-relaxed">
+          <span className="text-[#58a6ff] mt-0.5 shrink-0">•</span>
+          <span>{inlineFormat(line.slice(2))}</span>
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // Heading
+    if (line.startsWith("### ")) {
+      elements.push(<p key={i} className="text-sm font-semibold text-[#e6edf3] mt-3 mb-1">{inlineFormat(line.slice(4))}</p>);
+      i++;
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      elements.push(<p key={i} className="text-sm font-bold text-[#58a6ff] mt-3 mb-1">{inlineFormat(line.slice(3))}</p>);
+      i++;
+      continue;
+    }
+    if (line.startsWith("# ")) {
+      elements.push(<p key={i} className="text-base font-bold text-[#58a6ff] mt-2 mb-1">{inlineFormat(line.slice(2))}</p>);
+      i++;
+      continue;
+    }
+
+    // Empty line → spacer
+    if (line.trim() === "") {
+      elements.push(<div key={i} className="h-1" />);
+      i++;
+      continue;
+    }
+
+    // Normal paragraph
+    elements.push(<p key={i} className="text-sm leading-relaxed">{inlineFormat(line)}</p>);
+    i++;
+  }
+
+  return <>{elements}</>;
+}
+
+function inlineFormat(text: string): React.ReactNode {
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={i} className="font-semibold text-[#e6edf3]">{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+          return <em key={i} className="italic">{part.slice(1, -1)}</em>;
+        }
+        if (part.startsWith("`") && part.endsWith("`")) {
+          return <code key={i} className="px-1.5 py-0.5 rounded bg-[#161b22] border border-[#30363d] font-mono text-[11px] text-[#ffa657]">{part.slice(1, -1)}</code>;
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 /* ─── Agent Panel ────────────────────────────────────── */
 function AgentPanel({ messages, input, typing, onInput, onSend, endRef }: {
   messages: { role: string; text: string }[];
@@ -808,61 +962,61 @@ function AgentPanel({ messages, input, typing, onInput, onSend, endRef }: {
         <div className="h-6 w-6 rounded bg-gradient-to-br from-[#58a6ff] to-[#a371f7] flex items-center justify-center">
           <Sparkles className="h-3.5 w-3.5 text-white" />
         </div>
-        <span className="text-sm font-semibold">AI Agent</span>
-        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-[#a371f7]/20 text-[#a371f7] border border-[#a371f7]/30">Powered by Claude</span>
+        <div>
+          <span className="text-sm font-semibold">AI Agent</span>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          <div className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#a371f7]/20 text-[#a371f7] border border-[#a371f7]/30 font-medium">Claude Opus</span>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((m, i) => (
           <div key={i} className={`flex gap-3 ${m.role === "user" ? "flex-row-reverse" : ""}`}>
-            <div className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 ${m.role === "agent" ? "bg-gradient-to-br from-[#58a6ff] to-[#a371f7]" : "bg-[#30363d]"}`}>
-              {m.role === "agent"
-                ? <Sparkles className="h-3.5 w-3.5 text-white" />
-                : <span className="text-xs font-bold text-[#e6edf3]">N</span>}
+            <div className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${m.role === "agent" ? "bg-gradient-to-br from-[#58a6ff] to-[#a371f7] text-white" : "bg-[#30363d] text-[#e6edf3]"}`}>
+              {m.role === "agent" ? <Sparkles className="h-3.5 w-3.5" /> : "U"}
             </div>
-            <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm leading-relaxed ${m.role === "agent" ? "bg-[#21262d] text-[#e6edf3] rounded-tl-none" : "bg-[#1f6feb] text-white rounded-tr-none"}`}
-              data-testid={`msg-${m.role}-${i}`}>
-              {m.text}
+            <div
+              className={`max-w-[85%] rounded-xl px-3 py-2.5 ${m.role === "agent" ? "bg-[#21262d] text-[#e6edf3] rounded-tl-none" : "bg-[#1f6feb] text-white rounded-tr-none"}`}
+              data-testid={`msg-${m.role}-${i}`}
+            >
+              {m.role === "agent"
+                ? (m.text === ""
+                  ? <div className="flex gap-1 py-1">{[0,1,2].map(j => <div key={j} className="h-1.5 w-1.5 rounded-full bg-[#58a6ff] animate-bounce" style={{ animationDelay: `${j*0.15}s` }} />)}</div>
+                  : renderMarkdown(m.text))
+                : <p className="text-sm leading-relaxed">{m.text}</p>
+              }
             </div>
           </div>
         ))}
-        {typing && (
-          <div className="flex gap-3">
-            <div className="h-7 w-7 rounded-full bg-gradient-to-br from-[#58a6ff] to-[#a371f7] flex items-center justify-center shrink-0">
-              <Sparkles className="h-3.5 w-3.5 text-white" />
-            </div>
-            <div className="bg-[#21262d] rounded-xl rounded-tl-none px-4 py-3">
-              <div className="flex gap-1">
-                {[0, 1, 2].map(i => (
-                  <div key={i} className="h-1.5 w-1.5 rounded-full bg-[#58a6ff] animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+        {typing && agentMessages_typing_placeholder()}
         <div ref={endRef} />
       </div>
 
       <div className="border-t border-[#21262d] p-3 bg-[#161b22] shrink-0">
-        <div className="flex items-end gap-2 bg-[#21262d] rounded-xl border border-[#30363d] px-3 py-2">
+        <div className={`flex items-end gap-2 bg-[#21262d] rounded-xl border px-3 py-2 transition-colors ${typing ? "border-[#a371f7]/50" : "border-[#30363d]"}`}>
           <textarea
             value={input}
             onChange={e => onInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
-            placeholder="Ask Agent anything..."
+            placeholder={typing ? "Claude is thinking..." : "Ask about your code..."}
             rows={1}
-            className="flex-1 bg-transparent text-sm text-[#e6edf3] placeholder-[#484f58] outline-none resize-none"
+            disabled={typing}
+            className="flex-1 bg-transparent text-sm text-[#e6edf3] placeholder-[#484f58] outline-none resize-none disabled:opacity-50"
             style={{ maxHeight: 100 }}
             data-testid="input-agent"
           />
-          <button onClick={onSend}
-            className="h-7 w-7 flex items-center justify-center rounded-lg bg-[#a371f7] hover:bg-[#8957e5] text-white transition-colors shrink-0"
+          <button onClick={onSend} disabled={typing}
+            className="h-7 w-7 flex items-center justify-center rounded-lg bg-[#a371f7] hover:bg-[#8957e5] text-white transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
             data-testid="button-agent-send">
-            <Send className="h-3.5 w-3.5" />
+            {typing ? <div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send className="h-3.5 w-3.5" />}
           </button>
         </div>
-        <p className="text-[10px] text-[#484f58] text-center mt-2">Agent can make mistakes. Review suggestions carefully.</p>
+        <p className="text-[10px] text-[#484f58] text-center mt-2">Reads your current file • Claude Opus 4.7</p>
       </div>
     </div>
   );
 }
+
+function agentMessages_typing_placeholder() { return null; }
