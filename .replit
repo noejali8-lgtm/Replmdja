@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-20", "web", "bash"]
 
 [deployment]
 router = "application"
@@ -49,8 +49,9 @@ waitForPort = 20311
 outputType = "webview"
 
 [agent]
-stack = "PNPM_WORKSPACE"
+stack = "BEST_EFFORT_FALLBACK"
 expertMode = true
+integrations = ["javascript_anthropic_ai_integrations:2.0.0"]
 
 [postMerge]
 path = "scripts/post-merge.sh"
@@ -79,3 +80,6 @@ externalPort = 3000
 [[ports]]
 localPort = 25212
 externalPort = 3001
+
+[nix]
+channel = "stable-25_05"
