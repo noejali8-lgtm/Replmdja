@@ -45,7 +45,7 @@ function AppLayout() {
 function App() {
   useEffect(() => {
     document.documentElement.classList.add("dark");
-    document.documentElement.style.backgroundColor = "hsl(225 10% 10%)";
+    document.documentElement.style.backgroundColor = "#141414";
   }, []);
 
   return (

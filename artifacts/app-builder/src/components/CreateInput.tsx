@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Plus, ArrowUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Switch } from "@/components/ui/switch";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface CreateInputProps {
@@ -15,8 +14,8 @@ type AgentMode = "Core+" | "Power" | "Economy" | "Lite";
 const AGENT_MODES: { id: AgentMode; label: string; desc: string; color: string; badge?: string }[] = [
   { id: "Core+", label: "Core+", desc: "Latest & most capable models. Best quality.", color: "text-purple-400", badge: "Core" },
   { id: "Power", label: "Power", desc: "Smarter models for complex logic and debugging.", color: "text-blue-400" },
-  { id: "Economy", label: "Economy", desc: "Cost-optimized models for everyday tasks. Delivers a strong balance of speed and quality. Best mode for most builds.", color: "text-foreground" },
-  { id: "Lite", label: "Lite", desc: "Fast and lightweight. Great for simple edits.", color: "text-muted-foreground" },
+  { id: "Economy", label: "Economy", desc: "Cost-optimized models for everyday tasks.", color: "text-white" },
+  { id: "Lite", label: "Lite", desc: "Fast and lightweight. Great for simple edits.", color: "text-white/60" },
 ];
 
 export function CreateInput({ value, onChange, onSubmit }: CreateInputProps) {
@@ -34,7 +33,6 @@ export function CreateInput({ value, onChange, onSubmit }: CreateInputProps) {
 
   return (
     <div className="relative">
-      {/* Agent Modes Panel */}
       <AnimatePresence>
         {showModes && (
           <>
@@ -44,10 +42,10 @@ export function CreateInput({ value, onChange, onSubmit }: CreateInputProps) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.97 }}
               transition={{ duration: 0.15 }}
-              className="absolute bottom-full mb-2 left-0 right-0 z-40 bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
+              className="absolute bottom-full mb-2 left-0 right-0 z-40 bg-[#1c1c1c] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
             >
               <div className="p-3">
-                <p className="text-xs text-muted-foreground font-semibold uppercase tracking-widest px-1 mb-2">
+                <p className="text-xs text-white/40 font-semibold uppercase tracking-widest px-1 mb-2">
                   Agent modes
                 </p>
                 <div className="grid grid-cols-4 gap-1.5 mb-3">
@@ -58,8 +56,8 @@ export function CreateInput({ value, onChange, onSubmit }: CreateInputProps) {
                       className={cn(
                         "relative px-3 py-2 rounded-xl text-sm font-semibold transition-all border",
                         agentMode === mode.id
-                          ? "bg-secondary border-border text-foreground"
-                          : "bg-transparent border-transparent text-muted-foreground hover:bg-secondary/50"
+                          ? "bg-white/10 border-white/20 text-white"
+                          : "bg-transparent border-transparent text-white/40 hover:bg-white/5"
                       )}
                       data-testid={`agent-mode-${mode.id.toLowerCase().replace("+", "-plus")}`}
                     >
@@ -72,8 +70,8 @@ export function CreateInput({ value, onChange, onSubmit }: CreateInputProps) {
                     </button>
                   ))}
                 </div>
-                <div className="px-1 py-2 bg-secondary/40 rounded-xl">
-                  <p className="text-xs text-muted-foreground leading-relaxed">
+                <div className="px-2 py-2 bg-white/5 rounded-xl">
+                  <p className="text-xs text-white/50 leading-relaxed">
                     {AGENT_MODES.find(m => m.id === agentMode)?.desc}
                   </p>
                 </div>
@@ -83,47 +81,50 @@ export function CreateInput({ value, onChange, onSubmit }: CreateInputProps) {
         )}
       </AnimatePresence>
 
-      {/* Input Card */}
-      <div className="bg-card rounded-xl border border-card-border p-3 shadow-lg flex flex-col gap-3">
+      <div className="bg-[#1c1c1c] rounded-2xl border border-white/[0.08] overflow-hidden">
         <textarea
           ref={textareaRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              onSubmit();
+            }
+          }}
           placeholder="Describe your idea, Replit will bring it to life..."
-          className="w-full bg-transparent resize-none outline-none text-foreground placeholder:text-muted-foreground min-h-[44px] max-h-[120px] text-base"
+          className="w-full bg-transparent resize-none outline-none text-white placeholder:text-white/35 min-h-[52px] max-h-[120px] text-[15px] px-4 pt-4 pb-2"
           data-testid="input-prompt"
         />
 
-        <div className="flex items-center justify-between mt-1">
+        <div className="flex items-center gap-2 px-3 pb-3">
           <button
-            className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors border border-border"
+            className="w-7 h-7 rounded-full bg-white/8 flex items-center justify-center text-white/50 hover:text-white transition-colors border border-white/10"
             data-testid="button-add-attachment"
           >
-            <Plus size={18} />
+            <Plus size={15} />
           </button>
 
-          <div className="flex items-center gap-2">
-            {/* Plan toggle */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50 border border-border">
-              <span className="text-xs font-medium text-muted-foreground">Plan</span>
-              <Switch
-                checked={planEnabled}
-                onCheckedChange={setPlanEnabled}
-                data-testid="switch-plan"
-                className="scale-75 data-[state=checked]:bg-primary"
-              />
+          <button
+            onClick={() => setPlanEnabled(v => !v)}
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
+              planEnabled
+                ? "bg-white/15 border-white/25 text-white"
+                : "bg-transparent border-white/12 text-white/50 hover:border-white/20 hover:text-white/70"
+            )}
+            data-testid="switch-plan"
+          >
+            <div className={cn(
+              "w-3.5 h-3.5 rounded-sm border flex items-center justify-center shrink-0 transition-colors",
+              planEnabled ? "bg-white border-white" : "border-white/30"
+            )}>
+              {planEnabled && <div className="w-1.5 h-1.5 bg-black rounded-sm" />}
             </div>
+            Plan
+          </button>
 
-            {/* Agent mode selector */}
-            <button
-              onClick={() => setShowModes(!showModes)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary/50 border border-border hover:bg-secondary transition-colors"
-              data-testid="button-agent-mode"
-            >
-              <span className="text-xs font-medium text-foreground">⠿ {agentMode}</span>
-              <ChevronDown size={12} className="text-muted-foreground" />
-            </button>
-          </div>
+          <div className="flex-1" />
 
           <button
             onClick={onSubmit}
@@ -131,12 +132,12 @@ export function CreateInput({ value, onChange, onSubmit }: CreateInputProps) {
             className={cn(
               "w-8 h-8 rounded-full flex items-center justify-center transition-all",
               value.trim()
-                ? "bg-primary text-primary-foreground shadow-md hover:brightness-110"
-                : "bg-secondary text-muted-foreground opacity-50 cursor-not-allowed"
+                ? "bg-[#2563eb] text-white hover:bg-blue-500 active:scale-95"
+                : "bg-white/8 text-white/25 cursor-not-allowed"
             )}
             data-testid="button-send"
           >
-            <ArrowUp size={18} />
+            <ArrowUp size={17} />
           </button>
         </div>
       </div>

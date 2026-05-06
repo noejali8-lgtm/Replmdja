@@ -1820,46 +1820,41 @@ export default function Chat() {
       className="relative flex flex-col h-[100dvh] max-w-[480px] mx-auto w-full bg-background overflow-hidden"
     >
       {/* ── Header ── */}
-      <div className="flex items-center justify-between px-3 pt-10 pb-3 border-b border-border shrink-0">
-        {/* Left group */}
-        <div className="flex items-center gap-1 bg-secondary/40 border border-border/60 rounded-xl px-1 py-1">
-          <button
-            onClick={() => setLocation("/")}
-            className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"
-            data-testid="button-back"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <button
-            onClick={() => setShowHistory(true)}
-            className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"
-            data-testid="button-history"
-          >
-            <History size={18} />
-          </button>
+      <div className="flex items-center justify-between px-4 pt-10 pb-3 border-b border-white/[0.07] shrink-0">
+        <button
+          onClick={() => setLocation("/")}
+          className="w-9 h-9 flex items-center justify-center text-white/50 hover:text-white rounded-xl hover:bg-white/8 transition-colors"
+          data-testid="button-back"
+        >
+          <ArrowLeft size={20} />
+        </button>
+
+        <button
+          onClick={() => setShowHistory(true)}
+          className="w-9 h-9 flex items-center justify-center text-white/50 hover:text-white rounded-xl hover:bg-white/8 transition-colors"
+          data-testid="button-history"
+        >
+          <History size={20} />
+        </button>
+
+        <div className="flex items-center gap-2">
+          <AgentIcon size={18} className="text-purple-400" />
+          <span className="text-base font-semibold text-white">Agent</span>
         </div>
 
-        {/* Center - Agent title */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/30 border border-border/40 rounded-xl">
-          <AgentDots size={16} className="text-purple-400" />
-          <span className="text-sm font-semibold text-foreground">Agent</span>
-        </div>
+        <button
+          className="w-9 h-9 flex items-center justify-center text-white/50 hover:text-white rounded-xl hover:bg-white/8 transition-colors"
+          data-testid="button-share"
+        >
+          <Share2 size={19} />
+        </button>
 
-        {/* Right group */}
-        <div className="flex items-center gap-1 bg-secondary/40 border border-border/60 rounded-xl px-1 py-1">
-          <button
-            className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"
-            data-testid="button-share"
-          >
-            <Share2 size={17} />
-          </button>
-          <button
-            className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"
-            data-testid="button-more"
-          >
-            <MoreHorizontal size={18} />
-          </button>
-        </div>
+        <button
+          className="w-9 h-9 flex items-center justify-center text-white/50 hover:text-white rounded-xl hover:bg-white/8 transition-colors"
+          data-testid="button-more"
+        >
+          <MoreHorizontal size={20} />
+        </button>
       </div>
 
       {/* ── Messages area ── */}
@@ -1910,67 +1905,8 @@ export default function Chat() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ── Dev Tools Bar ── */}
-      <div className="shrink-0 border-t border-border bg-card/60">
-        <div className="flex items-stretch h-14">
-          {[
-            { icon: <Lock size={19} />, label: "Secrets", testId: "tool-secrets", onClick: () => setShowSecrets(true) },
-            { icon: <Database size={19} />, label: "Database", testId: "tool-database", onClick: () => setShowDatabase(true) },
-            { icon: <UserPlus size={19} />, label: "Auth", testId: "tool-auth", onClick: () => setShowAuth(true) },
-            { icon: <GitBranch size={19} />, label: "Git", testId: "tool-git", onClick: () => setShowGit(true) },
-          ].map((tool, i) => (
-            <motion.button
-              key={tool.label}
-              whileTap={{ scale: 0.92 }}
-              onClick={tool.onClick}
-              className={cn(
-                "flex-1 flex flex-col items-center justify-center gap-0.5 text-muted-foreground hover:text-foreground hover:bg-secondary/50 active:bg-secondary transition-colors",
-                i < 3 && "border-r border-border/50",
-                tool.label === "Git" && "hover:text-green-400"
-              )}
-              data-testid={tool.testId}
-            >
-              {tool.icon}
-              <span className="text-[10px] font-medium">{tool.label}</span>
-            </motion.button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── File Search Bar ── */}
-      <div className="shrink-0 border-t border-border/50 bg-background">
-        <div className="flex items-center h-11 px-1 gap-1">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            className="w-9 h-9 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/50 transition-colors"
-            data-testid="button-files"
-          >
-            <Folder size={18} />
-          </motion.button>
-          <div className="flex-1 flex items-center gap-2 bg-secondary/30 rounded-lg px-3 h-8 border border-border/30">
-            <Search size={14} className="text-muted-foreground shrink-0" />
-            <input
-              type="text"
-              placeholder="Search..."
-              value={fileSearch}
-              onChange={e => setFileSearch(e.target.value)}
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
-              data-testid="input-file-search"
-            />
-          </div>
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            className="w-9 h-9 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/50 transition-colors"
-            onClick={() => setFileSearch("")}
-            data-testid="button-close-search"
-          >
-            <X size={18} />
-          </motion.button>
-        </div>
-      </div>
-
       {/* ── Input Area ── */}
-      <div className="shrink-0 px-3 pb-3 pt-2 border-t border-border bg-background relative">
+      <div className="shrink-0 px-3 pb-2 pt-2 bg-[#141414] relative">
         {/* Agent Modes Panel */}
         <AnimatePresence>
           {showModes && (
@@ -2019,7 +1955,8 @@ export default function Chat() {
           )}
         </AnimatePresence>
 
-        <div className="bg-card rounded-2xl border border-card-border p-3 shadow-lg flex flex-col gap-2.5">
+        {/* Input card */}
+        <div className="bg-[#1c1c1c] rounded-2xl border border-white/[0.08] overflow-hidden">
           <textarea
             ref={textareaRef}
             value={input}
@@ -2030,15 +1967,15 @@ export default function Chat() {
             }}
             onKeyDown={handleKeyDown}
             placeholder="Make, test, iterate..."
-            className="w-full bg-transparent resize-none outline-none text-foreground placeholder:text-muted-foreground/60 min-h-[36px] max-h-[120px] text-sm"
+            className="w-full bg-transparent resize-none outline-none text-white placeholder:text-white/35 min-h-[40px] max-h-[120px] text-[15px] px-4 pt-3.5 pb-1"
             data-testid="input-chat"
             rows={1}
           />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 px-3 pb-3">
             {/* + attach */}
             <motion.button
               whileTap={{ scale: 0.9 }}
-              className="w-7 h-7 rounded-full bg-secondary/70 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors border border-border/60 shrink-0"
+              className="w-7 h-7 rounded-full bg-white/8 flex items-center justify-center text-white/50 hover:text-white transition-colors border border-white/10 shrink-0"
               data-testid="button-attach"
             >
               <Plus size={14} />
@@ -2048,17 +1985,19 @@ export default function Chat() {
             <button
               onClick={() => setPlanEnabled(v => !v)}
               className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors shrink-0",
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium border transition-colors shrink-0",
                 planEnabled
-                  ? "bg-primary/15 border-primary/40 text-primary"
-                  : "bg-secondary/40 border-border/50 text-muted-foreground hover:text-foreground"
+                  ? "bg-white/15 border-white/25 text-white"
+                  : "bg-transparent border-white/12 text-white/50 hover:text-white/70"
               )}
               data-testid="switch-plan"
             >
-              <motion.div
-                className={cn("w-3 h-3 rounded-full border-2 shrink-0", planEnabled ? "bg-primary border-primary" : "border-muted-foreground bg-transparent")}
-                animate={{ scale: planEnabled ? 1.1 : 1 }}
-              />
+              <div className={cn(
+                "w-3.5 h-3.5 rounded-sm border flex items-center justify-center shrink-0",
+                planEnabled ? "bg-white border-white" : "border-white/30"
+              )}>
+                {planEnabled && <div className="w-1.5 h-1.5 bg-black rounded-sm" />}
+              </div>
               Plan
             </button>
 
@@ -2066,100 +2005,106 @@ export default function Chat() {
             <motion.button
               whileTap={{ scale: 0.96 }}
               onClick={() => setShowModes(!showModes)}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary/50 border border-border/50 hover:bg-secondary transition-colors shrink-0"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-white/6 border border-white/10 hover:bg-white/10 transition-colors shrink-0"
               data-testid="button-agent-mode"
             >
-              <AgentDots size={11} className="text-foreground/80" />
-              <span className="text-xs font-medium text-foreground">{agentMode}</span>
-              <ChevronDown size={10} className="text-muted-foreground" />
+              <AgentDots size={11} className="text-white/70" />
+              <span className="text-xs font-medium text-white/80">{agentMode}</span>
+              <ChevronDown size={10} className="text-white/40" />
             </motion.button>
 
             <div className="flex-1" />
 
-            {/* Send / Stop button */}
+            {/* Stop / Send button — blue square */}
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={isThinking ? () => {} : handleSubmit}
-              disabled={!input.trim() && !isThinking}
               className={cn(
-                "w-8 h-8 rounded-xl flex items-center justify-center transition-all shrink-0",
+                "w-9 h-9 rounded-xl flex items-center justify-center transition-all shrink-0",
                 isThinking
-                  ? "bg-primary text-primary-foreground shadow-md"
+                  ? "bg-[#2563eb] text-white"
                   : input.trim()
-                  ? "bg-primary text-primary-foreground shadow-md hover:brightness-110"
-                  : "bg-secondary text-muted-foreground opacity-40 cursor-not-allowed"
+                  ? "bg-[#2563eb] text-white hover:bg-blue-500"
+                  : "bg-[#2563eb]/60 text-white/60"
               )}
               data-testid="button-send-chat"
             >
               {isThinking ? (
-                <motion.div
-                  animate={{ scale: [1, 0.85, 1] }}
-                  transition={{ duration: 1, repeat: Infinity }}
-                >
-                  <Square size={14} fill="currentColor" />
-                </motion.div>
+                <Square size={13} fill="currentColor" className="text-white" />
               ) : (
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 12V4M8 4L4 8M8 4L12 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+                <Square size={13} fill="currentColor" className="text-white" />
               )}
             </motion.button>
           </div>
         </div>
+
+        {/* Below-input row: + | record | ⋮ */}
+        <div className="flex items-center justify-between px-1 pt-2 pb-1">
+          <button className="w-9 h-9 flex items-center justify-center text-white/40 hover:text-white transition-colors" data-testid="button-add-panel">
+            <Plus size={20} />
+          </button>
+          <button className="w-9 h-9 flex items-center justify-center text-white/40 hover:text-white transition-colors" data-testid="button-record">
+            <div className="w-6 h-6 rounded-full border-2 border-white/30 flex items-center justify-center">
+              <div className="w-2.5 h-2.5 rounded-full bg-white/40" />
+            </div>
+          </button>
+          <button className="w-9 h-9 flex items-center justify-center text-white/40 hover:text-white transition-colors" data-testid="button-more-actions">
+            <MoreHorizontal size={20} />
+          </button>
+        </div>
       </div>
 
-      {/* ── Workspace Toolbar ── */}
-      <div className="shrink-0 border-t border-border bg-card/90">
-        <div className="flex items-center justify-around h-13 px-1 py-1 relative">
-
-          {/* Run */}
-          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowRun(true)} className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-lg transition-colors" data-testid="toolbar-run" title="Run">
-            <Play size={19} />
+      {/* ── 7-Tab Bottom Nav ── */}
+      <div className="shrink-0 bg-[#141414] border-t border-white/[0.07]">
+        <div className="flex items-center justify-around h-[52px] px-1">
+          {/* Play */}
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowRun(true)}
+            className="flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
+            data-testid="toolbar-run">
+            <Play size={20} strokeWidth={1.5} />
           </motion.button>
 
-          {/* Webview */}
-          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowWebview(true)} className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-lg transition-colors" data-testid="toolbar-webview" title="Webview">
-            <Monitor size={19} />
+          {/* Monitor */}
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowWebview(true)}
+            className="flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
+            data-testid="toolbar-webview">
+            <Monitor size={20} strokeWidth={1.5} />
           </motion.button>
 
-          {/* Agent — active with glow + underline indicator */}
-          <motion.button
-            whileTap={{ scale: 0.88 }}
-            className="relative w-11 h-11 flex flex-col items-center justify-center gap-0.5 rounded-xl bg-[#2a1f4e]/70 border border-purple-500/30 transition-colors"
-            data-testid="toolbar-agent"
-            title="Agent"
-          >
-            <motion.div
-              animate={{ scale: [1, 1.08, 1], opacity: [0.85, 1, 0.85] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <AgentIcon size={22} className="text-purple-400" />
-            </motion.div>
-            {/* Active underline */}
-            <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-purple-400" />
+          {/* Agent — active, purple, indicator */}
+          <motion.button whileTap={{ scale: 0.88 }}
+            className="relative flex-1 h-full flex items-center justify-center"
+            data-testid="toolbar-agent">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] rounded-full bg-purple-400" />
+            <AgentIcon size={22} className="text-purple-400" />
           </motion.button>
 
-          {/* Separator */}
-          <div className="w-px h-6 bg-border/50 mx-1" />
-
-          {/* Deploy */}
-          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowDeploy(true)} className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-lg transition-colors" data-testid="toolbar-deploy" title="Deploy">
-            <Globe size={19} />
+          {/* Globe */}
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowDeploy(true)}
+            className="flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
+            data-testid="toolbar-deploy">
+            <Globe size={20} strokeWidth={1.5} />
           </motion.button>
 
-          {/* New Tab */}
-          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowFiles(true)} className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-lg transition-colors" data-testid="toolbar-new-tab" title="Files">
-            <Plus size={19} />
+          {/* Connections */}
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowGit(true)}
+            className="flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
+            data-testid="toolbar-connections">
+            <GitBranch size={20} strokeWidth={1.5} />
           </motion.button>
 
-          {/* Files */}
-          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowFiles(true)} className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-lg transition-colors" data-testid="toolbar-files" title="Files">
-            <AlignJustify size={19} />
+          {/* Tasks */}
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowFiles(true)}
+            className="flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
+            data-testid="toolbar-tasks">
+            <AlignJustify size={20} strokeWidth={1.5} />
           </motion.button>
 
           {/* Split */}
-          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowWebview(true)} className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-lg transition-colors" data-testid="toolbar-split" title="Webview">
-            <LayoutPanelLeft size={19} />
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowWebview(true)}
+            className="flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
+            data-testid="toolbar-split">
+            <LayoutPanelLeft size={20} strokeWidth={1.5} />
           </motion.button>
         </div>
       </div>
