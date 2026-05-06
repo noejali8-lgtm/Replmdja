@@ -40,9 +40,11 @@ A mobile-first Replit clone with two apps: **App Builder** (mobile UI matching t
 ## Product
 
 - **App Builder**: Mobile Replit-like UI — create projects via AI chat, browse projects, account page
-  - **Agent 4 features**: Parallel Agents panel, App Monitoring panel, Design Canvas panel, Branching/Micro VMs panel, Turbo mode (2.5×), Build Together collaboration mode
+  - **Agent 4 features**: Parallel Agents, App Monitoring, Design Canvas, Branching/Micro VMs, Turbo mode (2.5×), Build Together, Multi-Artifact (Web/Mobile/Slides/API/Desktop), Agent Memory (confidence-scored facts), Checkpoint Timeline (restore to any point), Agent Insights (tokens/cost/speed stats)
+  - **Quick Suggestions**: Swipeable prompt chips appear after each AI reply (dismissed on tap or ×)
+  - **More menu**: ··· button opens overlay with Memory / Checkpoints / Insights / Files / Deploy / Webview
   - **GitHub browsing**: AI uses `fetch_url` tool to read repos, files, READMEs, file trees — with real-time "Fetching repository..." indicator in chat
-  - **Toolbar**: Play (run), Activity (monitoring), Agent (active), Parallel (CPU), Network (branches), Files, Palette (canvas)
+  - **Toolbar**: Play (run), Activity (monitoring), Agent (active), Parallel (CPU), Network (branches), Layers (multi-artifact), Palette (canvas)
   - **Toolbar panels**: Secrets, Database, Auth, Git (all functional slide-up panels)
   - **Git panel**: GitHub token auth, remote URL + repo browser (via GitHub API), Pull/Push with real Git Trees API commit flow, file staging view, commit author editor
   - **Import from GitHub**: animated importing screen → navigates to chat

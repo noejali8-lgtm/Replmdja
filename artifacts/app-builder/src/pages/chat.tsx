@@ -1383,6 +1383,506 @@ function WebviewPanel({ onClose }: { onClose: () => void }) {
 }
 
 /* ─────────────────────────────────────────────────────────
+   MULTI-ARTIFACT PANEL
+   ───────────────────────────────────────────────────────── */
+interface Artifact {
+  id: string;
+  type: "web" | "mobile" | "slides" | "api" | "desktop";
+  label: string;
+  desc: string;
+  icon: React.ReactNode;
+  status: "building" | "ready" | "syncing" | "idle";
+  linked: boolean;
+  url?: string;
+  color: string;
+  bg: string;
+}
+
+const DEFAULT_ARTIFACTS: Artifact[] = [
+  { id: "a1", type: "web", label: "Web App", desc: "React + Tailwind · Live at your-app.replit.app", icon: <Globe size={16} />, status: "ready", linked: true, url: "https://your-app.replit.app", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-400/20" },
+  { id: "a2", type: "mobile", label: "Mobile App", desc: "Expo · iOS + Android · Synced with Web", icon: <Monitor size={16} />, status: "ready", linked: true, color: "text-green-400", bg: "bg-green-500/10 border-green-400/20" },
+  { id: "a3", type: "slides", label: "Slide Deck", desc: "16 slides · Auto-generated from app structure", icon: <Layers size={16} />, status: "idle", linked: false, color: "text-orange-400", bg: "bg-orange-500/10 border-orange-400/20" },
+  { id: "a4", type: "api", label: "REST API", desc: "Express · 12 endpoints · OpenAPI spec", icon: <Code2 size={16} />, status: "ready", linked: true, color: "text-purple-400", bg: "bg-purple-500/10 border-purple-400/20" },
+  { id: "a5", type: "desktop", label: "Desktop App", desc: "Electron · macOS + Windows · Coming soon", icon: <Server size={16} />, status: "idle", linked: false, color: "text-muted-foreground", bg: "bg-secondary/30 border-border/30" },
+];
+
+function MultiArtifactPanel({ onClose }: { onClose: () => void }) {
+  const [artifacts, setArtifacts] = useState<Artifact[]>(DEFAULT_ARTIFACTS);
+  const [activeTab, setActiveTab] = useState<string>("a1");
+  const [building, setBuilding] = useState<string | null>(null);
+  const [syncAll, setSyncAll] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const handleBuild = async (id: string) => {
+    setBuilding(id);
+    await new Promise(r => setTimeout(r, 2000));
+    setArtifacts(prev => prev.map(a => a.id === id ? { ...a, status: "ready", linked: true } : a));
+    setBuilding(null);
+  };
+
+  const handleSyncAll = async () => {
+    setSyncing(true);
+    setArtifacts(prev => prev.map(a => a.linked ? { ...a, status: "syncing" } : a));
+    await new Promise(r => setTimeout(r, 1800));
+    setArtifacts(prev => prev.map(a => ({ ...a, status: a.status === "syncing" ? "ready" : a.status })));
+    setSyncing(false);
+    setSyncAll(true);
+  };
+
+  const active = artifacts.find(a => a.id === activeTab);
+
+  return (
+    <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 36 }}
+      className="absolute inset-0 z-50 flex flex-col bg-background">
+      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
+        <div className="flex-1" />
+        <Layers size={17} className="text-orange-400" />
+        <span className="text-base font-semibold text-foreground">Multi-Artifact</span>
+        <div className="flex-1" />
+        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+      </div>
+
+      {/* Artifact type tabs */}
+      <div className="flex overflow-x-auto no-scrollbar gap-1.5 px-4 py-3 border-b border-border/40 shrink-0">
+        {artifacts.map(a => (
+          <button key={a.id} onClick={() => setActiveTab(a.id)}
+            className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 transition-all",
+              activeTab === a.id ? cn(a.bg, a.color) : "bg-secondary/20 border-transparent text-muted-foreground hover:text-foreground"
+            )}>
+            {a.icon}
+            {a.label}
+            {a.status === "ready" && <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />}
+            {a.status === "syncing" && <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.2, repeat: Infinity }} className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 no-scrollbar">
+        {/* Sync all banner */}
+        <div className="flex items-center gap-2 bg-card border border-border rounded-2xl px-4 py-3">
+          <div className="flex-1">
+            <p className="text-xs font-semibold text-foreground">Auto-Sync Enabled</p>
+            <p className="text-[11px] text-muted-foreground/60">Changes propagate to all linked artifacts</p>
+          </div>
+          <button onClick={handleSyncAll} disabled={syncing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-blue-500/15 border border-blue-400/30 text-blue-300 hover:bg-blue-500/25 transition-all">
+            {syncing ? <><Loader2 size={11} className="animate-spin" /> Syncing...</> : <><RefreshCw size={11} /> Sync All</>}
+          </button>
+        </div>
+
+        {/* Active artifact detail */}
+        {active && (
+          <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className={cn("rounded-2xl border p-4 space-y-3", active.bg)}>
+            <div className="flex items-center gap-3">
+              <div className={cn("w-10 h-10 rounded-xl border flex items-center justify-center", active.bg, active.color)}>
+                {active.icon}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold text-foreground">{active.label}</p>
+                  <span className={cn("text-[9px] font-bold px-1.5 rounded-full border",
+                    active.status === "ready" ? "bg-green-500/15 border-green-400/25 text-green-400" :
+                    active.status === "building" || building === active.id ? "bg-yellow-500/15 border-yellow-400/25 text-yellow-400" :
+                    active.status === "syncing" ? "bg-blue-500/15 border-blue-400/25 text-blue-400" :
+                    "bg-secondary/60 border-border/40 text-muted-foreground/50"
+                  )}>
+                    {building === active.id ? "Building..." : active.status === "syncing" ? "Syncing" : active.status === "ready" ? "Ready" : "Not built"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground/60">{active.desc}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 cursor-pointer flex-1">
+                <div className={cn("relative w-8 h-4 rounded-full transition-colors", active.linked ? "bg-green-500" : "bg-secondary")}
+                  onClick={() => setArtifacts(prev => prev.map(a => a.id === active.id ? { ...a, linked: !a.linked } : a))}>
+                  <motion.div animate={{ x: active.linked ? 16 : 2 }} transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    className="absolute top-0.5 w-3 h-3 bg-white rounded-full shadow" />
+                </div>
+                <span className="text-[11px] text-muted-foreground">Link to main project</span>
+              </label>
+              {active.url && (
+                <button onClick={() => window.open(active.url, "_blank")}
+                  className="flex items-center gap-1 text-[11px] text-blue-400 hover:underline">
+                  <ExternalLink size={11} /> Open
+                </button>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              {active.status !== "ready" ? (
+                <button onClick={() => handleBuild(active.id)} disabled={building === active.id}
+                  className={cn("flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition-all border", active.bg, active.color, "hover:opacity-80")}>
+                  {building === active.id ? <><Loader2 size={12} className="animate-spin" /> Building...</> : <><Sparkles size={12} /> Build with AI</>}
+                </button>
+              ) : (
+                <button className={cn("flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold border opacity-60 cursor-default", active.bg, active.color)}>
+                  <CheckCircle size={12} /> Built & Live
+                </button>
+              )}
+              <button className="px-3 py-2.5 rounded-xl text-xs border border-border/40 text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors">
+                <Download size={14} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* All artifacts grid */}
+        <div>
+          <p className="text-[11px] font-semibold text-muted-foreground/50 uppercase tracking-wider mb-2 px-1">All Outputs</p>
+          <div className="space-y-2">
+            {artifacts.filter(a => a.id !== activeTab).map(a => (
+              <button key={a.id} onClick={() => setActiveTab(a.id)}
+                className="w-full flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-3 hover:bg-secondary/20 transition-colors">
+                <div className={cn("w-8 h-8 rounded-lg border flex items-center justify-center shrink-0", a.bg, a.color)}>{a.icon}</div>
+                <div className="flex-1 text-left">
+                  <p className="text-xs font-semibold text-foreground">{a.label}</p>
+                  <p className="text-[10px] text-muted-foreground/50 truncate">{a.desc}</p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {a.linked && <span className="text-[9px] text-green-400 font-medium">Linked</span>}
+                  {a.status === "ready" ? <span className="w-1.5 h-1.5 rounded-full bg-green-400" /> : <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />}
+                </div>
+                <ChevronRight size={13} className="text-muted-foreground/30 shrink-0" />
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   AI MEMORY PANEL
+   ───────────────────────────────────────────────────────── */
+interface MemoryEntry {
+  id: string;
+  category: "stack" | "requirement" | "preference" | "context" | "decision";
+  text: string;
+  confidence: number;
+  added: string;
+}
+
+const MOCK_MEMORY: MemoryEntry[] = [
+  { id: "m1", category: "stack", text: "Using React 19 + Vite + Tailwind CSS 4 for frontend", confidence: 99, added: "session start" },
+  { id: "m2", category: "stack", text: "PostgreSQL database with Drizzle ORM", confidence: 99, added: "session start" },
+  { id: "m3", category: "requirement", text: "Mobile-first design with dark GitHub-inspired color palette (#0d1117)", confidence: 97, added: "2 sessions ago" },
+  { id: "m4", category: "preference", text: "User prefers Framer Motion for all animations", confidence: 94, added: "3 msgs ago" },
+  { id: "m5", category: "decision", text: "AI uses Anthropic Claude Opus via streaming SSE", confidence: 99, added: "session start" },
+  { id: "m6", category: "context", text: "Project is a Replit IDE clone with two apps: App Builder and Replit IDE", confidence: 99, added: "session start" },
+  { id: "m7", category: "requirement", text: "Agent 4 features: Parallel Agents, Monitoring, Design Canvas, Branches, Turbo mode", confidence: 96, added: "this session" },
+  { id: "m8", category: "preference", text: "No placeholder/mock data — all features should be functional", confidence: 91, added: "1 session ago" },
+];
+
+const MEM_COLORS: Record<string, string> = {
+  stack: "bg-blue-500/10 border-blue-400/25 text-blue-400",
+  requirement: "bg-purple-500/10 border-purple-400/25 text-purple-400",
+  preference: "bg-green-500/10 border-green-400/25 text-green-400",
+  context: "bg-yellow-500/10 border-yellow-400/25 text-yellow-400",
+  decision: "bg-orange-500/10 border-orange-400/25 text-orange-400",
+};
+
+function MemoryPanel({ onClose }: { onClose: () => void }) {
+  const [entries, setEntries] = useState<MemoryEntry[]>(MOCK_MEMORY);
+  const [filter, setFilter] = useState<string>("all");
+  const [adding, setAdding] = useState(false);
+  const [newText, setNewText] = useState("");
+
+  const categories = ["all", "stack", "requirement", "preference", "context", "decision"];
+  const filtered = filter === "all" ? entries : entries.filter(e => e.category === filter);
+
+  const handleAdd = () => {
+    if (!newText.trim()) return;
+    setEntries(prev => [{ id: `m${Date.now()}`, category: "context", text: newText.trim(), confidence: 85, added: "just now" }, ...prev]);
+    setNewText(""); setAdding(false);
+  };
+
+  return (
+    <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 36 }}
+      className="absolute inset-0 z-50 flex flex-col bg-background">
+      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
+        <div className="flex-1" />
+        <Sparkles size={17} className="text-yellow-400" />
+        <span className="text-base font-semibold text-foreground">Agent Memory</span>
+        <div className="flex-1" />
+        <button onClick={() => setAdding(v => !v)}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-yellow-500/15 border border-yellow-400/30 text-yellow-300 hover:bg-yellow-500/25 transition-colors">
+          <Plus size={11} /> Add
+        </button>
+        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+      </div>
+
+      {/* Category filter chips */}
+      <div className="flex overflow-x-auto no-scrollbar gap-1.5 px-4 py-2.5 border-b border-border/40 shrink-0">
+        {categories.map(cat => (
+          <button key={cat} onClick={() => setFilter(cat)}
+            className={cn("px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 border transition-all capitalize",
+              filter === cat ? "bg-yellow-500/20 border-yellow-400/40 text-yellow-300" : "bg-secondary/20 border-transparent text-muted-foreground hover:text-foreground"
+            )}>
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 no-scrollbar">
+        <p className="text-[11px] text-muted-foreground/50 leading-relaxed px-1">
+          Agent remembers these facts about your project across all sessions. High-confidence memories are used automatically.
+        </p>
+
+        <AnimatePresence>
+          {adding && (
+            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+              className="bg-card border border-yellow-400/20 rounded-2xl p-3.5 space-y-2.5">
+              <p className="text-xs font-semibold text-foreground">Add to Agent Memory</p>
+              <textarea value={newText} onChange={e => setNewText(e.target.value)} rows={2} autoFocus
+                placeholder="e.g. User prefers TypeScript over JavaScript"
+                className="w-full bg-secondary/30 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-yellow-400/50 resize-none transition-colors" />
+              <div className="flex gap-2">
+                <button onClick={() => { setAdding(false); setNewText(""); }} className="flex-1 py-2 rounded-lg text-xs border border-border/50 text-muted-foreground hover:bg-secondary/50 transition-colors">Cancel</button>
+                <button onClick={handleAdd} disabled={!newText.trim()}
+                  className={cn("flex-1 py-2 rounded-lg text-xs font-semibold transition-colors",
+                    newText.trim() ? "bg-yellow-500/20 border border-yellow-400/40 text-yellow-300 hover:bg-yellow-500/30" : "bg-secondary/30 text-muted-foreground/40 cursor-not-allowed"
+                  )}>
+                  Remember This
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {filtered.map((entry, i) => (
+          <motion.div key={entry.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
+            className="bg-card border border-border rounded-xl p-3 flex items-start gap-3">
+            <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full border capitalize shrink-0 mt-0.5", MEM_COLORS[entry.category] || MEM_COLORS.context)}>
+              {entry.category}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] text-foreground leading-snug">{entry.text}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-1">
+                  <div className="w-12 h-1 bg-secondary/50 rounded-full overflow-hidden">
+                    <div className="h-full bg-green-400 rounded-full" style={{ width: `${entry.confidence}%` }} />
+                  </div>
+                  <span className="text-[9px] text-muted-foreground/40">{entry.confidence}%</span>
+                </div>
+                <span className="text-[9px] text-muted-foreground/30">{entry.added}</span>
+              </div>
+            </div>
+            <button onClick={() => setEntries(prev => prev.filter(e => e.id !== entry.id))}
+              className="text-muted-foreground/30 hover:text-red-400 transition-colors p-0.5 shrink-0">
+              <X size={12} />
+            </button>
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   CHECKPOINT TIMELINE PANEL
+   ───────────────────────────────────────────────────────── */
+interface Checkpoint {
+  id: string;
+  label: string;
+  desc: string;
+  time: string;
+  files: number;
+  status: "current" | "past" | "auto";
+}
+
+const MOCK_CHECKPOINTS: Checkpoint[] = [
+  { id: "cp1", label: "Current state", desc: "Added Parallel Agents, Monitoring & Canvas panels", time: "now", files: 3, status: "current" },
+  { id: "cp2", label: "Added Git panel", desc: "Full GitHub integration with repo browser", time: "18 min ago", files: 2, status: "auto" },
+  { id: "cp3", label: "Initial chat page", desc: "Basic chat UI with message bubbles", time: "34 min ago", files: 5, status: "auto" },
+  { id: "cp4", label: "Project scaffold", desc: "pnpm monorepo setup with API + frontend", time: "1 hr ago", files: 12, status: "past" },
+  { id: "cp5", label: "First commit", desc: "Empty project initialized", time: "2 hr ago", files: 1, status: "past" },
+];
+
+function CheckpointPanel({ onClose }: { onClose: () => void }) {
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const [restored, setRestored] = useState<string | null>(null);
+
+  const handleRestore = async (id: string) => {
+    if (id === "cp1") return;
+    setRestoring(id);
+    await new Promise(r => setTimeout(r, 1800));
+    setRestoring(null);
+    setRestored(id);
+  };
+
+  return (
+    <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 36 }}
+      className="absolute inset-0 z-50 flex flex-col bg-background">
+      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
+        <div className="flex-1" />
+        <Clock size={17} className="text-cyan-400" />
+        <span className="text-base font-semibold text-foreground">Checkpoints</span>
+        <div className="flex-1" />
+        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 no-scrollbar">
+        <p className="text-xs text-muted-foreground/60 leading-relaxed mb-4 px-1">
+          Auto-checkpoints are saved after every significant change. Restore any point to undo all changes since then — your conversation history is preserved.
+        </p>
+
+        {/* Timeline */}
+        <div className="relative">
+          {/* Vertical line */}
+          <div className="absolute left-[19px] top-3 bottom-3 w-[2px] bg-border/40" />
+
+          <div className="space-y-4">
+            {MOCK_CHECKPOINTS.map((cp, i) => (
+              <motion.div key={cp.id} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.07 }}
+                className="flex items-start gap-3">
+                {/* Timeline node */}
+                <div className={cn("w-10 h-10 rounded-full border-2 flex items-center justify-center shrink-0 z-10",
+                  cp.status === "current" ? "bg-green-500/20 border-green-400/60" :
+                  cp.status === "auto" ? "bg-blue-500/10 border-blue-400/30" :
+                  "bg-secondary/40 border-border/50"
+                )}>
+                  {cp.status === "current" ? <CheckCircle size={16} className="text-green-400" /> :
+                   cp.status === "auto" ? <RotateCcw size={14} className="text-blue-400" /> :
+                   <Clock size={14} className="text-muted-foreground/50" />}
+                </div>
+
+                <div className="flex-1 bg-card border border-border rounded-xl p-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-semibold text-foreground">{cp.label}</p>
+                        {cp.status === "current" && <span className="text-[9px] bg-green-500/15 border border-green-400/25 text-green-400 px-1.5 rounded-full font-bold">Current</span>}
+                        {cp.status === "auto" && <span className="text-[9px] bg-blue-500/15 border border-blue-400/25 text-blue-400 px-1.5 rounded-full font-bold">Auto</span>}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground/60">{cp.desc}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[10px] text-muted-foreground/40">{cp.time}</p>
+                      <p className="text-[9px] text-muted-foreground/30">{cp.files} files</p>
+                    </div>
+                  </div>
+
+                  {cp.id !== "cp1" && (
+                    <button onClick={() => handleRestore(cp.id)} disabled={restoring === cp.id || restored === cp.id}
+                      className={cn("w-full py-1.5 rounded-lg text-[11px] font-semibold transition-all flex items-center justify-center gap-1.5",
+                        restored === cp.id ? "bg-green-500/10 border border-green-400/25 text-green-400" :
+                        restoring === cp.id ? "bg-blue-500/10 border border-blue-400/25 text-blue-400" :
+                        "bg-secondary/30 border border-border/40 text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                      )}>
+                      {restored === cp.id ? <><CheckCircle size={11} /> Restored!</> :
+                       restoring === cp.id ? <><Loader2 size={11} className="animate-spin" /> Restoring...</> :
+                       <><RotateCcw size={11} /> Restore to this point</>}
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   AGENT INSIGHTS PANEL
+   ───────────────────────────────────────────────────────── */
+function InsightsPanel({ onClose }: { onClose: () => void }) {
+  const [tokens] = useState(48320);
+  const [cost] = useState(0.38);
+  const [speed] = useState("1×");
+  const [linesWritten] = useState(2847);
+  const [filesModified] = useState(14);
+  const [sessionTime] = useState(47);
+
+  const stats = [
+    { label: "Tokens Used", value: tokens.toLocaleString(), sub: "input + output", icon: <Zap size={14} />, color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-400/20" },
+    { label: "Session Cost", value: `$${cost.toFixed(2)}`, sub: "Claude Opus 4.7", icon: <BarChart3 size={14} />, color: "text-green-400", bg: "bg-green-500/10 border-green-400/20" },
+    { label: "Lines Written", value: linesWritten.toLocaleString(), sub: "by the agent", icon: <Code2 size={14} />, color: "text-blue-400", bg: "bg-blue-500/10 border-blue-400/20" },
+    { label: "Files Modified", value: String(filesModified), sub: "this session", icon: <FileText size={14} />, color: "text-purple-400", bg: "bg-purple-500/10 border-purple-400/20" },
+    { label: "Session Time", value: `${sessionTime}m`, sub: "active building", icon: <Clock size={14} />, color: "text-cyan-400", bg: "bg-cyan-500/10 border-cyan-400/20" },
+    { label: "Actions Taken", value: "63", sub: "read/write/run", icon: <Activity size={14} />, color: "text-orange-400", bg: "bg-orange-500/10 border-orange-400/20" },
+  ];
+
+  return (
+    <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 36 }}
+      className="absolute inset-0 z-50 flex flex-col bg-background">
+      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
+        <div className="flex-1" />
+        <BarChart3 size={17} className="text-orange-400" />
+        <span className="text-base font-semibold text-foreground">Agent Insights</span>
+        <div className="flex-1" />
+        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 no-scrollbar">
+        {/* Stats grid */}
+        <div className="grid grid-cols-2 gap-3">
+          {stats.map(s => (
+            <div key={s.label} className={cn("rounded-2xl border p-3 space-y-1", s.bg)}>
+              <div className={cn("flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider", s.color)}>
+                {s.icon} {s.label}
+              </div>
+              <p className={cn("text-2xl font-bold", s.color)}>{s.value}</p>
+              <p className="text-[10px] text-muted-foreground/50">{s.sub}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Token breakdown */}
+        <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+          <p className="text-xs font-semibold text-foreground">Token Breakdown</p>
+          {[
+            { label: "Prompt tokens", val: 32140, total: tokens, color: "bg-blue-400" },
+            { label: "Completion tokens", val: 16180, total: tokens, color: "bg-purple-400" },
+          ].map(t => (
+            <div key={t.label} className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground/70">{t.label}</span>
+                <span className="text-foreground font-medium">{t.val.toLocaleString()}</span>
+              </div>
+              <div className="h-2 bg-secondary/50 rounded-full overflow-hidden">
+                <motion.div initial={{ width: 0 }} animate={{ width: `${(t.val / t.total) * 100}%` }}
+                  transition={{ duration: 0.8, delay: 0.2 }}
+                  className={cn("h-full rounded-full", t.color)} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Speed breakdown */}
+        <div className="bg-card border border-border rounded-2xl p-4 space-y-2.5">
+          <p className="text-xs font-semibold text-foreground">Performance</p>
+          {[
+            { label: "Avg response time", val: "3.2s" },
+            { label: "Tokens/second", val: "~95 tok/s" },
+            { label: "Context window used", val: "24%" },
+            { label: "Model", val: "claude-opus-4-7" },
+          ].map(p => (
+            <div key={p.label} className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground/60">{p.label}</span>
+              <span className="text-foreground font-medium font-mono">{p.val}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
    PARALLEL AGENTS PANEL
    ───────────────────────────────────────────────────────── */
 interface ParallelTask {
@@ -2242,9 +2742,15 @@ export default function Chat() {
   const [showMonitoring, setShowMonitoring] = useState(false);
   const [showCanvas, setShowCanvas] = useState(false);
   const [showBranching, setShowBranching] = useState(false);
+  const [showMultiArtifact, setShowMultiArtifact] = useState(false);
+  const [showMemory, setShowMemory] = useState(false);
+  const [showCheckpoints, setShowCheckpoints] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
   const [turboMode, setTurboMode] = useState(false);
   const [buildTogether, setBuildTogether] = useState(false);
   const [currentToolCall, setCurrentToolCall] = useState<{ name: string; input: Record<string, unknown> } | null>(null);
+  const [showQuickSuggestions, setShowQuickSuggestions] = useState(true);
+  const [showMoreTools, setShowMoreTools] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasInitialized = useRef(false);
@@ -2538,6 +3044,62 @@ export default function Chat() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* ── Quick Suggestions ── */}
+      <AnimatePresence>
+        {showQuickSuggestions && messages.length > 0 && !isThinking && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+            className="shrink-0 px-3 py-2 bg-[#141414] border-t border-white/[0.05]">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <span className="text-[10px] text-white/25 shrink-0">Suggestions</span>
+              {[
+                { label: "✨ Add dark mode", prompt: "Add a dark/light mode toggle with smooth transitions" },
+                { label: "🔐 Add auth", prompt: "Add user authentication with email and Google sign-in" },
+                { label: "📊 Add dashboard", prompt: "Create an analytics dashboard with charts and metrics" },
+                { label: "🚀 Deploy now", prompt: "Help me deploy this app to production" },
+                { label: "🧪 Write tests", prompt: "Write unit tests for the main components" },
+                { label: "⚡ Optimize", prompt: "Optimize the app for performance and reduce bundle size" },
+                { label: "📱 Mobile view", prompt: "Make the app fully responsive for mobile devices" },
+              ].map(s => (
+                <motion.button key={s.label} whileTap={{ scale: 0.95 }}
+                  onClick={() => { setInput(s.prompt); setShowQuickSuggestions(false); }}
+                  className="shrink-0 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.09] text-[11px] text-white/60 hover:text-white hover:bg-white/[0.10] hover:border-white/[0.15] transition-all">
+                  {s.label}
+                </motion.button>
+              ))}
+              <button onClick={() => setShowQuickSuggestions(false)} className="shrink-0 ml-1 text-white/20 hover:text-white/50 transition-colors">
+                <X size={13} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── More tools panel (Memory / Checkpoints / Insights) ── */}
+      <AnimatePresence>
+        {showMoreTools && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setShowMoreTools(false)} />
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+              className="absolute bottom-[100%] right-3 z-40 bg-card border border-border rounded-2xl shadow-2xl overflow-hidden w-56 mb-1">
+              {[
+                { icon: <Sparkles size={14} className="text-yellow-400" />, label: "Agent Memory", action: () => { setShowMemory(true); setShowMoreTools(false); } },
+                { icon: <Clock size={14} className="text-cyan-400" />, label: "Checkpoints", action: () => { setShowCheckpoints(true); setShowMoreTools(false); } },
+                { icon: <BarChart3 size={14} className="text-orange-400" />, label: "Agent Insights", action: () => { setShowInsights(true); setShowMoreTools(false); } },
+                { icon: <AlignJustify size={14} className="text-muted-foreground" />, label: "Files", action: () => { setShowFiles(true); setShowMoreTools(false); } },
+                { icon: <Rocket size={14} className="text-orange-400" />, label: "Deploy", action: () => { setShowDeploy(true); setShowMoreTools(false); } },
+                { icon: <Globe size={14} className="text-blue-400" />, label: "Webview Preview", action: () => { setShowWebview(true); setShowMoreTools(false); } },
+              ].map(item => (
+                <button key={item.label} onClick={item.action}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/50 transition-colors">
+                  {item.icon}
+                  <span className="text-sm text-foreground">{item.label}</span>
+                </button>
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* ── Input Area ── */}
       <div className="shrink-0 px-3 pb-2 pt-2 bg-[#141414] relative">
         {/* Agent Modes Panel */}
@@ -2714,7 +3276,7 @@ export default function Chat() {
               <div className="w-2.5 h-2.5 rounded-full bg-white/40" />
             </div>
           </button>
-          <button className="w-9 h-9 flex items-center justify-center text-white/40 hover:text-white transition-colors" data-testid="button-more-actions">
+          <button onClick={() => setShowMoreTools(v => !v)} className="w-9 h-9 flex items-center justify-center text-white/40 hover:text-white transition-colors" data-testid="button-more-actions">
             <MoreHorizontal size={20} />
           </button>
         </div>
@@ -2761,11 +3323,11 @@ export default function Chat() {
             <Network size={20} strokeWidth={1.5} />
           </motion.button>
 
-          {/* Files */}
-          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowFiles(true)}
+          {/* Multi-Artifact */}
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowMultiArtifact(true)}
             className="flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
-            data-testid="toolbar-tasks">
-            <AlignJustify size={20} strokeWidth={1.5} />
+            data-testid="toolbar-multi-artifact">
+            <Layers size={20} strokeWidth={1.5} />
           </motion.button>
 
           {/* Design Canvas */}
@@ -2840,6 +3402,26 @@ export default function Chat() {
       {/* ── Branching (Micro VMs) Panel ── */}
       <AnimatePresence>
         {showBranching && <BranchingPanel onClose={() => setShowBranching(false)} />}
+      </AnimatePresence>
+
+      {/* ── Multi-Artifact Panel ── */}
+      <AnimatePresence>
+        {showMultiArtifact && <MultiArtifactPanel onClose={() => setShowMultiArtifact(false)} />}
+      </AnimatePresence>
+
+      {/* ── Agent Memory Panel ── */}
+      <AnimatePresence>
+        {showMemory && <MemoryPanel onClose={() => setShowMemory(false)} />}
+      </AnimatePresence>
+
+      {/* ── Checkpoint Timeline Panel ── */}
+      <AnimatePresence>
+        {showCheckpoints && <CheckpointPanel onClose={() => setShowCheckpoints(false)} />}
+      </AnimatePresence>
+
+      {/* ── Agent Insights Panel ── */}
+      <AnimatePresence>
+        {showInsights && <InsightsPanel onClose={() => setShowInsights(false)} />}
       </AnimatePresence>
 
       {/* ── Build Together floating badge ── */}
