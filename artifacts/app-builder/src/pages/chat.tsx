@@ -11,7 +11,10 @@ import {
   ExternalLink, UserCircle2, CheckCircle, Circle as CircleIcon,
   Link2, Key, Terminal, Server, ShieldCheck, Rocket, RefreshCw,
   FileText, Star, Eye, EyeOff, Edit3, Save, ChevronRight,
-  Table, Wifi, WifiOff, Mail, Chrome, AlertCircle
+  Table, Wifi, WifiOff, Mail, Chrome, AlertCircle,
+  Cpu, Activity, Layers, Zap, Users, Network, Sparkles,
+  GitMerge, Code2, Palette, BarChart3, TrendingUp,
+  Github, Download
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -45,11 +48,14 @@ const BUILD_STEPS: BuildStep[] = [
 ];
 
 const AGENT_MODES: { id: AgentMode; label: string; desc: string; color: string; badge?: string }[] = [
-  { id: "Core+", label: "Core+", desc: "Latest & most capable models. Best quality.", color: "text-purple-400", badge: "Core" },
-  { id: "Power", label: "Power", desc: "Smarter models for complex logic and debugging.", color: "text-blue-400" },
+  { id: "Core+", label: "Core+", desc: "Latest & most capable models. Best quality. Includes GitHub browsing, URL fetching, and parallel execution.", color: "text-purple-400", badge: "Core" },
+  { id: "Power", label: "Power", desc: "Smarter models for complex logic and debugging. Full tool access.", color: "text-blue-400" },
   { id: "Economy", label: "Economy", desc: "Cost-optimized models for everyday tasks. Delivers a strong balance of speed and quality. Best mode for most builds.", color: "text-foreground" },
   { id: "Lite", label: "Lite", desc: "Fast and lightweight. Great for simple edits.", color: "text-muted-foreground" },
 ];
+
+type AgentModeExtended = AgentMode | "Turbo";
+const TURBO_BADGE = { id: "Turbo" as AgentModeExtended, label: "Turbo", desc: "2.5× faster execution. Parallel agents work simultaneously on backend, frontend, and database. Best for large builds.", color: "text-yellow-400", badge: "⚡" };
 
 /* ── Replit Agent SVG icon (3×2 grid of dots) ── */
 function AgentIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
@@ -1377,6 +1383,576 @@ function WebviewPanel({ onClose }: { onClose: () => void }) {
 }
 
 /* ─────────────────────────────────────────────────────────
+   PARALLEL AGENTS PANEL
+   ───────────────────────────────────────────────────────── */
+interface ParallelTask {
+  id: string;
+  label: string;
+  agent: string;
+  status: "queued" | "running" | "done" | "merging";
+  progress: number;
+  color: string;
+}
+
+const PARALLEL_TASKS: ParallelTask[] = [
+  { id: "pa1", label: "Building database schema & API routes", agent: "Backend Agent", status: "done", progress: 100, color: "text-blue-400" },
+  { id: "pa2", label: "Designing React UI components", agent: "Frontend Agent", status: "done", progress: 100, color: "text-purple-400" },
+  { id: "pa3", label: "Configuring auth & security layer", agent: "Auth Agent", status: "running", progress: 72, color: "text-green-400" },
+  { id: "pa4", label: "Writing unit & integration tests", agent: "Test Agent", status: "queued", progress: 0, color: "text-yellow-400" },
+];
+
+function ParallelAgentsPanel({ onClose }: { onClose: () => void }) {
+  const [tasks, setTasks] = useState<ParallelTask[]>(PARALLEL_TASKS);
+  const [merging, setMerging] = useState(false);
+  const [merged, setMerged] = useState(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTasks(prev => prev.map(t => {
+        if (t.status === "running" && t.progress < 100) {
+          const next = Math.min(t.progress + Math.random() * 8, 100);
+          return { ...t, progress: next, status: next >= 100 ? "done" : "running" };
+        }
+        if (t.status === "queued" && prev.find(x => x.id === "pa3")?.status === "done") {
+          return { ...t, status: "running", progress: 5 };
+        }
+        return t;
+      }));
+    }, 600);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleMerge = async () => {
+    setMerging(true);
+    await new Promise(r => setTimeout(r, 2000));
+    setMerging(false);
+    setMerged(true);
+  };
+
+  const allDone = tasks.every(t => t.status === "done");
+
+  return (
+    <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 36 }}
+      className="absolute inset-0 z-50 flex flex-col bg-background">
+      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
+        <div className="flex-1" />
+        <Cpu size={17} className="text-purple-400" />
+        <span className="text-base font-semibold text-foreground">Parallel Agents</span>
+        <div className="flex-1" />
+        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 no-scrollbar">
+        <div className="flex items-center gap-2 bg-purple-500/10 border border-purple-400/20 rounded-xl px-3 py-2.5">
+          <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 1.5, repeat: Infinity }}>
+            <Cpu size={14} className="text-purple-400" />
+          </motion.div>
+          <span className="text-xs text-purple-300 font-medium">
+            {tasks.filter(t => t.status === "running").length} agents running in parallel
+          </span>
+          <span className="ml-auto text-[10px] text-purple-400/60">{tasks.filter(t => t.status === "done").length}/{tasks.length} done</span>
+        </div>
+
+        <p className="text-xs text-muted-foreground/60 leading-relaxed">
+          Agent 4 splits your project into independent branches and executes them simultaneously, then merges results using AI-powered conflict resolution.
+        </p>
+
+        <div className="space-y-3">
+          {tasks.map((task, i) => (
+            <motion.div key={task.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
+              className="bg-card border border-border rounded-2xl p-3.5 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-secondary/50 border border-border/50 flex items-center justify-center shrink-0">
+                  {task.status === "done" ? (
+                    <CheckCircle size={14} className="text-green-400" />
+                  ) : task.status === "running" ? (
+                    <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
+                      <Loader2 size={14} className={task.color} />
+                    </motion.div>
+                  ) : (
+                    <Circle size={14} className="text-muted-foreground/30" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-foreground truncate">{task.agent}</p>
+                  <p className="text-[11px] text-muted-foreground/60 truncate">{task.label}</p>
+                </div>
+                <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full",
+                  task.status === "done" ? "bg-green-500/10 text-green-400" :
+                  task.status === "running" ? "bg-purple-500/10 text-purple-400" :
+                  "bg-secondary/50 text-muted-foreground/40"
+                )}>
+                  {task.status === "done" ? "Done" : task.status === "running" ? "Running" : "Queued"}
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-secondary/50 rounded-full overflow-hidden">
+                <motion.div
+                  className={cn("h-full rounded-full",
+                    task.status === "done" ? "bg-green-400" :
+                    task.status === "running" ? "bg-purple-400" : "bg-secondary"
+                  )}
+                  animate={{ width: `${task.progress}%` }}
+                  transition={{ duration: 0.5 }}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground/40">{Math.round(task.progress)}% complete</span>
+                {task.status === "running" && (
+                  <motion.span className="text-[10px] text-purple-400/70" animate={{ opacity: [0.5, 1, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }}>
+                    executing...
+                  </motion.span>
+                )}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {allDone && !merged && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+            <div className="bg-yellow-500/10 border border-yellow-400/20 rounded-xl px-3 py-2.5 flex items-center gap-2">
+              <GitMerge size={14} className="text-yellow-400" />
+              <span className="text-xs text-yellow-300 font-medium">All agents done — ready to merge</span>
+            </div>
+            <button onClick={handleMerge} disabled={merging}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-purple-500/20 border border-purple-400/40 text-purple-300 text-sm font-semibold hover:bg-purple-500/30 active:scale-[0.98] transition-all">
+              {merging ? <><Loader2 size={14} className="animate-spin" /> Merging branches...</> : <><GitMerge size={14} /> Smart Merge All Branches</>}
+            </button>
+          </motion.div>
+        )}
+
+        {merged && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center gap-3 py-6">
+            <div className="w-14 h-14 rounded-2xl bg-green-500/20 border border-green-400/30 flex items-center justify-center">
+              <CheckCircle size={28} className="text-green-400" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-bold text-foreground">Merged Successfully!</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">AI resolved all conflicts automatically</p>
+            </div>
+          </motion.div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   APP MONITORING PANEL
+   ───────────────────────────────────────────────────────── */
+const MOCK_ERROR_LOGS = [
+  { time: "09:41:23", level: "INFO", msg: "Server started on port 8080", color: "text-green-400" },
+  { time: "09:41:25", level: "INFO", msg: "Database connected (PostgreSQL)", color: "text-green-400" },
+  { time: "09:43:11", level: "WARN", msg: "High memory usage detected: 78%", color: "text-yellow-400" },
+  { time: "09:44:02", level: "INFO", msg: "GET /api/conversations 200 (12ms)", color: "text-muted-foreground" },
+  { time: "09:44:15", level: "INFO", msg: "POST /api/anthropic/conversations 201 (45ms)", color: "text-muted-foreground" },
+  { time: "09:45:01", level: "ERROR", msg: "Unhandled promise rejection: timeout", color: "text-red-400" },
+  { time: "09:45:03", level: "INFO", msg: "Auto-retry succeeded on request", color: "text-green-400" },
+  { time: "09:46:30", level: "INFO", msg: "GET /api/anthropic/conversations/1/messages 200 (3219ms)", color: "text-muted-foreground" },
+];
+
+function MonitoringPanel({ onClose }: { onClose: () => void }) {
+  const [liveMode, setLiveMode] = useState(true);
+  const [requests, setRequests] = useState(247);
+  const [errors, setErrors] = useState(3);
+  const [uptime] = useState("99.8%");
+  const [p99] = useState("1.2s");
+
+  useEffect(() => {
+    if (!liveMode) return;
+    const interval = setInterval(() => {
+      setRequests(r => r + Math.floor(Math.random() * 3));
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [liveMode]);
+
+  return (
+    <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 36 }}
+      className="absolute inset-0 z-50 flex flex-col bg-background">
+      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
+        <div className="flex-1" />
+        <Activity size={17} className="text-green-400" />
+        <span className="text-base font-semibold text-foreground">App Monitoring</span>
+        <div className="flex-1" />
+        <button onClick={() => setLiveMode(v => !v)}
+          className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors",
+            liveMode ? "bg-green-500/15 border-green-400/30 text-green-400" : "bg-secondary/40 border-border/40 text-muted-foreground"
+          )}>
+          <motion.div animate={liveMode ? { scale: [1, 1.3, 1] } : {}} transition={{ duration: 1.5, repeat: Infinity }}
+            className={cn("w-1.5 h-1.5 rounded-full", liveMode ? "bg-green-400" : "bg-muted-foreground/40")} />
+          {liveMode ? "Live" : "Paused"}
+        </button>
+        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 no-scrollbar">
+        {/* Metrics grid */}
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: "Uptime", value: uptime, icon: <TrendingUp size={14} />, color: "text-green-400", bg: "bg-green-500/10 border-green-400/20" },
+            { label: "Requests", value: requests.toLocaleString(), icon: <BarChart3 size={14} />, color: "text-blue-400", bg: "bg-blue-500/10 border-blue-400/20" },
+            { label: "Errors (24h)", value: String(errors), icon: <AlertCircle size={14} />, color: "text-red-400", bg: "bg-red-500/10 border-red-400/20" },
+            { label: "p99 Latency", value: p99, icon: <Clock size={14} />, color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-400/20" },
+          ].map(m => (
+            <div key={m.label} className={cn("rounded-xl border px-3 py-3 space-y-1", m.bg)}>
+              <div className={cn("flex items-center gap-1.5", m.color)}>
+                {m.icon}
+                <span className="text-[10px] font-semibold uppercase tracking-wider">{m.label}</span>
+              </div>
+              <p className={cn("text-xl font-bold", m.color)}>
+                {liveMode && m.label === "Requests" ? (
+                  <motion.span key={m.value}>{m.value}</motion.span>
+                ) : m.value}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Request rate sparkline (fake) */}
+        <div className="bg-card border border-border rounded-2xl p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-foreground">Request Rate</span>
+            <span className="text-[10px] text-muted-foreground/50">Last 60 min</span>
+          </div>
+          <div className="flex items-end gap-1 h-10">
+            {[3,5,4,7,6,9,8,11,10,14,12,13,15,12,16,14,18,17,20,19,22,21,24,18,20,22,19,23,21,25].map((v, i) => (
+              <motion.div key={i} initial={{ height: 0 }} animate={{ height: `${(v / 25) * 100}%` }}
+                transition={{ delay: i * 0.02, duration: 0.4 }}
+                className="flex-1 bg-blue-400/50 rounded-sm min-h-[2px]" />
+            ))}
+          </div>
+        </div>
+
+        {/* Live logs */}
+        <div className="bg-card border border-border rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/40">
+            <span className="text-xs font-semibold text-foreground">Server Logs</span>
+            <span className="text-[10px] text-muted-foreground/50">{MOCK_ERROR_LOGS.length} entries</span>
+          </div>
+          <div className="bg-[#0d1117] overflow-y-auto max-h-52 no-scrollbar">
+            {MOCK_ERROR_LOGS.map((log, i) => (
+              <div key={i} className="flex items-start gap-2 px-3 py-1.5 border-b border-white/[0.04] font-mono">
+                <span className="text-[10px] text-muted-foreground/40 shrink-0 mt-0.5">{log.time}</span>
+                <span className={cn("text-[10px] font-bold w-10 shrink-0 mt-0.5", log.color)}>{log.level}</span>
+                <span className="text-[11px] text-muted-foreground/80 leading-tight">{log.msg}</span>
+              </div>
+            ))}
+            {liveMode && (
+              <div className="flex items-center gap-2 px-3 py-1.5">
+                <motion.div animate={{ opacity: [0, 1, 0] }} transition={{ duration: 1.2, repeat: Infinity }}
+                  className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                <span className="text-[11px] text-muted-foreground/40 font-mono">Waiting for new events...</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Alert if errors */}
+        {errors > 0 && (
+          <div className="bg-orange-500/10 border border-orange-400/20 rounded-xl px-4 py-3 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={14} className="text-orange-400" />
+              <span className="text-xs font-semibold text-orange-300">Agent Alert</span>
+            </div>
+            <p className="text-[11px] text-orange-300/70 leading-relaxed">
+              Detected {errors} errors in the last 24 hours. Agent has diagnosed the root cause and prepared a fix.
+            </p>
+            <button className="text-[11px] text-orange-400 underline">View Agent Diagnosis →</button>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   DESIGN CANVAS PANEL
+   ───────────────────────────────────────────────────────── */
+const CANVAS_COMPONENTS = [
+  { id: "c1", label: "Hero Section", x: 20, y: 30, w: 200, h: 80, color: "bg-purple-500/15 border-purple-400/30" },
+  { id: "c2", label: "Nav Bar", x: 20, y: 8, w: 200, h: 18, color: "bg-blue-500/15 border-blue-400/30" },
+  { id: "c3", label: "Feature Cards", x: 20, y: 118, w: 90, h: 60, color: "bg-green-500/15 border-green-400/30" },
+  { id: "c4", label: "CTA Button", x: 120, y: 118, w: 100, h: 30, color: "bg-orange-500/15 border-orange-400/30" },
+  { id: "c5", label: "Footer", x: 20, y: 188, w: 200, h: 28, color: "bg-secondary/50 border-border/50" },
+];
+
+const PALETTE = ["#7c3aed", "#2563eb", "#059669", "#d97706", "#dc2626", "#0891b2", "#7c3aed"];
+
+function CanvasPanel({ onClose }: { onClose: () => void }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(100);
+  const [activePalette, setActivePalette] = useState(0);
+  const [variants, setVariants] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generated, setGenerated] = useState(false);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    await new Promise(r => setTimeout(r, 1800));
+    setGenerating(false);
+    setGenerated(true);
+    setVariants(true);
+  };
+
+  return (
+    <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 36 }}
+      className="absolute inset-0 z-50 flex flex-col bg-background">
+      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
+        <div className="flex-1" />
+        <Palette size={17} className="text-pink-400" />
+        <span className="text-base font-semibold text-foreground">Design Canvas</span>
+        <div className="flex-1" />
+        <div className="flex items-center gap-1">
+          <button onClick={() => setZoom(z => Math.max(50, z - 10))} className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground text-xs rounded border border-border/50">−</button>
+          <span className="text-[11px] text-muted-foreground/60 w-10 text-center">{zoom}%</span>
+          <button onClick={() => setZoom(z => Math.min(200, z + 10))} className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground text-xs rounded border border-border/50">+</button>
+        </div>
+        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+      </div>
+
+      {/* Toolbar strip */}
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border/40 shrink-0 overflow-x-auto no-scrollbar">
+        {[
+          { icon: <Layers size={13} />, label: "Layers" },
+          { icon: <Code2 size={13} />, label: "Code" },
+          { icon: <Palette size={13} />, label: "Palette" },
+          { icon: <Sparkles size={13} />, label: "AI Fill" },
+        ].map(t => (
+          <button key={t.label} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 border border-transparent hover:border-border/40 transition-all shrink-0">
+            {t.icon} {t.label}
+          </button>
+        ))}
+        <div className="flex items-center gap-1 ml-auto shrink-0">
+          {PALETTE.map((c, i) => (
+            <button key={i} onClick={() => setActivePalette(i)}
+              className={cn("w-4 h-4 rounded-full border-2 transition-all", i === activePalette ? "border-white scale-125" : "border-transparent")}
+              style={{ backgroundColor: c }} />
+          ))}
+        </div>
+      </div>
+
+      {/* Infinite canvas */}
+      <div className="flex-1 overflow-hidden bg-[#0d1117] relative">
+        {/* Grid */}
+        <div className="absolute inset-0 opacity-20"
+          style={{ backgroundImage: "radial-gradient(circle, #444 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
+
+        {/* Canvas content */}
+        <div className="absolute inset-0 overflow-auto no-scrollbar p-6">
+          <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: "top left", width: 240, height: 220 }}>
+            {CANVAS_COMPONENTS.map(comp => (
+              <motion.div
+                key={comp.id}
+                onClick={() => setSelected(selected === comp.id ? null : comp.id)}
+                whileTap={{ scale: 0.98 }}
+                className={cn(
+                  "absolute rounded-lg border cursor-pointer transition-all text-[9px] font-semibold flex items-center justify-center",
+                  comp.color,
+                  selected === comp.id ? "ring-2 ring-white/40" : ""
+                )}
+                style={{ left: comp.x, top: comp.y, width: comp.w, height: comp.h }}
+                animate={selected === comp.id ? { boxShadow: "0 0 0 2px rgba(255,255,255,0.3)" } : {}}
+              >
+                <span className="text-white/60">{comp.label}</span>
+              </motion.div>
+            ))}
+
+            {variants && (
+              <>
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                  className="absolute rounded-lg border border-pink-400/40 bg-pink-500/10 cursor-pointer flex items-center justify-center text-[9px] font-semibold text-pink-300"
+                  style={{ left: 250, top: 30, width: 200, height: 80 }}>
+                  Variant B – Modern
+                </motion.div>
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.15 }}
+                  className="absolute rounded-lg border border-cyan-400/40 bg-cyan-500/10 cursor-pointer flex items-center justify-center text-[9px] font-semibold text-cyan-300"
+                  style={{ left: 250, top: 120, width: 200, height: 80 }}>
+                  Variant C – Minimal
+                </motion.div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Selected info */}
+        {selected && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="absolute bottom-4 left-4 right-4 bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3">
+            <Layers size={14} className="text-purple-400" />
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-foreground">{CANVAS_COMPONENTS.find(c => c.id === selected)?.label}</p>
+              <p className="text-[11px] text-muted-foreground/60">Click to edit · Drag to reposition</p>
+            </div>
+            <button className="text-[11px] text-purple-400 border border-purple-400/30 rounded-lg px-2.5 py-1 hover:bg-purple-500/10 transition-colors">Edit</button>
+          </motion.div>
+        )}
+      </div>
+
+      {/* Bottom bar */}
+      <div className="shrink-0 px-4 py-3 border-t border-border/40 flex items-center gap-2">
+        <button onClick={handleGenerate} disabled={generating}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-pink-500/20 border border-pink-400/40 text-pink-300 text-xs font-semibold hover:bg-pink-500/30 transition-all">
+          {generating ? <><Loader2 size={12} className="animate-spin" /> Generating...</> : <><Sparkles size={12} /> Generate Variants</>}
+        </button>
+        {generated && (
+          <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-[11px] text-muted-foreground/50">
+            3 variants ready
+          </motion.span>
+        )}
+        <div className="flex-1" />
+        <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500/20 border border-purple-400/40 text-purple-300 text-xs font-semibold hover:bg-purple-500/30 transition-all">
+          <Download size={12} /> Apply to App
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   BRANCHING PANEL (Micro VMs)
+   ───────────────────────────────────────────────────────── */
+interface Branch {
+  id: string;
+  name: string;
+  status: "active" | "idle" | "merged" | "running";
+  task: string;
+  created: string;
+  vm: string;
+}
+
+const MOCK_BRANCHES: Branch[] = [
+  { id: "b1", name: "main", status: "active", task: "Production branch", created: "base", vm: "vm-a1b2c3" },
+  { id: "b2", name: "feat/dark-mode", status: "running", task: "Agent working: Adding dark mode toggle...", created: "2 min ago", vm: "vm-d4e5f6" },
+  { id: "b3", name: "feat/auth-flow", status: "idle", task: "Auth & login screen complete", created: "18 min ago", vm: "vm-g7h8i9" },
+  { id: "b4", name: "fix/mobile-layout", status: "merged", task: "Mobile layout fix applied", created: "1 hr ago", vm: "vm-j0k1l2" },
+];
+
+function BranchingPanel({ onClose }: { onClose: () => void }) {
+  const [branches, setBranches] = useState<Branch[]>(MOCK_BRANCHES);
+  const [creating, setCreating] = useState(false);
+  const [newBranchName, setNewBranchName] = useState("");
+  const [merging, setMerging] = useState<string | null>(null);
+
+  const handleCreate = async () => {
+    if (!newBranchName.trim()) return;
+    const id = `b${Date.now()}`;
+    const newBranch: Branch = {
+      id, name: `feat/${newBranchName.trim().toLowerCase().replace(/\s+/g, "-")}`,
+      status: "running", task: "Agent spinning up Micro VM...", created: "just now", vm: `vm-${Math.random().toString(36).slice(2, 8)}`
+    };
+    setBranches(prev => [prev[0], newBranch, ...prev.slice(1)]);
+    setNewBranchName(""); setCreating(false);
+  };
+
+  const handleMerge = async (id: string) => {
+    setMerging(id);
+    await new Promise(r => setTimeout(r, 1800));
+    setBranches(prev => prev.map(b => b.id === id ? { ...b, status: "merged" as const } : b));
+    setMerging(null);
+  };
+
+  return (
+    <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 36 }}
+      className="absolute inset-0 z-50 flex flex-col bg-background">
+      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
+        <div className="flex-1" />
+        <Network size={17} className="text-cyan-400" />
+        <span className="text-base font-semibold text-foreground">Branches</span>
+        <div className="flex-1" />
+        <button onClick={() => setCreating(v => !v)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 hover:bg-cyan-500/25 transition-colors">
+          <Plus size={11} /> New
+        </button>
+        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 no-scrollbar">
+        <p className="text-xs text-muted-foreground/60 leading-relaxed">
+          Each branch runs in an isolated <span className="text-cyan-400 font-medium">Micro VM</span>. Changes are safe from main until you merge. Agent resolves 90% of conflicts automatically.
+        </p>
+
+        {/* Create new branch */}
+        <AnimatePresence>
+          {creating && (
+            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+              className="bg-card border border-cyan-400/20 rounded-2xl p-3.5 space-y-2.5">
+              <p className="text-xs font-semibold text-foreground">New Branch + Micro VM</p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground/60 shrink-0">feat/</span>
+                <input value={newBranchName} onChange={e => setNewBranchName(e.target.value)}
+                  placeholder="my-feature"
+                  className="flex-1 bg-secondary/30 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-cyan-400/50 transition-colors"
+                  autoFocus onKeyDown={e => e.key === "Enter" && handleCreate()} />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => { setCreating(false); setNewBranchName(""); }} className="flex-1 py-2 rounded-lg text-xs border border-border/50 text-muted-foreground hover:bg-secondary/50 transition-colors">Cancel</button>
+                <button onClick={handleCreate} disabled={!newBranchName.trim()}
+                  className={cn("flex-1 py-2 rounded-lg text-xs font-semibold transition-colors",
+                    newBranchName.trim() ? "bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 hover:bg-cyan-500/30" : "bg-secondary/30 text-muted-foreground/40 cursor-not-allowed"
+                  )}>
+                  Create Branch
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Branch list */}
+        {branches.map((branch, i) => (
+          <motion.div key={branch.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}
+            className="bg-card border border-border rounded-2xl p-3.5 space-y-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className={cn("w-7 h-7 rounded-lg border flex items-center justify-center shrink-0",
+                branch.status === "active" ? "bg-green-500/15 border-green-400/30" :
+                branch.status === "running" ? "bg-cyan-500/15 border-cyan-400/30" :
+                branch.status === "merged" ? "bg-purple-500/15 border-purple-400/30" :
+                "bg-secondary/50 border-border/50"
+              )}>
+                {branch.status === "active" ? <CheckCircle size={13} className="text-green-400" /> :
+                 branch.status === "running" ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}><Loader2 size={13} className="text-cyan-400" /></motion.div> :
+                 branch.status === "merged" ? <GitMerge size={13} className="text-purple-400" /> :
+                 <GitBranch size={13} className="text-muted-foreground/60" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <code className="text-xs font-mono font-semibold text-foreground truncate">{branch.name}</code>
+                  {branch.status === "active" && <span className="text-[9px] bg-green-500/15 border border-green-400/25 text-green-400 px-1.5 rounded-full font-semibold">main</span>}
+                </div>
+                <p className="text-[11px] text-muted-foreground/60 truncate">{branch.task}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Cpu size={10} className="text-muted-foreground/40" />
+                <span className="text-[10px] font-mono text-muted-foreground/40">{branch.vm}</span>
+                <span className="text-[10px] text-muted-foreground/30">· {branch.created}</span>
+              </div>
+              {branch.status === "idle" && (
+                <button
+                  onClick={() => handleMerge(branch.id)}
+                  disabled={merging === branch.id}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-purple-500/15 border border-purple-400/30 text-purple-300 hover:bg-purple-500/25 transition-colors">
+                  {merging === branch.id ? <><Loader2 size={10} className="animate-spin" /> Merging</> : <><GitMerge size={10} /> Merge</>}
+                </button>
+              )}
+              {branch.status === "merged" && (
+                <span className="text-[10px] text-purple-400/60 font-medium">✓ Merged</span>
+              )}
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
    GITHUB REPO BROWSER (used inside GitPanel)
    ───────────────────────────────────────────────────────── */
 interface GHRepo { id: number; full_name: string; private: boolean; description: string | null; updated_at: string; stargazers_count: number; language: string | null }
@@ -1662,6 +2238,13 @@ export default function Chat() {
   const [showRun, setShowRun] = useState(false);
   const [showDeploy, setShowDeploy] = useState(false);
   const [showWebview, setShowWebview] = useState(false);
+  const [showParallel, setShowParallel] = useState(false);
+  const [showMonitoring, setShowMonitoring] = useState(false);
+  const [showCanvas, setShowCanvas] = useState(false);
+  const [showBranching, setShowBranching] = useState(false);
+  const [turboMode, setTurboMode] = useState(false);
+  const [buildTogether, setBuildTogether] = useState(false);
+  const [currentToolCall, setCurrentToolCall] = useState<{ name: string; input: Record<string, unknown> } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasInitialized = useRef(false);
@@ -1726,7 +2309,11 @@ export default function Chat() {
           if (!line.startsWith("data: ")) continue;
           try {
             const data = JSON.parse(line.slice(6));
+            if (data.tool_call) {
+              setCurrentToolCall(data.tool_call);
+            }
             if (data.content) {
+              setCurrentToolCall(null);
               if (isFirst) {
                 setIsThinking(false);
                 setMessages((prev) => [...prev, {
@@ -1742,6 +2329,7 @@ export default function Chat() {
               }
             }
             if (data.done) {
+              setCurrentToolCall(null);
               setMessages((prev) => prev.map((m) =>
                 m.id === assistantMsgId ? { ...m, isStreaming: false } : m
               ));
@@ -1837,16 +2425,36 @@ export default function Chat() {
           <History size={20} />
         </button>
 
-        <div className="flex items-center gap-2">
-          <AgentIcon size={18} className="text-purple-400" />
-          <span className="text-base font-semibold text-white">Agent</span>
+        <div className="flex flex-col items-center gap-0.5">
+          <div className="flex items-center gap-2">
+            <AgentIcon size={18} className="text-purple-400" />
+            <span className="text-base font-semibold text-white">Agent</span>
+            {turboMode && (
+              <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}
+                className="text-[10px] font-bold bg-yellow-500/20 border border-yellow-400/40 text-yellow-300 px-1.5 rounded-full flex items-center gap-0.5">
+                <Zap size={8} className="shrink-0" />Turbo
+              </motion.span>
+            )}
+          </div>
+          {buildTogether && (
+            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+              <span className="text-[10px] text-green-400 font-medium">2 collaborating</span>
+            </motion.div>
+          )}
         </div>
 
+        {/* Build Together + Share */}
         <button
-          className="w-9 h-9 flex items-center justify-center text-white/50 hover:text-white rounded-xl hover:bg-white/8 transition-colors"
-          data-testid="button-share"
+          onClick={() => setBuildTogether(v => !v)}
+          className={cn("w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
+            buildTogether ? "text-green-400 bg-green-500/15" : "text-white/50 hover:text-white hover:bg-white/8"
+          )}
+          data-testid="button-build-together"
+          title="Build Together"
         >
-          <Share2 size={19} />
+          <Users size={18} />
         </button>
 
         <button
@@ -1876,6 +2484,31 @@ export default function Chat() {
                 </div>
                 <div className="bg-card border border-card-border rounded-2xl rounded-bl-sm px-4 py-3">
                   <BuildProgress steps={buildSteps} />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Tool call indicator (GitHub/URL fetching) */}
+        <AnimatePresence>
+          {currentToolCall && (
+            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="flex justify-start">
+              <div className="flex gap-2 max-w-[85%]">
+                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0 mt-0.5">
+                  <AgentDots size={10} className="text-primary-foreground" />
+                </div>
+                <div className="bg-card border border-card-border rounded-2xl rounded-bl-sm px-3.5 py-2.5 flex items-center gap-2.5">
+                  <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
+                    <Github size={13} className="text-muted-foreground/70 shrink-0" />
+                  </motion.div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-muted-foreground/60 font-medium">Fetching repository...</p>
+                    {currentToolCall.input && typeof currentToolCall.input === "object" && "url" in currentToolCall.input && (
+                      <p className="text-[10px] text-muted-foreground/40 truncate max-w-[200px]">{String(currentToolCall.input.url)}</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -1921,6 +2554,39 @@ export default function Chat() {
               >
                 <div className="p-3">
                   <p className="text-xs text-muted-foreground font-semibold uppercase tracking-widest px-1 mb-2">Agent modes</p>
+
+                  {/* Turbo mode banner */}
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => { setTurboMode(v => !v); setShowModes(false); }}
+                    className={cn(
+                      "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border mb-2.5 transition-all",
+                      turboMode
+                        ? "bg-yellow-500/15 border-yellow-400/40 text-yellow-300"
+                        : "bg-secondary/30 border-border/40 text-muted-foreground hover:bg-secondary/50"
+                    )}
+                    data-testid="agent-mode-turbo"
+                  >
+                    <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0",
+                      turboMode ? "bg-yellow-500/20" : "bg-secondary/50"
+                    )}>
+                      <Zap size={14} className={turboMode ? "text-yellow-400" : "text-muted-foreground/60"} />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-semibold">Turbo</span>
+                        <span className="text-[9px] bg-yellow-500/30 text-yellow-300 px-1.5 rounded-full font-bold">2.5×</span>
+                        <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 rounded-full font-bold">NEW</span>
+                      </div>
+                      <p className="text-[11px] opacity-70">Parallel execution across all agents</p>
+                    </div>
+                    <div className={cn("w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center",
+                      turboMode ? "bg-yellow-400 border-yellow-400" : "border-border/50"
+                    )}>
+                      {turboMode && <div className="w-2 h-2 bg-black rounded-full" />}
+                    </div>
+                  </motion.button>
+
                   <div className="grid grid-cols-4 gap-1.5 mb-3">
                     {AGENT_MODES.map((mode) => (
                       <motion.button
@@ -1946,7 +2612,7 @@ export default function Chat() {
                   </div>
                   <div className="px-2 py-2.5 bg-secondary/40 rounded-xl border border-border/30">
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      {AGENT_MODES.find(m => m.id === agentMode)?.desc}
+                      {turboMode ? TURBO_BADGE.desc : AGENT_MODES.find(m => m.id === agentMode)?.desc}
                     </p>
                   </div>
                 </div>
@@ -2064,11 +2730,12 @@ export default function Chat() {
             <Play size={20} strokeWidth={1.5} />
           </motion.button>
 
-          {/* Monitor */}
-          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowWebview(true)}
-            className="flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
-            data-testid="toolbar-webview">
-            <Monitor size={20} strokeWidth={1.5} />
+          {/* Monitor → App Monitoring */}
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowMonitoring(true)}
+            className="relative flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
+            data-testid="toolbar-monitor">
+            <Activity size={20} strokeWidth={1.5} />
+            <span className="absolute top-2 right-1 w-1.5 h-1.5 rounded-full bg-green-400" />
           </motion.button>
 
           {/* Agent — active, purple, indicator */}
@@ -2079,32 +2746,33 @@ export default function Chat() {
             <AgentIcon size={22} className="text-purple-400" />
           </motion.button>
 
-          {/* Globe */}
-          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowDeploy(true)}
-            className="flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
-            data-testid="toolbar-deploy">
-            <Globe size={20} strokeWidth={1.5} />
+          {/* Parallel Agents */}
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowParallel(true)}
+            className="relative flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
+            data-testid="toolbar-parallel">
+            <Cpu size={20} strokeWidth={1.5} />
+            {turboMode && <span className="absolute top-2 right-1 w-1.5 h-1.5 rounded-full bg-yellow-400" />}
           </motion.button>
 
-          {/* Connections */}
-          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowGit(true)}
+          {/* Branches (Micro VMs) */}
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowBranching(true)}
             className="flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
-            data-testid="toolbar-connections">
-            <GitBranch size={20} strokeWidth={1.5} />
+            data-testid="toolbar-branches">
+            <Network size={20} strokeWidth={1.5} />
           </motion.button>
 
-          {/* Tasks */}
+          {/* Files */}
           <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowFiles(true)}
             className="flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
             data-testid="toolbar-tasks">
             <AlignJustify size={20} strokeWidth={1.5} />
           </motion.button>
 
-          {/* Split */}
-          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowWebview(true)}
+          {/* Design Canvas */}
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowCanvas(true)}
             className="flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
-            data-testid="toolbar-split">
-            <LayoutPanelLeft size={20} strokeWidth={1.5} />
+            data-testid="toolbar-canvas">
+            <Palette size={20} strokeWidth={1.5} />
           </motion.button>
         </div>
       </div>
@@ -2152,6 +2820,55 @@ export default function Chat() {
       {/* ── Webview Panel ── */}
       <AnimatePresence>
         {showWebview && <WebviewPanel onClose={() => setShowWebview(false)} />}
+      </AnimatePresence>
+
+      {/* ── Parallel Agents Panel ── */}
+      <AnimatePresence>
+        {showParallel && <ParallelAgentsPanel onClose={() => setShowParallel(false)} />}
+      </AnimatePresence>
+
+      {/* ── App Monitoring Panel ── */}
+      <AnimatePresence>
+        {showMonitoring && <MonitoringPanel onClose={() => setShowMonitoring(false)} />}
+      </AnimatePresence>
+
+      {/* ── Design Canvas Panel ── */}
+      <AnimatePresence>
+        {showCanvas && <CanvasPanel onClose={() => setShowCanvas(false)} />}
+      </AnimatePresence>
+
+      {/* ── Branching (Micro VMs) Panel ── */}
+      <AnimatePresence>
+        {showBranching && <BranchingPanel onClose={() => setShowBranching(false)} />}
+      </AnimatePresence>
+
+      {/* ── Build Together floating badge ── */}
+      <AnimatePresence>
+        {buildTogether && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="absolute bottom-24 right-4 z-40"
+          >
+            <div className="bg-card border border-green-400/30 rounded-2xl px-3.5 py-2.5 flex items-center gap-2.5 shadow-xl">
+              <div className="flex -space-x-1.5">
+                {["A", "B"].map((l, i) => (
+                  <div key={i} className={cn("w-6 h-6 rounded-full border-2 border-card flex items-center justify-center text-[9px] font-bold",
+                    i === 0 ? "bg-purple-500/30 text-purple-300" : "bg-blue-500/30 text-blue-300"
+                  )}>{l}</div>
+                ))}
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-green-400">Building Together</p>
+                <p className="text-[10px] text-muted-foreground/50">2 collaborators active</p>
+              </div>
+              <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+                <div className="w-2 h-2 rounded-full bg-green-400" />
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </motion.div>
   );
