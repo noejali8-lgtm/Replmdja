@@ -46,7 +46,8 @@ A mobile-first Replit clone with two apps: **App Builder** (mobile UI matching t
   - **GitHub browsing**: AI uses `fetch_url` tool to read repos, files, READMEs, file trees — with real-time "Fetching repository..." indicator in chat
   - **Toolbar**: Play (run), Activity (monitoring), Agent (active), Parallel (CPU), Network (branches), Layers (multi-artifact), Palette (canvas)
   - **Toolbar panels**: Secrets, Database, Auth, Git (all functional slide-up panels)
-  - **Git panel**: GitHub token auth, remote URL + repo browser (via GitHub API), Pull/Push with real Git Trees API commit flow, file staging view, commit author editor
+  - **Git panel**: GitHub token auth, remote URL + repo browser (via GitHub API), Pull/Push with real Git Trees API commit flow, file staging view, commit author editor, **branch switcher** (create/switch/delete branches)
+  - **AI Models Panel** (`artifacts/app-builder/src/components/AIModelsPanel.tsx`): Full-screen panel opened via Core+ button with 35+ models (Anthropic, OpenAI, Google, xAI, Mistral, Meta, DeepSeek, Qwen, Cohere, 01.AI), GODMODE CLASSIC (5 racing combos), ULTRAPLINIAN (5 tiers, 10–55 models), Parseltongue (6 obfuscation techniques, 3 intensity levels, live preview), AutoTune (5 context types, EMA feedback sliders), STM Modules (Hedge Reducer, Direct Mode, Curiosity Bias), Konami code Easter egg
   - **Import from GitHub**: animated importing screen → navigates to chat
 - **Replit IDE**: Desktop IDE — code editor with syntax highlighting, file tree, AI agent, live preview, extensions store, projects page, profile page
 - **Extensions Store**: Browse/install Themes, Linters, Keymaps, AI tools, UI Libraries, State Management, Animation packages

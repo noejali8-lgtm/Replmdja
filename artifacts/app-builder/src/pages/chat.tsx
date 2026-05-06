@@ -6,7 +6,7 @@ import {
   Play, Monitor, Globe, AlignJustify, LayoutPanelLeft,
   Lock, Database, UserPlus, ChevronDown, ChevronUp,
   Folder, X, Search, History, Share2, MoreHorizontal,
-  ArrowUpDown, Clock, Square, BookOpen,
+  ArrowUpDown, Clock, Square, BookOpen, ArrowUp, Flame, Trophy,
   GitBranch, Trash2, LogIn, MessageSquare, RotateCcw,
   ExternalLink, UserCircle2, CheckCircle, Circle as CircleIcon,
   Link2, Key, Terminal, Server, ShieldCheck, Rocket, RefreshCw,
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
+import { AIModelsPanel, ALL_MODELS } from "@/components/AIModelsPanel";
 
 interface Message {
   id: string;
@@ -449,6 +450,38 @@ function GitPanel({ onClose }: { onClose: () => void }) {
 
   const [showRepoBrowser, setShowRepoBrowser] = useState(false);
   const [pushError, setPushError] = useState("");
+  // Branch switcher state
+  const [branches, setBranches] = useState<string[]>(["main", "feat/dark-mode", "feat/auth", "fix/mobile"]);
+  const [currentBranch, setCurrentBranch] = useState("main");
+  const [showBranchSwitcher, setShowBranchSwitcher] = useState(false);
+  const [newBranchInput, setNewBranchInput] = useState("");
+  const [branchOpStatus, setBranchOpStatus] = useState<"idle"|"loading"|"success">("idle");
+
+  const handleCreateBranch = async () => {
+    if (!newBranchInput.trim()) return;
+    setBranchOpStatus("loading");
+    await new Promise(r => setTimeout(r, 800));
+    const name = newBranchInput.trim().toLowerCase().replace(/\s+/g, "-");
+    setBranches(prev => [...prev, name]);
+    setCurrentBranch(name);
+    setNewBranchInput("");
+    setBranchOpStatus("success");
+    setTimeout(() => setBranchOpStatus("idle"), 2000);
+  };
+
+  const handleSwitchBranch = async (branch: string) => {
+    if (branch === currentBranch) return;
+    setBranchOpStatus("loading");
+    await new Promise(r => setTimeout(r, 600));
+    setCurrentBranch(branch);
+    setBranchOpStatus("success");
+    setTimeout(() => setBranchOpStatus("idle"), 1500);
+  };
+
+  const handleDeleteBranch = (branch: string) => {
+    if (branch === "main" || branch === currentBranch) return;
+    setBranches(prev => prev.filter(b => b !== branch));
+  };
 
   const handlePush = async () => {
     if (!commitMsg.trim()) { setShowCommit(true); return; }
@@ -659,6 +692,94 @@ function GitPanel({ onClose }: { onClose: () => void }) {
               </button>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Branch Switcher */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <GitBranch size={14} className="text-muted-foreground" />
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Branch</h3>
+            <div className="flex-1" />
+            <button
+              onClick={() => setShowBranchSwitcher(v => !v)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-secondary/40 border border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-all"
+              data-testid="button-branch-switcher"
+            >
+              <ChevronDown size={11} className={cn("transition-transform", showBranchSwitcher && "rotate-180")} />
+              Switch
+            </button>
+          </div>
+          <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            {/* Current branch */}
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40">
+              <div className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground truncate">{currentBranch}</p>
+                <p className="text-[11px] text-muted-foreground/50">current branch</p>
+              </div>
+              {branchOpStatus === "loading" && <Loader2 size={13} className="animate-spin text-muted-foreground shrink-0" />}
+              {branchOpStatus === "success" && <CheckCircle size={13} className="text-green-400 shrink-0" />}
+            </div>
+            {/* Branch list */}
+            <AnimatePresence>
+              {showBranchSwitcher && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  {/* Other branches */}
+                  <div className="divide-y divide-border/30">
+                    {branches.filter(b => b !== currentBranch).map(branch => (
+                      <div key={branch} className="flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/20 transition-colors">
+                        <GitBranch size={12} className="text-muted-foreground/50 shrink-0" />
+                        <span className="flex-1 text-xs text-muted-foreground truncate">{branch}</span>
+                        <button
+                          onClick={() => handleSwitchBranch(branch)}
+                          className="text-[11px] px-2 py-1 rounded-md bg-blue-500/15 border border-blue-400/25 text-blue-400 hover:bg-blue-500/25 transition-colors shrink-0"
+                          data-testid={`button-switch-${branch}`}
+                        >Switch</button>
+                        {branch !== "main" && (
+                          <button
+                            onClick={() => handleDeleteBranch(branch)}
+                            className="text-[11px] px-2 py-1 rounded-md text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
+                            data-testid={`button-delete-branch-${branch}`}
+                          ><Trash2 size={11} /></button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Create new branch */}
+                  <div className="px-4 py-3 border-t border-border/40 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={newBranchInput}
+                        onChange={e => setNewBranchInput(e.target.value)}
+                        placeholder="new-branch-name"
+                        onKeyDown={e => e.key === "Enter" && handleCreateBranch()}
+                        className="flex-1 bg-secondary/30 border border-border/50 rounded-lg px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-green-400/40 transition-colors"
+                        data-testid="input-new-branch"
+                      />
+                      <button
+                        onClick={handleCreateBranch}
+                        disabled={!newBranchInput.trim() || branchOpStatus === "loading"}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0",
+                          newBranchInput.trim()
+                            ? "bg-green-500/20 border border-green-400/40 text-green-300 hover:bg-green-500/30"
+                            : "bg-secondary/30 border border-border/30 text-muted-foreground/30 cursor-not-allowed"
+                        )}
+                        data-testid="button-create-branch"
+                      >
+                        {branchOpStatus === "loading" ? <Loader2 size={11} className="animate-spin" /> : "+ Create"}
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
@@ -2751,6 +2872,17 @@ export default function Chat() {
   const [currentToolCall, setCurrentToolCall] = useState<{ name: string; input: Record<string, unknown> } | null>(null);
   const [showQuickSuggestions, setShowQuickSuggestions] = useState(true);
   const [showMoreTools, setShowMoreTools] = useState(false);
+  // AI Models Panel state
+  const [showAIModels, setShowAIModels] = useState(false);
+  const [selectedModelId, setSelectedModelId] = useState("claude-sonnet-4-6");
+  const [aiActiveTab, setAiActiveTab] = useState<"models"|"godmode"|"ultraplinian"|"parseltongue"|"autotune"|"stm">("models");
+  const [godmodeActive, setGodmodeActive] = useState(false);
+  const [ultraplinianTier, setUltraplinianTier] = useState(0);
+  const [parseltongueLevel, setParseltongueLevel] = useState<0|1|2|3>(0);
+  const [parseltongueActive, setParseltongueActive] = useState(false);
+  const [autoTuneActive, setAutoTuneActive] = useState(false);
+  const [stmModules, setStmModules] = useState<Set<string>>(new Set());
+  const selectedModelData = ALL_MODELS.find(m => m.id === selectedModelId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasInitialized = useRef(false);
@@ -3232,18 +3364,26 @@ export default function Chat() {
             {/* Agent mode pill */}
             <motion.button
               whileTap={{ scale: 0.96 }}
-              onClick={() => setShowModes(!showModes)}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-white/6 border border-white/10 hover:bg-white/10 transition-colors shrink-0"
+              onClick={() => agentMode === "Core+" ? setShowAIModels(true) : setShowModes(!showModes)}
+              className={cn(
+                "flex items-center gap-1 px-2.5 py-1.5 rounded-full border hover:bg-white/10 transition-colors shrink-0",
+                agentMode === "Core+"
+                  ? "bg-purple-500/15 border-purple-400/30 hover:bg-purple-500/20"
+                  : "bg-white/6 border-white/10"
+              )}
               data-testid="button-agent-mode"
             >
-              <AgentDots size={11} className="text-white/70" />
-              <span className="text-xs font-medium text-white/80">{agentMode}</span>
+              <AgentDots size={11} className={agentMode === "Core+" ? "text-purple-400" : "text-white/70"} />
+              <span className={cn("text-xs font-medium", agentMode === "Core+" ? "text-purple-300" : "text-white/80")}>{agentMode}</span>
+              {agentMode === "Core+" && selectedModelData && (
+                <span className="text-[9px] text-purple-400/70 truncate max-w-[60px]">{selectedModelData.name.split(" ").slice(-1)[0]}</span>
+              )}
               <ChevronDown size={10} className="text-white/40" />
             </motion.button>
 
             <div className="flex-1" />
 
-            {/* Stop / Send button — blue square */}
+            {/* Stop / Send button */}
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={isThinking ? () => {} : handleSubmit}
@@ -3260,7 +3400,7 @@ export default function Chat() {
               {isThinking ? (
                 <Square size={13} fill="currentColor" className="text-white" />
               ) : (
-                <Square size={13} fill="currentColor" className="text-white" />
+                <ArrowUp size={16} strokeWidth={2.5} className="text-white" />
               )}
             </motion.button>
           </div>
@@ -3422,6 +3562,35 @@ export default function Chat() {
       {/* ── Agent Insights Panel ── */}
       <AnimatePresence>
         {showInsights && <InsightsPanel onClose={() => setShowInsights(false)} />}
+      </AnimatePresence>
+
+      {/* ── AI Models Panel (Core+ full-screen) ── */}
+      <AnimatePresence>
+        {showAIModels && (
+          <AIModelsPanel
+            selectedModel={selectedModelId}
+            onSelectModel={(id) => { setSelectedModelId(id); }}
+            activeTab={aiActiveTab}
+            onTabChange={(tab) => setAiActiveTab(tab)}
+            godmodeActive={godmodeActive}
+            onGodmodeToggle={() => setGodmodeActive(v => !v)}
+            ultraplinianTier={ultraplinianTier}
+            onUltraplinianTier={setUltraplinianTier}
+            parseltongueLevel={parseltongueLevel}
+            onParseltongueLevel={setParseltongueLevel}
+            parseltongueActive={parseltongueActive}
+            onParseltongueToggle={() => setParseltongueActive(v => !v)}
+            autoTuneActive={autoTuneActive}
+            onAutoTuneToggle={() => setAutoTuneActive(v => !v)}
+            stmModules={stmModules}
+            onStmToggle={(id) => setStmModules(prev => {
+              const next = new Set(prev);
+              next.has(id) ? next.delete(id) : next.add(id);
+              return next;
+            })}
+            onClose={() => setShowAIModels(false)}
+          />
+        )}
       </AnimatePresence>
 
       {/* ── Build Together floating badge ── */}
