@@ -492,7 +492,59 @@ export default function Explore() {
                 <ArrowRight size={13} />
               </button>
             )}
+            {section.id === "ai" && (
+              <button
+                onClick={() => setLocation("/replit-agent")}
+                className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-purple-500/10 border border-purple-400/20 text-purple-400 text-xs font-bold transition-all active:scale-95 hover:bg-purple-500/15"
+                data-testid="btn-agent"
+              >
+                <Bot size={13} />
+                جرّب Replit Agent — ابنِ مشروعاً كاملاً بالذكاء الاصطناعي
+                <ArrowRight size={13} />
+              </button>
+            )}
+            {section.id === "advanced" && (
+              <button
+                onClick={() => setLocation("/advanced-features")}
+                className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-orange-500/10 border border-orange-400/20 text-orange-400 text-xs font-bold transition-all active:scale-95 hover:bg-orange-500/15"
+                data-testid="btn-advanced"
+              >
+                <Cpu size={13} />
+                9 ميزات متقدمة تفاعلية — Offline، Docker، AI خاص...
+                <ArrowRight size={13} />
+              </button>
+            )}
+            {section.id === "deploy" && (
+              <button
+                onClick={() => setLocation("/pro-features")}
+                className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-cyan-500/10 border border-cyan-400/20 text-cyan-400 text-xs font-bold transition-all active:scale-95 hover:bg-cyan-500/15"
+                data-testid="btn-pro"
+              >
+                <Rocket size={13} />
+                ميزات المحترفين — Nix، PostgreSQL، Cycles، Webhooks...
+                <ArrowRight size={13} />
+              </button>
+            )}
           </motion.div>
+        ))}
+      </div>
+
+      {/* Quick nav cards */}
+      <div className="px-4 mt-4 grid grid-cols-2 gap-2">
+        {[
+          { label: "Replit Agent", sub: "وكيل AI يبني مشاريعك", path: "/replit-agent", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-400/20", icon: <Bot size={14} /> },
+          { label: "ميزات متقدمة", sub: "Offline · Docker · AI خاص", path: "/advanced-features", color: "text-orange-400", bg: "bg-orange-500/10 border-orange-400/20", icon: <Search size={14} /> },
+          { label: "ميزات المحترفين", sub: "Nix · PostgreSQL · Cycles", path: "/pro-features", color: "text-cyan-400", bg: "bg-cyan-500/10 border-cyan-400/20", icon: <Rocket size={14} /> },
+          { label: "دليل Workspace", sub: "كل أداة بتفصيل كامل", path: "/workspace-guide", color: "text-green-400", bg: "bg-green-500/10 border-green-400/20", icon: <Monitor size={14} /> },
+        ].map(card => (
+          <button key={card.path} onClick={() => setLocation(card.path)}
+            className={cn("flex items-center gap-2 px-3 py-3 rounded-xl border text-left transition-all active:scale-[0.97] hover:opacity-90", card.bg)}>
+            <div className={cn("w-7 h-7 rounded-lg bg-black/20 flex items-center justify-center shrink-0", card.color)}>{card.icon}</div>
+            <div className="min-w-0">
+              <p className={cn("text-[11px] font-bold leading-tight", card.color)}>{card.label}</p>
+              <p className="text-[9px] text-white/30 truncate">{card.sub}</p>
+            </div>
+          </button>
         ))}
       </div>
 

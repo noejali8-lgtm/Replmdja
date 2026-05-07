@@ -13,6 +13,9 @@ import Account from "@/pages/account";
 import Explore from "@/pages/explore";
 import Templates from "@/pages/templates";
 import WorkspaceGuide from "@/pages/workspace-guide";
+import ReplitAgent from "@/pages/replit-agent";
+import AdvancedFeatures from "@/pages/advanced-features";
+import ProFeatures from "@/pages/pro-features";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -27,6 +30,9 @@ function Router() {
         <Route path="/templates" component={Templates} />
         <Route path="/explore" component={Explore} />
         <Route path="/workspace-guide" component={WorkspaceGuide} />
+        <Route path="/replit-agent" component={ReplitAgent} />
+        <Route path="/advanced-features" component={AdvancedFeatures} />
+        <Route path="/pro-features" component={ProFeatures} />
         <Route path="/account" component={Account} />
         <Route component={NotFound} />
       </Switch>

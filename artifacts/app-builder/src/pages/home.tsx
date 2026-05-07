@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, GitBranch, FileText, Package, Zap, BookOpen, Compass, ChevronRight } from "lucide-react";
+import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, GitBranch, FileText, Package, Zap, Layers, BookOpen, Compass, ChevronRight } from "lucide-react";
 import { SiGithub } from "react-icons/si";
 import { CategoryChips } from "@/components/CategoryChips";
 import { CreateInput } from "@/components/CreateInput";
@@ -295,6 +295,30 @@ export default function Home() {
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-white leading-tight">Explore</p>
                   <p className="text-[10px] text-white/35 truncate">دليل Replit</p>
+                </div>
+                <ChevronRight size={12} className="text-white/20 ml-auto shrink-0" />
+              </div>
+            </Link>
+            <Link href="/replit-agent">
+              <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-white/4 border border-white/8 hover:bg-white/7 transition-colors cursor-pointer">
+                <div className="w-7 h-7 rounded-lg bg-purple-500/20 border border-purple-400/25 flex items-center justify-center shrink-0">
+                  <Zap size={13} className="text-purple-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-white leading-tight">AI Agent</p>
+                  <p className="text-[10px] text-white/35 truncate">بنّاء تلقائي</p>
+                </div>
+                <ChevronRight size={12} className="text-white/20 ml-auto shrink-0" />
+              </div>
+            </Link>
+            <Link href="/pro-features">
+              <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-white/4 border border-white/8 hover:bg-white/7 transition-colors cursor-pointer">
+                <div className="w-7 h-7 rounded-lg bg-cyan-500/20 border border-cyan-400/25 flex items-center justify-center shrink-0">
+                  <Layers size={13} className="text-cyan-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-white leading-tight">Pro Tools</p>
+                  <p className="text-[10px] text-white/35 truncate">Nix · DB · Deploy</p>
                 </div>
                 <ChevronRight size={12} className="text-white/20 ml-auto shrink-0" />
               </div>
