@@ -6,7 +6,7 @@ import {
   Play, Monitor, Globe, AlignJustify, LayoutPanelLeft,
   Lock, Database, UserPlus, ChevronDown, ChevronUp,
   Folder, X, Search, History, Share2, MoreHorizontal,
-  ArrowUpDown, Clock, Square, BookOpen, ArrowUp, Flame, Trophy,
+  ArrowUpDown, Clock, Square, BookOpen, ArrowUp, ArrowDown, Flame, Trophy,
   GitBranch, Trash2, LogIn, MessageSquare, RotateCcw,
   ExternalLink, UserCircle2, CheckCircle, Circle as CircleIcon,
   Link2, Key, Terminal, Server, ShieldCheck, Rocket, RefreshCw,
@@ -14,7 +14,7 @@ import {
   Table, Wifi, WifiOff, Mail, Chrome, AlertCircle,
   Cpu, Activity, Layers, Zap, Users, Network, Sparkles,
   GitMerge, Code2, Palette, BarChart3, TrendingUp,
-  Github, Download
+  Github, Download, Settings, Globe2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -371,6 +371,15 @@ const GIT_CONNECTIONS: GitConnection[] = [
 
 type GitOpStatus = "idle" | "loading" | "success" | "error";
 
+const MOCK_COMMIT_HISTORY = [
+  { sha: "a1b2c3d", message: "Add new pages for AI agent and advanced/pro features", author: "timtaims2003", time: "2 hours ago" },
+  { sha: "e4f5g6h", message: "Add a detailed workspace guide page with interactive examples", author: "timtaims2003", time: "2 hours ago" },
+  { sha: "i7j8k9l", message: "Implement Git panel with branch switcher and GitHub API integration", author: "timtaims2003", time: "3 hours ago" },
+  { sha: "m1n2o3p", message: "Add AI Models panel with 60+ models across 17 providers", author: "timtaims2003", time: "4 hours ago" },
+  { sha: "q4r5s6t", message: "Implement Ensemble, Arena, and Debate modes for multi-AI collaboration", author: "timtaims2003", time: "5 hours ago" },
+  { sha: "u7v8w9x", message: "Initial project scaffold with pnpm monorepo setup", author: "timtaims2003", time: "6 hours ago" },
+];
+
 function GitPanel({ onClose }: { onClose: () => void }) {
   const [remoteUrl, setRemoteUrl] = useState(() => localStorage.getItem("git_remote_url") || "");
   const [connections, setConnections] = useState<GitConnection[]>(() => {
@@ -521,6 +530,7 @@ function GitPanel({ onClose }: { onClose: () => void }) {
   };
 
   const githubConnected = connections.find(c => c.id === "github")?.status === "connected";
+  const [showGitSettings, setShowGitSettings] = useState(false);
 
   return (
     <motion.div
@@ -528,7 +538,7 @@ function GitPanel({ onClose }: { onClose: () => void }) {
       animate={{ y: 0 }}
       exit={{ y: "100%" }}
       transition={{ type: "spring", stiffness: 340, damping: 36 }}
-      className="absolute inset-0 z-50 flex flex-col bg-background overflow-y-auto no-scrollbar"
+      className="absolute inset-0 z-50 flex flex-col bg-background"
     >
       {/* Header */}
       <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
@@ -544,6 +554,13 @@ function GitPanel({ onClose }: { onClose: () => void }) {
         <span className="text-base font-semibold text-foreground">Git</span>
         <div className="flex-1" />
         <button
+          onClick={() => setShowGitSettings(true)}
+          className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"
+          title="Git Settings"
+        >
+          <Settings size={16} />
+        </button>
+        <button
           onClick={onClose}
           className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"
           data-testid="button-close-git"
@@ -552,25 +569,93 @@ function GitPanel({ onClose }: { onClose: () => void }) {
         </button>
       </div>
 
-      <div className="flex-1 px-4 py-4 space-y-5">
+      {/* Branch sub-row */}
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-border/40 bg-secondary/5 shrink-0">
+        <button
+          onClick={() => setShowBranchSwitcher(v => !v)}
+          className="flex items-center gap-1.5 bg-secondary/40 border border-border/50 rounded-lg px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-secondary/60 transition-colors"
+          data-testid="button-branch-switcher"
+        >
+          <GitBranch size={12} className="text-green-400" />
+          <span>{currentBranch}</span>
+          <ChevronDown size={11} className={cn("text-muted-foreground/60 transition-transform", showBranchSwitcher && "rotate-180")} />
+        </button>
+        <div className="flex-1" />
+        {branchOpStatus === "loading" && <Loader2 size={13} className="animate-spin text-muted-foreground/50" />}
+        {branchOpStatus === "success" && <CheckCircle size={13} className="text-green-400" />}
+        <button
+          onClick={handlePull}
+          disabled={pullStatus === "loading"}
+          title="Refresh"
+          className="w-7 h-7 flex items-center justify-center text-muted-foreground/50 hover:text-foreground rounded-lg hover:bg-secondary/50 transition-colors"
+        >
+          <RefreshCw size={14} className={cn(pullStatus === "loading" && "animate-spin")} />
+        </button>
+      </div>
 
-        {/* GitHub Token Modal */}
+      <div className="flex-1 overflow-y-auto no-scrollbar">
+        {/* Branch Switcher dropdown */}
         <AnimatePresence>
-          {showTokenInput && (
+          {showBranchSwitcher && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60"
-              onClick={() => setShowTokenInput(null)}
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden border-b border-border/40 bg-secondary/5"
             >
+              <div className="px-4 py-3 space-y-2">
+                <div className="divide-y divide-border/30">
+                  {branches.filter(b => b !== currentBranch).map(branch => (
+                    <div key={branch} className="flex items-center gap-3 py-2">
+                      <GitBranch size={12} className="text-muted-foreground/50 shrink-0" />
+                      <span className="flex-1 text-xs text-muted-foreground truncate">{branch}</span>
+                      <button onClick={() => { handleSwitchBranch(branch); setShowBranchSwitcher(false); }}
+                        className="text-[11px] px-2 py-1 rounded-md bg-blue-500/15 border border-blue-400/25 text-blue-400 hover:bg-blue-500/25 transition-colors shrink-0"
+                      >Switch</button>
+                      {branch !== "main" && (
+                        <button onClick={() => handleDeleteBranch(branch)}
+                          className="text-[11px] px-1.5 py-1 rounded-md text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
+                        ><Trash2 size={11} /></button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <input value={newBranchInput} onChange={e => setNewBranchInput(e.target.value)}
+                    placeholder="new-branch-name" onKeyDown={e => e.key === "Enter" && handleCreateBranch()}
+                    className="flex-1 bg-secondary/30 border border-border/50 rounded-lg px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-green-400/40 transition-colors"
+                    data-testid="input-new-branch"
+                  />
+                  <button onClick={handleCreateBranch} disabled={!newBranchInput.trim() || branchOpStatus === "loading"}
+                    className={cn("px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0",
+                      newBranchInput.trim() ? "bg-green-500/20 border border-green-400/40 text-green-300 hover:bg-green-500/30" : "bg-secondary/30 border border-border/30 text-muted-foreground/30 cursor-not-allowed"
+                    )}
+                    data-testid="button-create-branch"
+                  >{branchOpStatus === "loading" ? <Loader2 size={11} className="animate-spin" /> : "+ New"}</button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="px-4 py-4 space-y-4">
+          {/* GitHub Token Modal */}
+          <AnimatePresence>
+            {showTokenInput && (
               <motion.div
-                className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 space-y-4"
-                onClick={e => e.stopPropagation()}
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60"
+                onClick={() => setShowTokenInput(null)}
               >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-secondary/50 flex items-center justify-center text-foreground">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <motion.div
+                  className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 space-y-4"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-secondary/50 flex items-center justify-center text-foreground">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
                     </svg>
                   </div>
@@ -627,432 +712,187 @@ function GitPanel({ onClose }: { onClose: () => void }) {
           )}
         </AnimatePresence>
 
-        {/* Remote section */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Link2 size={14} className="text-muted-foreground" />
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Remote</h3>
-          </div>
-          <div className="bg-card border border-border rounded-2xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-border/50">
-              <label className="text-xs text-muted-foreground block mb-1.5">Remote URL</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={remoteUrl}
-                  onChange={e => setRemoteUrl(e.target.value)}
-                  placeholder="https://github.com/username/repo.git"
-                  className="flex-1 bg-secondary/30 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-purple-400/50 transition-colors"
-                  data-testid="input-remote-url"
-                />
-                {remoteUrl && (
-                  <button
-                    onClick={() => { navigator.clipboard?.writeText(remoteUrl); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-                    className="w-8 h-8 flex items-center justify-center bg-secondary/50 border border-border/50 rounded-lg text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                  >
-                    {copied ? <CheckCircle size={13} className="text-green-400" /> : <ExternalLink size={13} />}
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="px-4 py-2.5 flex items-center justify-between">
-              <span className="text-xs text-muted-foreground/70">Branch: <span className="text-foreground font-medium">main</span></span>
-              <div className="flex items-center gap-2">
-                {githubConnected && (
-                  <button
-                    onClick={() => setShowRepoBrowser(true)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary/40 border border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-all flex items-center gap-1"
-                    data-testid="button-browse-repos"
-                  >
-                    Browse
-                  </button>
-                )}
-              <button
-                disabled={!remoteUrl || remoteStatus === "loading"}
-                onClick={handleCreateRemote}
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5",
-                  remoteStatus === "success"
-                    ? "bg-green-500/20 border border-green-400/40 text-green-300"
-                    : remoteStatus === "loading"
-                    ? "bg-purple-500/20 border border-purple-400/40 text-purple-300"
-                    : remoteUrl
-                    ? "bg-purple-500/20 border border-purple-400/40 text-purple-300 hover:bg-purple-500/30"
-                    : "bg-secondary/30 border border-border/30 text-muted-foreground/40 cursor-not-allowed"
-                )}
-                data-testid="button-create-remote"
-              >
-                {remoteStatus === "loading" ? (
-                  <><Loader2 size={11} className="animate-spin" /> Saving...</>
-                ) : remoteStatus === "success" ? (
-                  <><CheckCircle size={11} /> Saved</>
-                ) : (
-                  "Create Remote"
-                )}
-              </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Branch Switcher */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <GitBranch size={14} className="text-muted-foreground" />
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Branch</h3>
-            <div className="flex-1" />
-            <button
-              onClick={() => setShowBranchSwitcher(v => !v)}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-secondary/40 border border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-all"
-              data-testid="button-branch-switcher"
-            >
-              <ChevronDown size={11} className={cn("transition-transform", showBranchSwitcher && "rotate-180")} />
-              Switch
-            </button>
-          </div>
-          <div className="bg-card border border-border rounded-2xl overflow-hidden">
-            {/* Current branch */}
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40">
-              <div className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground truncate">{currentBranch}</p>
-                <p className="text-[11px] text-muted-foreground/50">current branch</p>
-              </div>
-              {branchOpStatus === "loading" && <Loader2 size={13} className="animate-spin text-muted-foreground shrink-0" />}
-              {branchOpStatus === "success" && <CheckCircle size={13} className="text-green-400 shrink-0" />}
-            </div>
-            {/* Branch list */}
-            <AnimatePresence>
-              {showBranchSwitcher && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden"
-                >
-                  {/* Other branches */}
-                  <div className="divide-y divide-border/30">
-                    {branches.filter(b => b !== currentBranch).map(branch => (
-                      <div key={branch} className="flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/20 transition-colors">
-                        <GitBranch size={12} className="text-muted-foreground/50 shrink-0" />
-                        <span className="flex-1 text-xs text-muted-foreground truncate">{branch}</span>
-                        <button
-                          onClick={() => handleSwitchBranch(branch)}
-                          className="text-[11px] px-2 py-1 rounded-md bg-blue-500/15 border border-blue-400/25 text-blue-400 hover:bg-blue-500/25 transition-colors shrink-0"
-                          data-testid={`button-switch-${branch}`}
-                        >Switch</button>
-                        {branch !== "main" && (
-                          <button
-                            onClick={() => handleDeleteBranch(branch)}
-                            className="text-[11px] px-2 py-1 rounded-md text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
-                            data-testid={`button-delete-branch-${branch}`}
-                          ><Trash2 size={11} /></button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  {/* Create new branch */}
-                  <div className="px-4 py-3 border-t border-border/40 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <input
-                        value={newBranchInput}
-                        onChange={e => setNewBranchInput(e.target.value)}
-                        placeholder="new-branch-name"
-                        onKeyDown={e => e.key === "Enter" && handleCreateBranch()}
-                        className="flex-1 bg-secondary/30 border border-border/50 rounded-lg px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-green-400/40 transition-colors"
-                        data-testid="input-new-branch"
-                      />
-                      <button
-                        onClick={handleCreateBranch}
-                        disabled={!newBranchInput.trim() || branchOpStatus === "loading"}
-                        className={cn(
-                          "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0",
-                          newBranchInput.trim()
-                            ? "bg-green-500/20 border border-green-400/40 text-green-300 hover:bg-green-500/30"
-                            : "bg-secondary/30 border border-border/30 text-muted-foreground/30 cursor-not-allowed"
-                        )}
-                        data-testid="button-create-branch"
-                      >
-                        {branchOpStatus === "loading" ? <Loader2 size={11} className="animate-spin" /> : "+ Create"}
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-
-        {/* Git Operations (Pull / Push) */}
-        {githubConnected && remoteUrl && (
+          {/* Remote Updates */}
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <ArrowUpDown size={14} className="text-muted-foreground" />
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Sync</h3>
-            </div>
-            <div className="bg-card border border-border rounded-2xl overflow-hidden divide-y divide-border/50">
-              {/* Pull */}
-              <div className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Pull</p>
-                  <p className="text-xs text-muted-foreground/60">Fetch latest changes from remote</p>
-                </div>
-                <button
-                  onClick={handlePull}
-                  disabled={pullStatus === "loading"}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5",
-                    pullStatus === "success"
-                      ? "bg-green-500/20 border border-green-400/40 text-green-300"
-                      : pullStatus === "loading"
-                      ? "bg-blue-500/20 border border-blue-400/40 text-blue-300"
-                      : "bg-secondary/40 border border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/70"
-                  )}
-                  data-testid="button-pull"
-                >
-                  {pullStatus === "loading" ? (
-                    <><Loader2 size={11} className="animate-spin" /> Pulling...</>
-                  ) : pullStatus === "success" ? (
-                    <><CheckCircle size={11} /> Done</>
-                  ) : (
-                    "Pull"
-                  )}
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50 mb-2 px-0.5">Remote Updates</p>
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              {/* Repo link row */}
+              <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border/40">
+                <Github size={14} className="text-muted-foreground/60 shrink-0" />
+                <span className="flex-1 text-xs text-foreground/80 truncate font-mono">
+                  {remoteUrl ? remoteUrl.replace("https://github.com/", "").replace(".git", "") : "No remote configured"}
+                </span>
+                {githubConnected && (
+                  <button onClick={() => setShowRepoBrowser(true)}
+                    className="text-[10px] text-muted-foreground/50 hover:text-foreground transition-colors shrink-0 px-1.5 py-0.5 rounded border border-border/50 hover:bg-secondary/50"
+                    data-testid="button-browse-repos">Browse</button>
+                )}
+                {remoteUrl && (
+                  <button onClick={() => window.open(remoteUrl.replace(".git", ""), "_blank")}
+                    className="text-muted-foreground/40 hover:text-foreground transition-colors shrink-0">
+                    <ExternalLink size={13} />
+                  </button>
+                )}
+              </div>
+              {/* Fetch status row */}
+              <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/40">
+                <span className="text-[11px] text-muted-foreground/60 flex-1">
+                  origin/{currentBranch} • upstream
+                  <span className="text-muted-foreground/35 ml-1.5">
+                    {pullStatus === "loading" ? "fetching..." : "last fetched 1 min ago"}
+                  </span>
+                </span>
+                <button onClick={handlePull} disabled={pullStatus === "loading"}
+                  className="text-muted-foreground/40 hover:text-foreground transition-colors">
+                  <RefreshCw size={13} className={cn(pullStatus === "loading" && "animate-spin")} />
                 </button>
               </div>
-
-              {/* Commit + Push */}
-              <div className="px-4 py-3 space-y-2.5">
-                {/* Header row */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Commit & Push</p>
-                    <p className="text-xs text-muted-foreground/60">{stagedFiles.size} file{stagedFiles.size !== 1 ? "s" : ""} staged</p>
-                  </div>
-                  <button
-                    onClick={() => setShowCommit(v => !v)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-500/20 border border-purple-400/40 text-purple-300 hover:bg-purple-500/30 transition-all flex items-center gap-1.5"
-                    data-testid="button-open-commit"
-                  >
-                    <ChevronDown size={11} className={cn("transition-transform", showCommit && "rotate-180")} />
-                    Stage files
-                  </button>
-                </div>
-
-                {/* File staging list */}
-                <AnimatePresence>
-                  {showCommit && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden space-y-2"
-                    >
-                      {/* Select all row */}
-                      <div className="flex items-center justify-between py-1">
-                        <label className="flex items-center gap-2 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={stagedFiles.size === MOCK_CHANGED_FILES.length}
-                            onChange={e => setStagedFiles(e.target.checked ? new Set(MOCK_CHANGED_FILES.map(f => f.path)) : new Set())}
-                            className="w-3.5 h-3.5 accent-purple-500 cursor-pointer"
-                            data-testid="checkbox-stage-all"
-                          />
-                          <span className="text-[11px] text-muted-foreground font-medium">Select all ({MOCK_CHANGED_FILES.length} changed)</span>
-                        </label>
-                      </div>
-
-                      {/* File list */}
-                      <div className="bg-secondary/20 border border-border/40 rounded-xl overflow-hidden divide-y divide-border/30">
-                        {MOCK_CHANGED_FILES.map(file => {
-                          const staged = stagedFiles.has(file.path);
-                          const filename = file.path.split("/").pop() || file.path;
-                          const dir = file.path.includes("/") ? file.path.substring(0, file.path.lastIndexOf("/")) : "";
-                          return (
-                            <label
-                              key={file.path}
-                              className={cn(
-                                "flex items-center gap-2.5 px-3 py-2 cursor-pointer select-none transition-colors",
-                                staged ? "bg-purple-500/5" : "opacity-50"
-                              )}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={staged}
-                                onChange={e => {
-                                  const next = new Set(stagedFiles);
-                                  if (e.target.checked) next.add(file.path);
-                                  else next.delete(file.path);
-                                  setStagedFiles(next);
-                                }}
-                                className="w-3.5 h-3.5 accent-purple-500 cursor-pointer shrink-0"
-                                data-testid={`checkbox-file-${file.path.replace(/\//g, "-")}`}
-                              />
-                              <span className={cn(
-                                "text-[10px] font-bold w-4 shrink-0 text-center",
-                                file.status === "A" ? "text-green-400" : "text-yellow-400"
-                              )}>{file.status}</span>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs text-foreground font-medium truncate">{filename}</p>
-                                {dir && <p className="text-[10px] text-muted-foreground/50 truncate">{dir}</p>}
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
-
-                      {/* Commit message */}
-                      <input
-                        type="text"
-                        value={commitMsg}
-                        onChange={e => setCommitMsg(e.target.value)}
-                        placeholder="Commit message..."
-                        className="w-full bg-secondary/30 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-purple-400/50 transition-colors"
-                        data-testid="input-commit-message"
-                      />
-
-                      {/* Push error */}
-                      {pushError && (
-                        <p className="text-[11px] text-red-400 bg-red-500/10 border border-red-400/20 rounded-lg px-3 py-2">{pushError}</p>
-                      )}
-
-                      {/* Push button */}
-                      <button
-                        onClick={handlePush}
-                        disabled={!commitMsg.trim() || stagedFiles.size === 0 || pushStatus === "loading"}
-                        className={cn(
-                          "w-full py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
-                          pushStatus === "success"
-                            ? "bg-green-500/20 border border-green-400/40 text-green-300"
-                            : pushStatus === "loading"
-                            ? "bg-purple-500/20 border border-purple-400/40 text-purple-300"
-                            : commitMsg.trim() && stagedFiles.size > 0
-                            ? "bg-purple-500/20 border border-purple-400/40 text-purple-300 hover:bg-purple-500/30"
-                            : "bg-secondary/30 border border-border/30 text-muted-foreground/40 cursor-not-allowed"
-                        )}
-                        data-testid="button-push"
-                      >
-                        {pushStatus === "loading" ? (
-                          <><Loader2 size={11} className="animate-spin" /> Pushing {stagedFiles.size} file{stagedFiles.size !== 1 ? "s" : ""}...</>
-                        ) : pushStatus === "success" ? (
-                          <><CheckCircle size={11} /> Pushed to GitHub!</>
-                        ) : (
-                          <>Push {stagedFiles.size > 0 ? `${stagedFiles.size} file${stagedFiles.size !== 1 ? "s" : ""}` : "—"} to GitHub</>
-                        )}
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+              {/* Sync / Pull / Push button row */}
+              <div className="flex items-stretch divide-x divide-border/40">
+                <button onClick={handlePull} disabled={pullStatus === "loading"}
+                  className="flex-1 flex flex-col items-center gap-0.5 py-3 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors">
+                  <RefreshCw size={13} className={cn(pullStatus === "loading" && "animate-spin")} />
+                  <span>{pullStatus === "success" ? "Synced" : "Sync"}</span>
+                </button>
+                <button onClick={handlePull} disabled={pullStatus === "loading"}
+                  className="flex-1 flex flex-col items-center gap-0.5 py-3 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors"
+                  data-testid="button-pull">
+                  <ArrowDown size={13} />
+                  <span>{pullStatus === "loading" ? "Pulling..." : "Pull"}</span>
+                </button>
+                <button onClick={() => setShowCommit(v => !v)}
+                  className={cn("flex-1 flex flex-col items-center gap-0.5 py-3 text-xs transition-colors",
+                    showCommit ? "text-purple-400 bg-purple-500/10" : "text-muted-foreground hover:text-foreground hover:bg-secondary/30"
+                  )}>
+                  <ArrowUp size={13} />
+                  <span>Push</span>
+                </button>
               </div>
             </div>
           </div>
-        )}
 
-        {/* Connections section */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <GitBranch size={14} className="text-muted-foreground" />
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Connections</h3>
-          </div>
-          <div className="bg-card border border-border rounded-2xl overflow-hidden divide-y divide-border/50">
-            {connections.map((conn) => (
-              <div key={conn.id} className="flex items-center gap-3 px-4 py-3.5">
-                <div className="w-8 h-8 rounded-lg bg-secondary/50 border border-border/50 flex items-center justify-center text-foreground shrink-0">
-                  {conn.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-medium text-foreground">{conn.name}</span>
-                    {conn.status === "connected" && (
-                      <span className="text-[9px] bg-green-500/20 border border-green-400/30 text-green-400 px-1.5 rounded-full font-semibold">Active</span>
-                    )}
-                  </div>
-                  {conn.username && (
-                    <span className="text-xs text-muted-foreground/60">@{conn.username}</span>
-                  )}
-                </div>
-                {conn.status === "connected" ? (
-                  <button
-                    onClick={() => handleDelete(conn.id)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/10 border border-red-400/20 hover:border-red-400/40 transition-all"
-                    data-testid={`button-disconnect-${conn.id}`}
-                  >
-                    <Trash2 size={11} /> Delete
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleSignIn(conn.id)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground border border-border/50 hover:border-border hover:bg-secondary/50 transition-all"
-                    data-testid={`button-connect-${conn.id}`}
-                  >
-                    <LogIn size={11} /> Sign in
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Commit Author section */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <UserCircle2 size={14} className="text-muted-foreground" />
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Commit Author</h3>
-          </div>
-          <div className="bg-card border border-border rounded-2xl overflow-hidden">
-            <button
-              className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-secondary/20 transition-colors"
-              onClick={() => setShowAuthorEdit(v => !v)}
-              data-testid="button-toggle-author"
-            >
-              <div className="w-9 h-9 rounded-full bg-purple-500/20 border border-purple-400/30 flex items-center justify-center shrink-0">
-                <span className="text-sm font-semibold text-purple-300">{authorName[0]?.toUpperCase()}</span>
-              </div>
-              <div className="flex-1 text-left">
-                <p className="text-sm font-medium text-foreground">{authorName}</p>
-                <p className="text-xs text-muted-foreground/60">{authorEmail}</p>
-              </div>
-              <ChevronDown size={15} className={cn("text-muted-foreground transition-transform", showAuthorEdit && "rotate-180")} />
-            </button>
-            <AnimatePresence>
-              {showAuthorEdit && (
-                <motion.div
-                  initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }}
-                  className="overflow-hidden border-t border-border/40"
-                >
-                  <div className="px-4 py-3 space-y-2.5">
-                    <div>
-                      <label className="text-[11px] text-muted-foreground block mb-1">Name</label>
-                      <input
-                        value={authorName}
-                        onChange={e => setAuthorName(e.target.value)}
-                        className="w-full bg-secondary/30 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-purple-400/50 transition-colors"
-                        data-testid="input-author-name"
+          {/* Commit section */}
+          <div>
+            <div className="flex items-center justify-between mb-2 px-0.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">Commit</p>
+              {MOCK_CHANGED_FILES.length > 0 && (
+                <span className="text-[10px] text-muted-foreground/40">{stagedFiles.size}/{MOCK_CHANGED_FILES.length} staged</span>
+              )}
+            </div>
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              <AnimatePresence initial={false}>
+                {showCommit ? (
+                  <motion.div key="commit-open" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="p-4 space-y-3">
+                    {/* Select all */}
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input type="checkbox"
+                        checked={stagedFiles.size === MOCK_CHANGED_FILES.length}
+                        onChange={e => setStagedFiles(e.target.checked ? new Set(MOCK_CHANGED_FILES.map(f => f.path)) : new Set())}
+                        className="w-3.5 h-3.5 accent-purple-500 cursor-pointer"
+                        data-testid="checkbox-stage-all"
                       />
+                      <span className="text-[11px] text-muted-foreground">Select all ({MOCK_CHANGED_FILES.length} changed)</span>
+                    </label>
+                    {/* File list */}
+                    <div className="bg-secondary/20 border border-border/40 rounded-xl overflow-hidden divide-y divide-border/30">
+                      {MOCK_CHANGED_FILES.map(file => {
+                        const staged = stagedFiles.has(file.path);
+                        const filename = file.path.split("/").pop() || file.path;
+                        const dir = file.path.includes("/") ? file.path.substring(0, file.path.lastIndexOf("/")) : "";
+                        return (
+                          <label key={file.path} className={cn("flex items-center gap-2.5 px-3 py-2 cursor-pointer select-none transition-colors", staged ? "bg-purple-500/5" : "opacity-50")}>
+                            <input type="checkbox" checked={staged}
+                              onChange={e => { const next = new Set(stagedFiles); if (e.target.checked) next.add(file.path); else next.delete(file.path); setStagedFiles(next); }}
+                              className="w-3.5 h-3.5 accent-purple-500 cursor-pointer shrink-0"
+                              data-testid={`checkbox-file-${file.path.replace(/\//g, "-")}`}
+                            />
+                            <span className={cn("text-[10px] font-bold w-4 shrink-0 text-center", file.status === "A" ? "text-green-400" : "text-yellow-400")}>{file.status}</span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs text-foreground font-medium truncate">{filename}</p>
+                              {dir && <p className="text-[10px] text-muted-foreground/50 truncate">{dir}</p>}
+                            </div>
+                          </label>
+                        );
+                      })}
                     </div>
-                    <div>
-                      <label className="text-[11px] text-muted-foreground block mb-1">Email</label>
-                      <input
-                        value={authorEmail}
-                        onChange={e => setAuthorEmail(e.target.value)}
-                        className="w-full bg-secondary/30 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-purple-400/50 transition-colors"
-                        data-testid="input-author-email"
-                      />
-                    </div>
-                    <button
-                      onClick={() => setShowAuthorEdit(false)}
-                      className="w-full py-2 bg-purple-500/20 border border-purple-400/30 text-purple-300 text-xs font-semibold rounded-lg hover:bg-purple-500/30 transition-colors"
-                      data-testid="button-save-author"
+                    {/* Commit message */}
+                    <input type="text" value={commitMsg} onChange={e => setCommitMsg(e.target.value)}
+                      placeholder="Commit message..."
+                      className="w-full bg-secondary/30 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-purple-400/50 transition-colors"
+                      data-testid="input-commit-message"
+                    />
+                    {pushError && <p className="text-[11px] text-red-400 bg-red-500/10 border border-red-400/20 rounded-lg px-3 py-2">{pushError}</p>}
+                    <button onClick={handlePush} disabled={!commitMsg.trim() || stagedFiles.size === 0 || pushStatus === "loading"}
+                      className={cn("w-full py-2.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
+                        pushStatus === "success" ? "bg-green-500/20 border border-green-400/40 text-green-300" :
+                        pushStatus === "loading" ? "bg-purple-500/20 border border-purple-400/40 text-purple-300" :
+                        commitMsg.trim() && stagedFiles.size > 0 ? "bg-purple-500/20 border border-purple-400/40 text-purple-300 hover:bg-purple-500/30" :
+                        "bg-secondary/30 border border-border/30 text-muted-foreground/40 cursor-not-allowed"
+                      )}
+                      data-testid="button-push"
                     >
-                      Save Author
+                      {pushStatus === "loading" ? <><Loader2 size={11} className="animate-spin" /> Pushing...</> :
+                       pushStatus === "success" ? <><CheckCircle size={11} /> Pushed!</> :
+                       <>Push {stagedFiles.size > 0 ? `${stagedFiles.size} file${stagedFiles.size !== 1 ? "s" : ""}` : "—"}</>}
                     </button>
+                  </motion.div>
+                ) : (
+                  <motion.div key="commit-closed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="px-4 py-3.5">
+                    <p className="text-xs text-muted-foreground/50">There are no changes to commit.</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* Commit History */}
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50 mb-2 px-0.5">History</p>
+            <div className="bg-card border border-border rounded-2xl overflow-hidden divide-y divide-border/40">
+              {MOCK_COMMIT_HISTORY.map((c, i) => (
+                <motion.div key={c.sha} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
+                  className="flex items-start gap-3 px-4 py-3 hover:bg-secondary/10 transition-colors cursor-pointer">
+                  <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 mt-[7px] shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-foreground/85 leading-snug line-clamp-1">{c.message}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="w-4 h-4 rounded-full bg-purple-500/20 flex items-center justify-center text-[8px] font-bold text-purple-300 shrink-0">{c.author[0].toUpperCase()}</div>
+                      <span className="text-[10px] text-muted-foreground/50">{c.author}</span>
+                      <span className="text-[10px] text-muted-foreground/35">{c.time}</span>
+                    </div>
                   </div>
                 </motion.div>
-              )}
-            </AnimatePresence>
+              ))}
+            </div>
           </div>
-        </div>
 
+        </div>
       </div>
+
+      {/* GitSettings sub-panel slides over */}
+      <AnimatePresence>
+        {showGitSettings && (
+          <GitSettingsPanel
+            onClose={() => setShowGitSettings(false)}
+            connections={connections}
+            onConnectionsChange={saveConnections}
+            remoteUrl={remoteUrl}
+            onRemoteUrlChange={(url) => { setRemoteUrl(url); localStorage.setItem("git_remote_url", url); }}
+            remoteStatus={remoteStatus}
+            onCreateRemote={handleCreateRemote}
+            authorName={authorName}
+            onAuthorNameChange={setAuthorName}
+            authorEmail={authorEmail}
+            onAuthorEmailChange={setAuthorEmail}
+            onSignIn={handleSignIn}
+            onDelete={handleDelete}
+            onBrowse={() => { setShowRepoBrowser(true); setShowGitSettings(false); }}
+            githubConnected={githubConnected}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Repo Browser slides over GitPanel */}
       <AnimatePresence>
@@ -1064,6 +904,184 @@ function GitPanel({ onClose }: { onClose: () => void }) {
           />
         )}
       </AnimatePresence>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   GIT SETTINGS PANEL
+   ───────────────────────────────────────────────────────── */
+interface GitSettingsPanelProps {
+  onClose: () => void;
+  connections: GitConnection[];
+  onConnectionsChange: (c: GitConnection[]) => void;
+  remoteUrl: string;
+  onRemoteUrlChange: (url: string) => void;
+  remoteStatus: GitOpStatus;
+  onCreateRemote: () => void;
+  authorName: string;
+  onAuthorNameChange: (n: string) => void;
+  authorEmail: string;
+  onAuthorEmailChange: (e: string) => void;
+  onSignIn: (id: string) => void;
+  onDelete: (id: string) => void;
+  onBrowse: () => void;
+  githubConnected: boolean;
+}
+
+function GitSettingsPanel({ onClose, connections, remoteUrl, onRemoteUrlChange, remoteStatus, onCreateRemote, authorName, onAuthorNameChange, authorEmail, onAuthorEmailChange, onSignIn, onDelete, onBrowse, githubConnected }: GitSettingsPanelProps) {
+  const [copied, setCopied] = useState(false);
+  const [showAuthorEdit, setShowAuthorEdit] = useState(false);
+  const [showConnectionsOpen, setShowConnectionsOpen] = useState(true);
+
+  return (
+    <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 36 }}
+      className="absolute inset-0 z-60 flex flex-col bg-background">
+      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors">
+          <ArrowLeft size={15} /> Settings
+        </button>
+        <div className="flex-1" />
+        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors">
+          <X size={18} />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 no-scrollbar">
+        {/* Remote URL */}
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50 mb-2 px-0.5">Remote</p>
+          <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-border/50">
+              <label className="text-xs text-muted-foreground block mb-1.5">Remote URL</label>
+              <div className="flex items-center gap-2">
+                <input type="text" value={remoteUrl} onChange={e => onRemoteUrlChange(e.target.value)}
+                  placeholder="https://github.com/username/repo.git"
+                  className="flex-1 bg-secondary/30 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-purple-400/50 transition-colors"
+                  data-testid="input-remote-url"
+                />
+                {remoteUrl && (
+                  <button onClick={() => { navigator.clipboard?.writeText(remoteUrl); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+                    className="w-8 h-8 flex items-center justify-center bg-secondary/50 border border-border/50 rounded-lg text-muted-foreground hover:text-foreground transition-colors shrink-0">
+                    {copied ? <CheckCircle size={13} className="text-green-400" /> : <ExternalLink size={13} />}
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="px-4 py-2.5 flex items-center gap-2 justify-end">
+              {githubConnected && (
+                <button onClick={onBrowse}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary/40 border border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-all flex items-center gap-1"
+                  data-testid="button-browse-repos">Browse</button>
+              )}
+              <button disabled={!remoteUrl || remoteStatus === "loading"} onClick={onCreateRemote}
+                className={cn("px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5",
+                  remoteStatus === "success" ? "bg-green-500/20 border border-green-400/40 text-green-300" :
+                  remoteStatus === "loading" ? "bg-purple-500/20 border border-purple-400/40 text-purple-300" :
+                  remoteUrl ? "bg-purple-500/20 border border-purple-400/40 text-purple-300 hover:bg-purple-500/30" :
+                  "bg-secondary/30 border border-border/30 text-muted-foreground/40 cursor-not-allowed"
+                )}
+                data-testid="button-create-remote"
+              >
+                {remoteStatus === "loading" ? <><Loader2 size={11} className="animate-spin" /> Saving...</> :
+                 remoteStatus === "success" ? <><CheckCircle size={11} /> Saved</> : "Create Remote"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Connections */}
+        <div>
+          <button onClick={() => setShowConnectionsOpen(v => !v)}
+            className="flex items-center gap-2 mb-2 w-full group">
+            <GitBranch size={14} className="text-muted-foreground" />
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50 flex-1 text-left">Connections</p>
+            <ChevronDown size={13} className={cn("text-muted-foreground/40 transition-transform", showConnectionsOpen && "rotate-180")} />
+          </button>
+          <AnimatePresence initial={false}>
+            {showConnectionsOpen && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden bg-card border border-border rounded-2xl divide-y divide-border/50">
+                {connections.map(conn => (
+                  <div key={conn.id} className="flex items-center gap-3 px-4 py-3.5">
+                    <div className="w-8 h-8 rounded-lg bg-secondary/50 border border-border/50 flex items-center justify-center text-foreground shrink-0">{conn.icon}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium text-foreground">{conn.name}</span>
+                        {conn.status === "connected" && (
+                          <span className="text-[9px] bg-green-500/20 border border-green-400/30 text-green-400 px-1.5 rounded-full font-semibold">Active</span>
+                        )}
+                      </div>
+                      {conn.username && <span className="text-xs text-muted-foreground/60">@{conn.username}</span>}
+                    </div>
+                    {conn.status === "connected" ? (
+                      <button onClick={() => onDelete(conn.id)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/10 border border-red-400/20 hover:border-red-400/40 transition-all"
+                        data-testid={`button-disconnect-${conn.id}`}>
+                        <Trash2 size={11} /> Delete
+                      </button>
+                    ) : (
+                      <button onClick={() => onSignIn(conn.id)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground border border-border/50 hover:border-border hover:bg-secondary/50 transition-all"
+                        data-testid={`button-connect-${conn.id}`}>
+                        <LogIn size={11} /> Sign in
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Commit Author */}
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50 mb-2 px-0.5">Commit Author</p>
+          <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <button onClick={() => setShowAuthorEdit(v => !v)}
+              className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-secondary/20 transition-colors"
+              data-testid="button-toggle-author">
+              <div className="w-9 h-9 rounded-full bg-purple-500/20 border border-purple-400/30 flex items-center justify-center shrink-0">
+                <span className="text-sm font-semibold text-purple-300">{authorName[0]?.toUpperCase()}</span>
+              </div>
+              <div className="flex-1 text-left">
+                <p className="text-sm font-medium text-foreground">{authorName}</p>
+                <p className="text-xs text-muted-foreground/60">{authorEmail}</p>
+              </div>
+              <ChevronDown size={15} className={cn("text-muted-foreground transition-transform", showAuthorEdit && "rotate-180")} />
+            </button>
+            <AnimatePresence>
+              {showAuthorEdit && (
+                <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }}
+                  className="overflow-hidden border-t border-border/40">
+                  <div className="px-4 py-3 space-y-2.5">
+                    <div>
+                      <label className="text-[11px] text-muted-foreground block mb-1">Name</label>
+                      <input value={authorName} onChange={e => onAuthorNameChange(e.target.value)}
+                        className="w-full bg-secondary/30 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-purple-400/50 transition-colors"
+                        data-testid="input-author-name"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-muted-foreground block mb-1">Email</label>
+                      <input value={authorEmail} onChange={e => onAuthorEmailChange(e.target.value)}
+                        className="w-full bg-secondary/30 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-purple-400/50 transition-colors"
+                        data-testid="input-author-email"
+                      />
+                    </div>
+                    <button onClick={() => { setShowAuthorEdit(false); localStorage.setItem("git_author_name", authorName); localStorage.setItem("git_author_email", authorEmail); }}
+                      className="w-full py-2 bg-purple-500/20 border border-purple-400/30 text-purple-300 text-xs font-semibold rounded-lg hover:bg-purple-500/30 transition-colors"
+                      data-testid="button-save-author">
+                      Save Author
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
     </motion.div>
   );
 }
@@ -1311,18 +1329,35 @@ function RunPanel({ onClose }: { onClose: () => void }) {
 }
 
 /* ─────────────────────────────────────────────────────────
-   DEPLOY PANEL
+   PUBLISHING PANEL
    ───────────────────────────────────────────────────────── */
-function DeployPanel({ onClose }: { onClose: () => void }) {
-  const [deploying, setDeploying] = useState(false);
-  const [deployed, setDeployed] = useState(false);
+function PublishingPanel({ onClose }: { onClose: () => void }) {
+  const [subdomain, setSubdomain] = useState("my-app--username");
+  const [checking, setChecking] = useState(false);
+  const [available, setAvailable] = useState(true);
+  const [publishing, setPublishing] = useState(false);
+  const [published, setPublished] = useState(false);
+  const [showDbSettings, setShowDbSettings] = useState(false);
+  const checkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleDeploy = async () => {
-    setDeploying(true);
-    await new Promise(r => setTimeout(r, 2500));
-    setDeploying(false);
-    setDeployed(true);
+  const checkDomain = () => {
+    if (checkTimer.current) clearTimeout(checkTimer.current);
+    setChecking(true);
+    checkTimer.current = setTimeout(() => { setAvailable(true); setChecking(false); }, 700);
   };
+
+  const handlePublish = async () => {
+    if (!available) return;
+    setPublishing(true);
+    await new Promise(r => setTimeout(r, 2500));
+    setPublishing(false);
+    setPublished(true);
+  };
+
+  const PUBLISH_ARTIFACTS = [
+    { id: "web", label: "Replit IDE Workspace", type: "Website", icon: <Globe size={13} className="text-blue-400" />, url: `https://${subdomain}.replit.app/` },
+    { id: "app-builder", label: "App Builder", type: "Website", icon: <Globe size={13} className="text-purple-400" />, url: `https://${subdomain}.replit.app/app-builder` },
+  ];
 
   return (
     <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
@@ -1331,59 +1366,210 @@ function DeployPanel({ onClose }: { onClose: () => void }) {
       <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
         <div className="flex-1" />
-        <Rocket size={17} className="text-orange-400" />
-        <span className="text-base font-semibold text-foreground">Deploy</span>
+        <Globe size={17} className="text-blue-400" />
+        <span className="text-base font-semibold text-foreground">Publishing</span>
         <div className="flex-1" />
         <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
       </div>
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 no-scrollbar">
-        {deployed ? (
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-4 py-8">
-            <div className="w-16 h-16 rounded-2xl bg-green-500/20 border border-green-400/30 flex items-center justify-center">
-              <CheckCircle size={32} className="text-green-400" />
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-bold text-foreground">Deployed!</p>
-              <p className="text-sm text-muted-foreground/70 mt-1">Your app is live at</p>
-              <button onClick={() => window.open("https://your-app.replit.app", "_blank")} className="text-sm text-blue-400 underline mt-1">your-app.replit.app</button>
-            </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 no-scrollbar">
+        <h1 className="text-lg font-bold text-foreground">Publish your app</h1>
+
+        {/* Domain */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">Domain</p>
+          <div className="flex items-center gap-0 bg-card border border-border rounded-xl overflow-hidden focus-within:border-blue-400/50 transition-colors">
+            <input value={subdomain} onChange={e => { setSubdomain(e.target.value); setAvailable(false); checkDomain(); }}
+              className="flex-1 bg-transparent px-3 py-2.5 text-sm text-foreground outline-none"
+              placeholder="my-app--username"
+            />
+            <div className="px-3 py-2.5 text-sm text-muted-foreground/50 border-l border-border/50 shrink-0">.replit.app</div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {checking ? (
+              <><Loader2 size={11} className="animate-spin text-muted-foreground/50" /><span className="text-[11px] text-muted-foreground/50">Checking availability...</span></>
+            ) : available ? (
+              <><CheckCircle size={11} className="text-green-400" /><span className="text-[11px] text-green-400">Available</span></>
+            ) : (
+              <><AlertCircle size={11} className="text-red-400" /><span className="text-[11px] text-red-400">Already taken</span></>
+            )}
+          </div>
+        </div>
+
+        {/* What you're publishing */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">What you're publishing</p>
+          <div className="space-y-2">
+            {PUBLISH_ARTIFACTS.map(a => (
+              <div key={a.id} className="bg-card border border-border rounded-xl p-3.5">
+                <div className="flex items-center gap-2 mb-1">
+                  {a.icon}
+                  <span className="text-sm font-semibold text-foreground">{a.label}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground/40 bg-secondary/50 px-1.5 py-0.5 rounded">{a.type}</span>
+                </div>
+                <p className="text-xs text-blue-400/70 font-mono truncate">{a.url}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Who can access */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">Who can access your app</p>
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/20 transition-colors">
+              <Globe size={15} className="text-muted-foreground/60 shrink-0" />
+              <div className="flex-1 text-left">
+                <p className="text-sm font-medium text-foreground">Public</p>
+                <p className="text-xs text-muted-foreground/50">Anyone on the internet with the URL</p>
+              </div>
+              <ChevronDown size={14} className="text-muted-foreground/40 shrink-0" />
+            </button>
+          </div>
+        </div>
+
+        {/* Production database settings */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <button onClick={() => setShowDbSettings(v => !v)}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/20 transition-colors">
+            <Database size={15} className="text-blue-400 shrink-0" />
+            <span className="flex-1 text-left text-sm font-medium text-foreground">Production database settings</span>
+            <ChevronDown size={14} className={cn("text-muted-foreground/40 transition-transform shrink-0", showDbSettings && "rotate-180")} />
+          </button>
+          <AnimatePresence>
+            {showDbSettings && (
+              <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }}
+                className="overflow-hidden border-t border-border/40">
+                <div className="px-4 py-3 space-y-3">
+                  <p className="text-xs text-muted-foreground/60 leading-relaxed">Your production database is separate from your development database. Changes made in development don't affect production until you explicitly migrate.</p>
+                  <div className="flex items-center gap-2 bg-green-500/10 border border-green-400/20 rounded-lg px-3 py-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                    <span className="text-xs text-green-400 font-medium">PostgreSQL connected (production)</span>
+                  </div>
+                  <button className="w-full py-2 rounded-lg text-xs font-semibold bg-secondary/50 border border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-colors">
+                    Run migrations
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Publish button / success */}
+        {published ? (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-green-500/10 border border-green-400/25 rounded-2xl p-5 flex flex-col items-center gap-2.5">
+            <CheckCircle size={28} className="text-green-400" />
+            <p className="text-sm font-bold text-foreground">Published!</p>
+            <button onClick={() => window.open(`https://${subdomain}.replit.app`, "_blank")}
+              className="text-xs text-blue-400 underline">{subdomain}.replit.app</button>
           </motion.div>
         ) : (
-          <>
-            <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <Server size={16} className="text-orange-400" />
-                <p className="text-sm font-semibold text-foreground">Replit Autoscale</p>
-                <span className="text-[9px] bg-blue-500/20 border border-blue-400/30 text-blue-300 px-1.5 rounded-full font-semibold ml-auto">Recommended</span>
-              </div>
-              <p className="text-xs text-muted-foreground/70 leading-relaxed">Automatically scales with traffic. Zero infrastructure management needed.</p>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground/60">Starts at</span>
-                <span className="text-foreground font-medium">$0 / month</span>
-              </div>
-            </div>
-            <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <Globe size={16} className="text-green-400" />
-                <p className="text-sm font-semibold text-foreground">Static Deployment</p>
-              </div>
-              <p className="text-xs text-muted-foreground/70 leading-relaxed">For static sites and SPAs. Fast CDN delivery worldwide.</p>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground/60">Cost</span>
-                <span className="text-green-400 font-medium">Free</span>
-              </div>
-            </div>
-            <button
-              onClick={handleDeploy}
-              disabled={deploying}
-              className={cn("w-full flex items-center justify-center gap-2 py-4 rounded-xl text-sm font-semibold transition-all",
-                deploying ? "bg-orange-500/20 border border-orange-400/40 text-orange-300" : "bg-orange-500/20 border border-orange-400/40 text-orange-300 hover:bg-orange-500/30 active:scale-[0.98]"
-              )}
-            >
-              {deploying ? <><Loader2 size={15} className="animate-spin" /> Deploying...</> : <><Rocket size={15} /> Deploy Now</>}
-            </button>
-          </>
+          <button onClick={handlePublish} disabled={!available || publishing}
+            className={cn("w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-semibold transition-all",
+              available && !publishing
+                ? "bg-blue-500/20 border border-blue-400/40 text-blue-300 hover:bg-blue-500/30 active:scale-[0.98]"
+                : "bg-secondary/30 border border-border/30 text-muted-foreground/40 cursor-not-allowed"
+            )}>
+            {publishing ? <><Loader2 size={15} className="animate-spin" /> Publishing...</> : <><Globe size={15} /> Publish</>}
+          </button>
         )}
+        <div className="h-4" />
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   TOOLS SEARCH PANEL
+   ───────────────────────────────────────────────────────── */
+interface ToolsSearchPanelProps {
+  onClose: () => void;
+  onOpenSecrets: () => void;
+  onOpenDatabase: () => void;
+  onOpenAuth: () => void;
+  onOpenPublishing: () => void;
+}
+
+function ToolsSearchPanel({ onClose, onOpenSecrets, onOpenDatabase, onOpenAuth, onOpenPublishing }: ToolsSearchPanelProps) {
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 80); }, []);
+
+  const TOOLS = [
+    { icon: <Sparkles size={15} className="text-purple-400" />, label: "Agent", desc: "Agent makes changes, reviews its work, and debugs automatically.", bg: "bg-purple-500/10 border-purple-400/20" },
+    { icon: <Globe size={15} className="text-blue-400" />, label: "Publishing", desc: "Publish a live, stable, public version of your App.", bg: "bg-blue-500/10 border-blue-400/20", action: () => { onOpenPublishing(); onClose(); } },
+    { icon: <Star size={15} className="text-yellow-400" />, label: "Agent Skills", desc: "Manage skills that extend Agent capabilities.", bg: "bg-yellow-500/10 border-yellow-400/20" },
+    { icon: <BarChart3 size={15} className="text-green-400" />, label: "Analytics", desc: "View traffic, request metrics, and usage analytics for your deployed App.", bg: "bg-green-500/10 border-green-400/20" },
+    { icon: <Database size={15} className="text-cyan-400" />, label: "App Storage", desc: "App Storage is Replit's built-in object storage for files and images.", bg: "bg-cyan-500/10 border-cyan-400/20", action: () => { onOpenDatabase(); onClose(); } },
+    { icon: <ShieldCheck size={15} className="text-purple-400" />, label: "Auth", desc: "Let users log in to your App using a prebuilt login page.", bg: "bg-purple-500/10 border-purple-400/20", action: () => { onOpenAuth(); onClose(); } },
+    { icon: <Palette size={15} className="text-pink-400" />, label: "Canvas", desc: "Agent-controlled canvas for mockups and wireframes.", bg: "bg-pink-500/10 border-pink-400/20" },
+    { icon: <Terminal size={15} className="text-muted-foreground" />, label: "Console", desc: "View the terminal output after running your code.", bg: "bg-secondary/50 border-border/50" },
+    { icon: <Database size={15} className="text-blue-400" />, label: "Database", desc: "Store structured data such as user profiles, messages, and sessions.", bg: "bg-blue-500/10 border-blue-400/20", action: () => { onOpenDatabase(); onClose(); } },
+    { icon: <Code2 size={15} className="text-orange-400" />, label: "Developer", desc: "Advanced developer tools including build logs and environment config.", bg: "bg-orange-500/10 border-orange-400/20" },
+    { icon: <Key size={15} className="text-yellow-400" />, label: "Secrets", desc: "Manage environment variables and secret keys securely.", bg: "bg-yellow-500/10 border-yellow-400/20", action: () => { onOpenSecrets(); onClose(); } },
+  ] as const;
+
+  const filtered = query.trim()
+    ? TOOLS.filter(t => t.label.toLowerCase().includes(query.toLowerCase()) || t.desc.toLowerCase().includes(query.toLowerCase()))
+    : TOOLS;
+
+  return (
+    <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 36 }}
+      className="absolute inset-0 z-50 flex flex-col bg-background">
+      {/* Search header */}
+      <div className="flex items-center gap-3 px-4 pt-10 pb-3 border-b border-border shrink-0">
+        <div className="flex-1 flex items-center gap-2 bg-secondary/40 border border-border/50 rounded-xl px-3 py-2.5">
+          <Search size={14} className="text-muted-foreground/50 shrink-0" />
+          <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Search for tools and files"
+            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/40 outline-none" />
+          {query && (
+            <button onClick={() => setQuery("")} className="text-muted-foreground/40 hover:text-foreground transition-colors">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        <button onClick={onClose} className="text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0 px-1 py-1">Cancel</button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto no-scrollbar">
+        {!query && (
+          <div className="px-4 py-2 border-b border-border/30">
+            {[
+              { icon: <Search size={14} className="text-muted-foreground/60" />, label: "Search", desc: "Search through your files", bg: "bg-secondary/50 border-border/50" },
+              { icon: <Folder size={14} className="text-yellow-400" />, label: "Files", desc: "Browse project files", bg: "bg-yellow-500/10 border-yellow-400/20" },
+            ].map(item => (
+              <button key={item.label}
+                className="w-full flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-secondary/30 transition-colors">
+                <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border", item.bg)}>{item.icon}</div>
+                <span className="flex-1 text-sm font-medium text-foreground text-left">{item.label}</span>
+                <span className="text-xs text-muted-foreground/40">{item.desc}</span>
+                <ChevronRight size={13} className="text-muted-foreground/30 shrink-0" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/40 mb-2 px-1">Tools</p>
+          <div className="space-y-0.5">
+            {filtered.map(tool => (
+              <button key={tool.label} onClick={"action" in tool ? tool.action : undefined}
+                className="w-full flex items-start gap-3 px-2 py-3 rounded-xl hover:bg-secondary/30 transition-colors text-left">
+                <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 border", tool.bg)}>
+                  {tool.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">{tool.label}</p>
+                  <p className="text-xs text-muted-foreground/55 leading-relaxed">{tool.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </motion.div>
   );
@@ -2857,7 +3043,8 @@ export default function Chat() {
   const [showAuth, setShowAuth] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
   const [showRun, setShowRun] = useState(false);
-  const [showDeploy, setShowDeploy] = useState(false);
+  const [showPublishing, setShowPublishing] = useState(false);
+  const [showToolsSearch, setShowToolsSearch] = useState(false);
   const [showWebview, setShowWebview] = useState(false);
   const [showParallel, setShowParallel] = useState(false);
   const [showMonitoring, setShowMonitoring] = useState(false);
@@ -3245,7 +3432,7 @@ export default function Chat() {
                 { icon: <Clock size={14} className="text-cyan-400" />, label: "Checkpoints", action: () => { setShowCheckpoints(true); setShowMoreTools(false); } },
                 { icon: <BarChart3 size={14} className="text-orange-400" />, label: "Agent Insights", action: () => { setShowInsights(true); setShowMoreTools(false); } },
                 { icon: <AlignJustify size={14} className="text-muted-foreground" />, label: "Files", action: () => { setShowFiles(true); setShowMoreTools(false); } },
-                { icon: <Rocket size={14} className="text-orange-400" />, label: "Deploy", action: () => { setShowDeploy(true); setShowMoreTools(false); } },
+                { icon: <Globe size={14} className="text-blue-400" />, label: "Publishing", action: () => { setShowPublishing(true); setShowMoreTools(false); } },
                 { icon: <Globe size={14} className="text-blue-400" />, label: "Webview Preview", action: () => { setShowWebview(true); setShowMoreTools(false); } },
               ].map(item => (
                 <button key={item.label} onClick={item.action}
@@ -3433,18 +3620,36 @@ export default function Chat() {
           </div>
         </div>
 
-        {/* Below-input row: + | record | ⋮ */}
-        <div className="flex items-center justify-between px-1 pt-2 pb-1">
-          <button className="w-9 h-9 flex items-center justify-center text-white/40 hover:text-white transition-colors" data-testid="button-add-panel">
-            <Plus size={20} />
+        {/* Below-input row: quick action buttons */}
+        <div className="flex items-stretch gap-0 border-t border-white/[0.06] -mx-3 px-3 pt-2">
+          {([
+            { icon: <Key size={13} />, label: "Secrets", action: () => setShowSecrets(true) },
+            { icon: <Database size={13} />, label: "Database", action: () => setShowDatabase(true) },
+            { icon: <ShieldCheck size={13} />, label: "Auth", action: () => setShowAuth(true) },
+            { icon: <Plus size={13} />, label: "New Tab", action: () => setShowToolsSearch(true) },
+          ] as const).map(item => (
+            <button key={item.label} onClick={item.action}
+              className="flex-1 flex flex-col items-center gap-0.5 py-2 text-white/35 hover:text-white/80 transition-colors">
+              {item.icon}
+              <span className="text-[9px] font-medium">{item.label}</span>
+            </button>
+          ))}
+        </div>
+        {/* File search row */}
+        <div className="flex items-center gap-1.5 pt-1.5 pb-1">
+          <button onClick={() => setShowFiles(true)}
+            className="w-8 h-7 flex items-center justify-center text-white/35 hover:text-white/70 transition-colors shrink-0">
+            <Folder size={15} />
           </button>
-          <button className="w-9 h-9 flex items-center justify-center text-white/40 hover:text-white transition-colors" data-testid="button-record">
-            <div className="w-6 h-6 rounded-full border-2 border-white/30 flex items-center justify-center">
-              <div className="w-2.5 h-2.5 rounded-full bg-white/40" />
-            </div>
-          </button>
-          <button onClick={() => setShowMoreTools(v => !v)} className="w-9 h-9 flex items-center justify-center text-white/40 hover:text-white transition-colors" data-testid="button-more-actions">
-            <MoreHorizontal size={20} />
+          <div className="flex-1 flex items-center gap-1.5 bg-white/[0.05] border border-white/[0.08] rounded-lg px-2.5 h-7">
+            <Search size={12} className="text-white/30 shrink-0" />
+            <input value={fileSearch} onChange={e => setFileSearch(e.target.value)}
+              placeholder="Search..."
+              className="flex-1 bg-transparent text-xs text-white/70 placeholder:text-white/25 outline-none min-w-0" />
+          </div>
+          <button onClick={() => { setShowMoreTools(v => !v); }}
+            className="w-7 h-7 flex items-center justify-center text-white/35 hover:text-white/70 transition-colors shrink-0">
+            <MoreHorizontal size={15} />
           </button>
         </div>
       </div>
@@ -3541,9 +3746,22 @@ export default function Chat() {
         {showRun && <RunPanel onClose={() => setShowRun(false)} />}
       </AnimatePresence>
 
-      {/* ── Deploy Panel ── */}
+      {/* ── Publishing Panel ── */}
       <AnimatePresence>
-        {showDeploy && <DeployPanel onClose={() => setShowDeploy(false)} />}
+        {showPublishing && <PublishingPanel onClose={() => setShowPublishing(false)} />}
+      </AnimatePresence>
+
+      {/* ── Tools Search Panel ── */}
+      <AnimatePresence>
+        {showToolsSearch && (
+          <ToolsSearchPanel
+            onClose={() => setShowToolsSearch(false)}
+            onOpenSecrets={() => { setShowSecrets(true); setShowToolsSearch(false); }}
+            onOpenDatabase={() => { setShowDatabase(true); setShowToolsSearch(false); }}
+            onOpenAuth={() => { setShowAuth(true); setShowToolsSearch(false); }}
+            onOpenPublishing={() => { setShowPublishing(true); setShowToolsSearch(false); }}
+          />
+        )}
       </AnimatePresence>
 
       {/* ── Webview Panel ── */}
