@@ -200,6 +200,45 @@ router.post("/arena", async (req: Request, res: Response) => {
   res.end();
 });
 
+/* ── POST /api/openrouter/rebuttal ───────────────────────────────────────────
+   Losing model is given the winner's answer and gets one final rebuttal shot.
+   Returns JSON { rebuttal, error }.
+   ─────────────────────────────────────────────────────────────────────────── */
+router.post("/rebuttal", async (req: Request, res: Response) => {
+  const { loserModelId, prompt, loserAnswer, winnerAnswer, apiKey } = req.body as {
+    loserModelId: string;
+    prompt: string;
+    loserAnswer: string;
+    winnerAnswer: string;
+    apiKey: string;
+  };
+
+  if (!loserModelId || !prompt || !loserAnswer || !winnerAnswer || !apiKey) {
+    res.status(400).json({ error: "Missing required fields." });
+    return;
+  }
+
+  const rebuttalPrompt =
+    `The original question was: "${prompt}"\n\n` +
+    `Your original answer was:\n${loserAnswer}\n\n` +
+    `The judge initially preferred this competing answer:\n${winnerAnswer}\n\n` +
+    `You have ONE FINAL CHANCE to change the judge's mind. Write a focused, compelling rebuttal (max 3 paragraphs) that:\n` +
+    `1. Acknowledges any genuinely valid points in the competing answer\n` +
+    `2. Points out what YOUR answer gets right that the other answer misses or gets wrong\n` +
+    `3. Makes a direct, confident case for why your answer is ultimately superior\n\n` +
+    `Be persuasive, specific, and concise. Do not be defensive — be compelling.`;
+
+  const { text, error } = await callModel(
+    loserModelId,
+    [{ role: "user", content: rebuttalPrompt }],
+    apiKey,
+    600,
+    0.75,
+  );
+
+  res.json({ rebuttal: text ?? "", error: error ?? null });
+});
+
 /* ── GET /api/openrouter/models ──────────────────────────────────────────────
    Proxies the OpenRouter free-models list (no auth required to list).
    ─────────────────────────────────────────────────────────────────────────── */

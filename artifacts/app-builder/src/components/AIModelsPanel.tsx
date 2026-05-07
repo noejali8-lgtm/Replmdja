@@ -315,6 +315,13 @@ export function AIModelsPanel({
   const [arenaSearchB, setArenaSearchB] = useState("");
   const [arenaPickerOpen, setArenaPickerOpen] = useState<"A"|"B"|null>(null);
   const [arenaError, setArenaError] = useState("");
+  // Rebuttal state
+  const [arenaInitialVote, setArenaInitialVote] = useState<ArenaVote>(null);
+  const [arenaFinalVote, setArenaFinalVote] = useState<ArenaVote>(null);
+  const [arenaRebuttalLoser, setArenaRebuttalLoser] = useState<"A"|"B"|null>(null);
+  const [arenaRebuttal, setArenaRebuttal] = useState("");
+  const [arenaRebuttalLoading, setArenaRebuttalLoading] = useState(false);
+  const [arenaRebuttalError, setArenaRebuttalError] = useState("");
 
   // Konami listener
   useEffect(() => {
@@ -542,6 +549,12 @@ export function AIModelsPanel({
 
     setArenaError("");
     setArenaVote(null);
+    setArenaInitialVote(null);
+    setArenaFinalVote(null);
+    setArenaRebuttalLoser(null);
+    setArenaRebuttal("");
+    setArenaRebuttalError("");
+    setArenaRebuttalLoading(false);
     setArenaRunning(true);
     setArenaSlotA({ modelId: arenaModelA, text: "", loading: true });
     setArenaSlotB({ modelId: arenaModelB, text: "", loading: true });
@@ -586,9 +599,52 @@ export function AIModelsPanel({
 
   const castArenaVote = (vote: ArenaVote) => {
     setArenaVote(vote);
+    setArenaInitialVote(vote);
+    if (vote === "tie") {
+      // Ties skip the rebuttal — lock in immediately
+      setArenaFinalVote(vote);
+      if (arenaSlotA && arenaSlotB) {
+        setArenaHistory(prev => [
+          { modelA: arenaModelA, modelB: arenaModelB, prompt: arenaPrompt, textA: arenaSlotA.text, textB: arenaSlotB.text, vote },
+          ...prev.slice(0, 9),
+        ]);
+      }
+      return;
+    }
+    // Non-tie: loser gets one rebuttal before verdict is locked
+    const loserSlot = vote === "A" ? arenaSlotB : arenaSlotA;
+    const winnerSlot = vote === "A" ? arenaSlotA : arenaSlotB;
+    const loserModelId = vote === "A" ? arenaModelB : arenaModelA;
+    const loserLabel: "A"|"B" = vote === "A" ? "B" : "A";
+    setArenaRebuttalLoser(loserLabel);
+    setArenaRebuttal("");
+    setArenaRebuttalError("");
+    setArenaRebuttalLoading(true);
+    fetch("/api/openrouter/rebuttal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        loserModelId,
+        prompt: arenaPrompt,
+        loserAnswer: loserSlot?.text ?? "",
+        winnerAnswer: winnerSlot?.text ?? "",
+        apiKey: ensembleApiKey,
+      }),
+    })
+      .then(r => r.json())
+      .then((data: { rebuttal?: string; error?: string }) => {
+        if (data.error) setArenaRebuttalError(data.error);
+        else setArenaRebuttal(data.rebuttal ?? "");
+      })
+      .catch(e => setArenaRebuttalError(String(e)))
+      .finally(() => setArenaRebuttalLoading(false));
+  };
+
+  const lockArenaVerdict = (finalVote: ArenaVote) => {
+    setArenaFinalVote(finalVote);
     if (arenaSlotA && arenaSlotB) {
       setArenaHistory(prev => [
-        { modelA: arenaModelA, modelB: arenaModelB, prompt: arenaPrompt, textA: arenaSlotA.text, textB: arenaSlotB.text, vote },
+        { modelA: arenaModelA, modelB: arenaModelB, prompt: arenaPrompt, textA: arenaSlotA.text, textB: arenaSlotB.text, vote: finalVote },
         ...prev.slice(0, 9),
       ]);
     }
@@ -1176,10 +1232,10 @@ export function AIModelsPanel({
                         ))}
                       </div>
 
-                      {/* Vote row — only shown when both done */}
-                      {arenaSlotA && !arenaSlotA.loading && arenaSlotB && !arenaSlotB.loading && !arenaRunning && (
+                      {/* Phase 1: Initial vote buttons */}
+                      {arenaSlotA && !arenaSlotA.loading && arenaSlotB && !arenaSlotB.loading && !arenaRunning && !arenaInitialVote && (
                         <div className="space-y-2">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 text-center">Your verdict</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 text-center">Your initial verdict</p>
                           <div className="grid grid-cols-3 gap-2">
                             {([
                               { vote: "A" as ArenaVote, label: "👈 A wins", cls: "bg-blue-500/20 border-blue-400/40 text-blue-300 hover:bg-blue-500/30" },
@@ -1187,18 +1243,130 @@ export function AIModelsPanel({
                               { vote: "B" as ArenaVote, label: "B wins 👉", cls: "bg-rose-500/20 border-rose-400/40 text-rose-300 hover:bg-rose-500/30" },
                             ]).map(opt => (
                               <button key={opt.vote} onClick={() => castArenaVote(opt.vote)}
-                                className={cn("py-2.5 rounded-xl border text-xs font-semibold transition-all",
-                                  arenaVote === opt.vote ? cn(opt.cls, "ring-2 ring-white/20 scale-[1.03]") : opt.cls
-                                )}>{opt.label}</button>
+                                className={cn("py-2.5 rounded-xl border text-xs font-semibold transition-all active:scale-95", opt.cls)}
+                              >{opt.label}</button>
                             ))}
                           </div>
-                          {arenaVote && (
-                            <motion.p initial={{ opacity:0 }} animate={{ opacity:1 }} className="text-[11px] text-center text-white/40">
-                              ✓ Vote recorded — {arenaHistory.length} battle{arenaHistory.length !== 1 ? "s" : ""} logged
-                            </motion.p>
-                          )}
                         </div>
                       )}
+
+                      {/* Phase 2: Rebuttal phase — loser pleads its case */}
+                      <AnimatePresence>
+                        {arenaInitialVote && arenaInitialVote !== "tie" && !arenaFinalVote && (
+                          <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="space-y-3">
+                            {/* Banner: you voted for X */}
+                            <div className={cn("flex items-center gap-2 px-3 py-2 rounded-xl border text-xs",
+                              arenaInitialVote === "A"
+                                ? "bg-blue-500/10 border-blue-400/20 text-blue-300"
+                                : "bg-rose-500/10 border-rose-400/20 text-rose-300"
+                            )}>
+                              <Check size={12} />
+                              <span>You picked <strong>Model {arenaInitialVote}</strong> — but wait…</span>
+                            </div>
+
+                            {/* Rebuttal card */}
+                            <div className={cn("rounded-2xl border p-4 space-y-3",
+                              arenaRebuttalLoser === "A"
+                                ? "bg-blue-500/8 border-blue-400/25"
+                                : "bg-rose-500/8 border-rose-400/25"
+                            )}>
+                              <div className="flex items-center gap-2">
+                                <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black border",
+                                  arenaRebuttalLoser === "A" ? "bg-blue-500/20 border-blue-400/30 text-blue-300" : "bg-rose-500/20 border-rose-400/30 text-rose-300"
+                                )}>
+                                  {arenaRebuttalLoser}
+                                </div>
+                                <span className="text-xs font-bold text-white">Model {arenaRebuttalLoser}'s rebuttal</span>
+                                {arenaRebuttalLoading && <Loader2 size={12} className="animate-spin text-white/40 ml-auto" />}
+                                {!arenaRebuttalLoading && arenaRebuttal && <Swords size={12} className="text-amber-400 ml-auto" />}
+                              </div>
+
+                              {arenaRebuttalLoading && (
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex gap-1">
+                                      {[0,1,2].map(i => (
+                                        <motion.div key={i} animate={{ opacity:[0.3,1,0.3] }} transition={{ duration:1, repeat:Infinity, delay:i*0.2 }}
+                                          className="w-1.5 h-1.5 rounded-full bg-white/25" />
+                                      ))}
+                                    </div>
+                                    <span className="text-[11px] text-white/40">Preparing rebuttal…</span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {arenaRebuttalError && (
+                                <p className="text-[11px] text-red-400/80">{arenaRebuttalError}</p>
+                              )}
+
+                              {arenaRebuttal && !arenaRebuttalLoading && (
+                                <p className="text-[12px] text-white/80 leading-relaxed">{arenaRebuttal}</p>
+                              )}
+                            </div>
+
+                            {/* Final verdict buttons — shown when rebuttal is ready */}
+                            {(arenaRebuttal || arenaRebuttalError) && !arenaRebuttalLoading && (
+                              <motion.div initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }} className="space-y-2">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 text-center">Lock in your final verdict</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {/* Stick with winner */}
+                                  <button onClick={() => lockArenaVerdict(arenaInitialVote)}
+                                    className={cn("flex flex-col items-center py-3 px-2 rounded-xl border text-xs font-semibold transition-all active:scale-95",
+                                      arenaInitialVote === "A"
+                                        ? "bg-blue-500/20 border-blue-400/40 text-blue-300 hover:bg-blue-500/30"
+                                        : "bg-rose-500/20 border-rose-400/40 text-rose-300 hover:bg-rose-500/30"
+                                    )}>
+                                    <span className="text-base">{arenaInitialVote === "A" ? "👈" : "👉"}</span>
+                                    <span>Stick with {arenaInitialVote}</span>
+                                    <span className="text-[10px] opacity-60 font-normal">Not convinced</span>
+                                  </button>
+                                  {/* Switch to loser */}
+                                  <button onClick={() => lockArenaVerdict(arenaRebuttalLoser)}
+                                    className={cn("flex flex-col items-center py-3 px-2 rounded-xl border text-xs font-semibold transition-all active:scale-95",
+                                      arenaRebuttalLoser === "A"
+                                        ? "bg-blue-500/20 border-blue-400/40 text-blue-300 hover:bg-blue-500/30"
+                                        : "bg-rose-500/20 border-rose-400/40 text-rose-300 hover:bg-rose-500/30"
+                                    )}>
+                                    <span className="text-base">{arenaRebuttalLoser === "A" ? "👈" : "👉"}</span>
+                                    <span>{arenaRebuttalLoser} convinced me</span>
+                                    <span className="text-[10px] opacity-60 font-normal">Changed my mind</span>
+                                  </button>
+                                </div>
+                              </motion.div>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      {/* Phase 3: Verdict locked */}
+                      <AnimatePresence>
+                        {arenaFinalVote && (
+                          <motion.div initial={{ opacity:0, scale:0.97 }} animate={{ opacity:1, scale:1 }} className="space-y-2">
+                            <div className={cn("flex items-center gap-3 px-4 py-3 rounded-xl border",
+                              arenaFinalVote === "tie" ? "bg-white/5 border-white/10" :
+                              arenaFinalVote === "A"   ? "bg-blue-500/10 border-blue-400/25" :
+                                                         "bg-rose-500/10 border-rose-400/25"
+                            )}>
+                              <span className="text-lg">{arenaFinalVote === "tie" ? "🤝" : arenaFinalVote === "A" ? "🏆" : "🏆"}</span>
+                              <div>
+                                <p className="text-xs font-bold text-white">
+                                  {arenaFinalVote === "tie" ? "Declared a tie" : `Model ${arenaFinalVote} wins`}
+                                  {arenaInitialVote && arenaInitialVote !== "tie" && arenaFinalVote !== arenaInitialVote &&
+                                    <span className="text-amber-400 ml-1.5">↩ changed mind!</span>}
+                                </p>
+                                <p className="text-[10px] text-white/40">
+                                  {arenaFinalVote !== "tie" && arenaFinalVote === arenaInitialVote
+                                    ? "Rebuttal didn't change your mind"
+                                    : arenaFinalVote !== "tie"
+                                    ? `${ALL_MODELS.find(m => m.id === (arenaFinalVote === "A" ? arenaModelA : arenaModelB))?.name ?? "Model " + arenaFinalVote} wins the debate`
+                                    : "Both models performed equally"}
+                                </p>
+                              </div>
+                              <span className="ml-auto text-[10px] text-white/30">{arenaHistory.length} battle{arenaHistory.length !== 1 ? "s" : ""} logged</span>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </motion.div>
                   )}
                 </AnimatePresence>
