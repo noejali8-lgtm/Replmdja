@@ -7,77 +7,171 @@ import { CategoryChips } from "@/components/CategoryChips";
 import { CreateInput } from "@/components/CreateInput";
 import { cn } from "@/lib/utils";
 
-const IMPORT_STEPS = [
-  { icon: <SiGithub size={14} />, label: "Connecting to GitHub" },
-  { icon: <GitBranch size={14} />, label: "Cloning repository" },
-  { icon: <FileText size={14} />, label: "Reading file tree" },
-  { icon: <Package size={14} />, label: "Setting up workspace" },
-  { icon: <Zap size={14} />, label: "Launching editor" },
-];
+function isGitHubUrl(text: string): boolean {
+  const t = text.trim();
+  return /^(https?:\/\/)?(www\.)?github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+/.test(t);
+}
+
+function normalizeGitHubUrl(raw: string): string {
+  const t = raw.trim().replace(/^https?:\/\//, "").replace(/^github\.com\//, "");
+  return `https://github.com/${t.replace(/\.git$/, "")}`;
+}
 
 function ImportingScreen({ repoUrl, onDone }: { repoUrl: string; onDone: () => void }) {
-  const repoName = repoUrl.trim().replace(/^https?:\/\//, "").replace(/^github\.com\//, "").replace(/\.git$/, "");
-  const owner = repoName.split("/")[0] ?? "user";
-  const repo = repoName.split("/")[1] ?? repoName;
-  const [doneIdx, setDoneIdx] = useState(-1);
-  const [activeIdx, setActiveIdx] = useState(0);
+  const repoName = repoUrl.replace("https://github.com/", "");
+  const [phase, setPhase] = useState<"importing" | "setting-up" | "done">("importing");
 
   useEffect(() => {
-    let idx = 0;
-    const advance = () => {
-      if (idx >= IMPORT_STEPS.length) { setTimeout(onDone, 500); return; }
-      setActiveIdx(idx);
-      const delay = 600 + Math.random() * 500;
-      setTimeout(() => { setDoneIdx(idx); idx++; setTimeout(advance, 200); }, delay);
-    };
-    setTimeout(advance, 300);
+    const t1 = setTimeout(() => setPhase("setting-up"), 2200);
+    const t2 = setTimeout(() => setPhase("done"), 4000);
+    const t3 = setTimeout(() => onDone(), 4600);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [onDone]);
 
   return (
     <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-[#141414] flex flex-col"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-[#0d1117] flex flex-col"
     >
-      <div className="flex items-center gap-3 px-5 pt-12 pb-4 border-b border-white/8">
-        <div className="w-8 h-8 rounded-lg bg-white/8 border border-white/12 flex items-center justify-center">
-          <SiGithub size={16} className="text-white" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-white truncate">{repo || repoName}</p>
-          <p className="text-xs text-white/40 truncate">github.com/{owner}</p>
-        </div>
-        <div className="text-[10px] bg-blue-500/15 border border-blue-400/25 text-blue-400 px-2 py-1 rounded-full font-semibold">Importing</div>
-      </div>
-      <div className="flex-1 flex flex-col justify-center px-8 gap-1">
-        {IMPORT_STEPS.map((step, i) => {
-          const isDone = i <= doneIdx;
-          const isActive = i === activeIdx && i > doneIdx;
-          return (
-            <motion.div key={i} initial={{ opacity: 0, x: -12 }} animate={{ opacity: i <= activeIdx ? 1 : 0.3, x: 0 }} transition={{ delay: i * 0.06, duration: 0.3 }} className="flex items-center gap-3 py-3">
-              <div className={cn("w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 transition-all duration-300", isDone ? "bg-green-500/20 border-green-400/40 text-green-400" : isActive ? "bg-blue-500/20 border-blue-400/40 text-blue-400" : "bg-white/5 border-white/10 text-white/25")}>
-                {isDone ? <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 500 }}><CheckCircle2 size={14} className="text-green-400" /></motion.div> : isActive ? <Loader2 size={13} className="animate-spin" /> : step.icon}
-              </div>
-              <span className={cn("text-sm font-medium transition-colors duration-200", isDone ? "text-green-400" : isActive ? "text-white" : "text-white/25")}>
-                {step.label}
-                {i === 1 && isActive && <span className="text-xs text-white/30 ml-2 font-normal font-mono">{repoName}</span>}
-              </span>
+      {/* Top badge */}
+      <div className="px-4 pt-12">
+        <AnimatePresence mode="wait">
+          {phase === "importing" && (
+            <motion.div
+              key="importing-badge"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="flex items-center gap-2.5 bg-[#161b22] border border-white/10 rounded-2xl px-4 py-3"
+            >
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+                className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white/70 shrink-0"
+              />
+              <span className="text-sm text-white/70 font-medium">Setting up your project from Replit...</span>
             </motion.div>
-          );
-        })}
+          )}
+          {phase === "setting-up" && (
+            <motion.div
+              key="setting-badge"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="flex items-center gap-2.5 bg-[#161b22] border border-white/10 rounded-2xl px-4 py-3"
+            >
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+                className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white/70 shrink-0"
+              />
+              <span className="text-sm text-white/70 font-medium">Setting up your project from Replit...</span>
+            </motion.div>
+          )}
+          {phase === "done" && (
+            <motion.div
+              key="done-badge"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2.5 bg-[#161b22] border border-white/10 rounded-2xl px-4 py-3"
+            >
+              <CheckCircle2 size={16} className="text-white/70 shrink-0" />
+              <span className="text-sm text-white/70 font-medium">Successfully imported from Replit</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-      <AnimatePresence>
-        {doneIdx >= 2 && (
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mx-5 mb-5 bg-[#1c1c1c] border border-white/10 rounded-2xl px-4 py-3 space-y-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-2">File Tree</p>
-            {["src/", "src/App.tsx", "src/main.tsx", "package.json", "README.md"].map((f, i) => (
-              <motion.div key={f} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.07 }} className="flex items-center gap-2">
-                <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", f.endsWith("/") ? "bg-yellow-400/60" : "bg-blue-400/60")} />
-                <span className="text-xs font-mono text-white/50">{f}</span>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+
+      {/* Center animation */}
+      <div className="flex-1 flex flex-col items-center justify-center gap-8">
+        <AnimatePresence mode="wait">
+          {phase === "importing" && (
+            <motion.div
+              key="squares"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="flex flex-col items-center gap-6"
+            >
+              <div className="relative w-24 h-24">
+                {[0, 1, 2].map((i) => (
+                  <motion.div
+                    key={i}
+                    className="absolute w-10 h-10 rounded-xl bg-[#f25022]"
+                    style={{
+                      top: i === 0 ? 0 : i === 1 ? "auto" : "auto",
+                      bottom: i === 0 ? "auto" : i === 1 ? 0 : 0,
+                      left: i === 0 ? 0 : i === 1 ? 0 : "auto",
+                      right: i === 0 ? "auto" : i === 1 ? "auto" : 0,
+                    }}
+                    animate={{
+                      scale: [1, 0.85, 1],
+                      opacity: [0.9, 0.6, 0.9],
+                    }}
+                    transition={{
+                      duration: 0.9,
+                      repeat: Infinity,
+                      delay: i * 0.22,
+                      ease: "easeInOut",
+                    }}
+                  />
+                ))}
+              </div>
+              <p className="text-white/60 text-base font-medium tracking-wide">Importing...</p>
+            </motion.div>
+          )}
+
+          {phase === "setting-up" && (
+            <motion.div
+              key="setting-up"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className="flex flex-col items-center gap-4"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-[#6e40c9]/20 border border-[#6e40c9]/30 flex items-center justify-center">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}
+                >
+                  <Loader2 size={26} className="text-[#a78bfa]" />
+                </motion.div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded bg-[#6e40c9]/30 border border-[#6e40c9]/40 flex items-center justify-center">
+                  <div className="w-2 h-2 rounded-sm bg-[#a78bfa]" />
+                </div>
+                <p className="text-white/60 text-sm font-medium">Working.</p>
+              </div>
+            </motion.div>
+          )}
+
+          {phase === "done" && (
+            <motion.div
+              key="done"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col items-center gap-4"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-[#6e40c9]/20 border border-[#6e40c9]/30 flex items-center justify-center">
+                <div className="w-5 h-5 rounded bg-[#6e40c9]/30 border border-[#6e40c9]/40 flex items-center justify-center">
+                  <div className="w-2 h-2 rounded-sm bg-[#a78bfa]" />
+                </div>
+              </div>
+              <p className="text-white/60 text-sm font-medium">Working.</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Repo info */}
+        <div className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/8 rounded-full">
+          <SiGithub size={13} className="text-white/40 shrink-0" />
+          <span className="text-xs text-white/40 font-mono truncate max-w-[200px]">{repoName}</span>
+        </div>
+      </div>
     </motion.div>
   );
 }
@@ -97,7 +191,7 @@ function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onI
     if (!slug || !slug.includes("/")) { setError("Enter a valid GitHub URL — e.g. github.com/user/repo"); return; }
     setError("");
     setImporting(true);
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 300));
     onImport(`https://github.com/${slug}`);
   };
 
@@ -192,6 +286,14 @@ export default function Home() {
   const handleSubmit = () => {
     const trimmed = prompt.trim();
     if (!trimmed) return;
+
+    if (isGitHubUrl(trimmed)) {
+      const url = normalizeGitHubUrl(trimmed);
+      setPrompt("");
+      setImportingRepo(url);
+      return;
+    }
+
     sessionStorage.setItem("chat_prompt", trimmed);
     setLocation("/chat");
   };
@@ -255,7 +357,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Greeting — centered vertically in remaining space */}
+      {/* Greeting */}
       <div className="flex-1 flex flex-col">
         <div className="flex-1 flex flex-col items-center justify-center px-4 pb-4">
           <h1 className="text-[28px] font-semibold text-white text-center leading-snug tracking-tight mb-6">
@@ -263,15 +365,30 @@ export default function Home() {
             what do you want to make?
           </h1>
 
-          {/* Category chips */}
           <div className="w-full overflow-x-auto no-scrollbar -mx-4 px-4">
             <CategoryChips onSelect={handleChipSelect} />
           </div>
         </div>
 
-        {/* Input + Footer pinned to bottom */}
+        {/* Input + Footer */}
         <div className="px-4 pb-[78px] space-y-3">
           <CreateInput value={prompt} onChange={setPrompt} onSubmit={handleSubmit} />
+
+          {/* GitHub URL hint when user types a github link */}
+          <AnimatePresence>
+            {isGitHubUrl(prompt) && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 6 }}
+                className="flex items-center gap-2.5 px-3.5 py-2.5 bg-[#161b22] border border-white/10 rounded-xl"
+              >
+                <SiGithub size={14} className="text-white/60 shrink-0" />
+                <span className="text-xs text-white/50 flex-1">GitHub URL detected — press send to import automatically</span>
+                <Zap size={12} className="text-yellow-400/60 shrink-0" />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Quick links row */}
           <div className="grid grid-cols-2 gap-2">
