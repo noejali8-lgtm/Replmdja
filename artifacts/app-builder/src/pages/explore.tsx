@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronDown, ChevronRight, Github, GitBranch, Zap, Users, Globe, Database,
@@ -434,6 +435,7 @@ function SectionCard({ section }: { section: Section }) {
 }
 
 export default function Explore() {
+  const [, setLocation] = useLocation();
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
@@ -479,6 +481,17 @@ export default function Explore() {
             transition={{ delay: i * 0.04 }}
           >
             <SectionCard section={section} />
+            {section.id === "workspace" && (
+              <button
+                onClick={() => setLocation("/workspace-guide")}
+                className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-green-500/10 border border-green-400/20 text-green-400 text-xs font-bold transition-all active:scale-95 hover:bg-green-500/15"
+                data-testid="btn-workspace-guide"
+              >
+                <Monitor size={13} />
+                دليل تفصيلي كامل — كل زر يعمل
+                <ArrowRight size={13} />
+              </button>
+            )}
           </motion.div>
         ))}
       </div>

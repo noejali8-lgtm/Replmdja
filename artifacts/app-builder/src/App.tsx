@@ -12,6 +12,7 @@ import Projects from "@/pages/projects";
 import Account from "@/pages/account";
 import Explore from "@/pages/explore";
 import Templates from "@/pages/templates";
+import WorkspaceGuide from "@/pages/workspace-guide";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ function Router() {
         <Route path="/projects" component={Projects} />
         <Route path="/templates" component={Templates} />
         <Route path="/explore" component={Explore} />
+        <Route path="/workspace-guide" component={WorkspaceGuide} />
         <Route path="/account" component={Account} />
         <Route component={NotFound} />
       </Switch>
