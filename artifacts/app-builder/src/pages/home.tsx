@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, Zap, Layers, BookOpen, Compass, ChevronRight } from "lucide-react";
+import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, Zap, Layers, BookOpen, Compass, ChevronRight, Clock, Trash2 } from "lucide-react";
 import { SiGithub, SiReplit } from "react-icons/si";
 import { CategoryChips } from "@/components/CategoryChips";
 import { CreateInput } from "@/components/CreateInput";
@@ -13,6 +13,46 @@ interface ImportTarget {
   url: string;
   source: ImportSource;
   label: string;
+}
+
+interface RecentImport extends ImportTarget {
+  importedAt: number;
+}
+
+const HISTORY_KEY = "import_history";
+const MAX_HISTORY = 5;
+
+function loadHistory(): RecentImport[] {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveToHistory(target: ImportTarget) {
+  const existing = loadHistory().filter(h => h.url !== target.url);
+  const updated: RecentImport[] = [
+    { ...target, importedAt: Date.now() },
+    ...existing,
+  ].slice(0, MAX_HISTORY);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+}
+
+function removeFromHistory(url: string) {
+  const updated = loadHistory().filter(h => h.url !== url);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+}
+
+function timeAgo(ts: number): string {
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  const h = Math.floor(diff / 3600000);
+  const d = Math.floor(diff / 86400000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  if (h < 24) return `${h}h ago`;
+  return `${d}d ago`;
 }
 
 function isGitHubUrl(text: string): boolean {
@@ -55,7 +95,6 @@ function ImportingScreen({ target, onDone }: { target: ImportTarget; onDone: () 
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 bg-[#0d1117] flex flex-col"
     >
-      {/* Top badge */}
       <div className="px-4 pt-12">
         <AnimatePresence mode="wait">
           {(phase === "importing" || phase === "setting-up") && (
@@ -94,7 +133,6 @@ function ImportingScreen({ target, onDone }: { target: ImportTarget; onDone: () 
         </AnimatePresence>
       </div>
 
-      {/* Center animation */}
       <div className="flex-1 flex flex-col items-center justify-center gap-8">
         <AnimatePresence mode="wait">
           {phase === "importing" && (
@@ -109,10 +147,7 @@ function ImportingScreen({ target, onDone }: { target: ImportTarget; onDone: () 
                 {[0, 1, 2].map((i) => (
                   <motion.div
                     key={i}
-                    className={cn(
-                      "absolute w-10 h-10 rounded-xl",
-                      isGitHub ? "bg-[#f25022]" : "bg-[#f26207]"
-                    )}
+                    className={cn("absolute w-10 h-10 rounded-xl", isGitHub ? "bg-[#f25022]" : "bg-[#f26207]")}
                     style={{
                       top: i === 0 ? 0 : "auto",
                       bottom: i === 0 ? "auto" : 0,
@@ -127,7 +162,6 @@ function ImportingScreen({ target, onDone }: { target: ImportTarget; onDone: () 
               <p className="text-white/60 text-base font-medium tracking-wide">Importing...</p>
             </motion.div>
           )}
-
           {phase === "setting-up" && (
             <motion.div
               key="setting-up"
@@ -137,10 +171,7 @@ function ImportingScreen({ target, onDone }: { target: ImportTarget; onDone: () 
               className="flex flex-col items-center gap-4"
             >
               <div className="w-14 h-14 rounded-2xl bg-[#6e40c9]/20 border border-[#6e40c9]/30 flex items-center justify-center">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}
-                >
+                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}>
                   <Loader2 size={26} className="text-[#a78bfa]" />
                 </motion.div>
               </div>
@@ -152,7 +183,6 @@ function ImportingScreen({ target, onDone }: { target: ImportTarget; onDone: () 
               </div>
             </motion.div>
           )}
-
           {phase === "done" && (
             <motion.div
               key="done"
@@ -171,7 +201,6 @@ function ImportingScreen({ target, onDone }: { target: ImportTarget; onDone: () 
           )}
         </AnimatePresence>
 
-        {/* Source info pill */}
         <div className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/8 rounded-full">
           {isGitHub
             ? <SiGithub size={13} className="text-white/40 shrink-0" />
@@ -191,13 +220,11 @@ function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onI
   const [error, setError] = useState("");
   const username = (typeof localStorage !== "undefined" && localStorage.getItem("git_author_name")) || "username";
   const initial = username[0]?.toUpperCase() || "U";
+  const liveDetect = detectImport(repoUrl);
 
   const handleImport = async () => {
     const target = detectImport(repoUrl);
-    if (!target) {
-      setError("Enter a valid GitHub or Replit URL");
-      return;
-    }
+    if (!target) { setError("Enter a valid GitHub or Replit URL"); return; }
     setError("");
     setImporting(true);
     await new Promise(r => setTimeout(r, 300));
@@ -213,15 +240,11 @@ function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onI
         className="relative w-full max-w-[480px] bg-[#1c1c1c] rounded-t-3xl overflow-hidden shadow-2xl z-10 border-t border-white/10"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="w-10 h-1 rounded-full bg-white/20" />
-        </div>
+        <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 rounded-full bg-white/20" /></div>
         <div className="flex items-center justify-between px-5 pt-2 pb-4">
           <div className="w-8" />
           <h2 className="text-xl font-bold text-white tracking-tight">Import Project</h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white transition-colors rounded-full hover:bg-white/8">
-            <X size={18} />
-          </button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white transition-colors rounded-full hover:bg-white/8"><X size={18} /></button>
         </div>
         <div className="px-5 pb-8 space-y-5">
           <div>
@@ -234,19 +257,12 @@ function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onI
               data-testid="input-github-repo-url" autoFocus
             />
             {error && <p className="text-xs text-red-400 mt-1.5">{error}</p>}
-            {/* Live detection hint */}
             <AnimatePresence>
-              {repoUrl.trim() && detectImport(repoUrl) && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                  className="flex items-center gap-2 mt-2"
-                >
-                  {detectImport(repoUrl)?.source === "github"
-                    ? <SiGithub size={12} className="text-green-400" />
-                    : <SiReplit size={12} className="text-[#f26207]" />
-                  }
+              {repoUrl.trim() && liveDetect && (
+                <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex items-center gap-2 mt-2">
+                  {liveDetect.source === "github" ? <SiGithub size={12} className="text-green-400" /> : <SiReplit size={12} className="text-[#f26207]" />}
                   <span className="text-xs text-green-400 font-medium">
-                    {detectImport(repoUrl)?.source === "github" ? "GitHub repo detected" : "Replit project detected"}
+                    {liveDetect.source === "github" ? "GitHub repo detected" : "Replit project detected"}
                   </span>
                 </motion.div>
               )}
@@ -268,9 +284,7 @@ function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onI
             <label className="block text-sm font-semibold text-white/80 mb-2">Privacy</label>
             <div className="grid grid-cols-2 gap-2 p-1 bg-white/5 border border-white/8 rounded-xl">
               {(["private", "public"] as const).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPrivacy(p)}
+                <button key={p} onClick={() => setPrivacy(p)}
                   className={cn("flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all", privacy === p ? "bg-[#2563eb] text-white" : "text-white/40 hover:text-white/70")}
                   data-testid={`button-privacy-${p}`}
                 >
@@ -281,8 +295,7 @@ function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onI
             </div>
           </div>
           <button
-            onClick={handleImport}
-            disabled={importing || !repoUrl.trim()}
+            onClick={handleImport} disabled={importing || !repoUrl.trim()}
             className={cn("w-full flex items-center justify-center gap-2.5 py-4 rounded-xl text-sm font-semibold transition-all", importing ? "bg-white/8 text-white/40 cursor-not-allowed" : repoUrl.trim() ? "bg-[#2563eb] text-white hover:bg-blue-500 active:scale-[0.98]" : "bg-white/6 border border-white/8 text-white/30 cursor-not-allowed")}
             data-testid="button-import-repo"
           >
@@ -294,11 +307,93 @@ function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onI
   );
 }
 
+function RecentImportsSection({ onReimport }: { onReimport: (target: ImportTarget) => void }) {
+  const [history, setHistory] = useState<RecentImport[]>([]);
+
+  useEffect(() => {
+    setHistory(loadHistory());
+  }, []);
+
+  const handleRemove = (e: React.MouseEvent, url: string) => {
+    e.stopPropagation();
+    removeFromHistory(url);
+    setHistory(loadHistory());
+  };
+
+  if (history.length === 0) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-2"
+    >
+      <div className="flex items-center gap-2 px-0.5">
+        <Clock size={12} className="text-white/30" />
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-white/30">Recent Imports</span>
+      </div>
+      <div className="space-y-1.5">
+        {history.map((item, i) => (
+          <motion.button
+            key={item.url}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.05 }}
+            onClick={() => onReimport(item)}
+            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl bg-white/[0.035] border border-white/[0.07] hover:bg-white/6 active:scale-[0.98] transition-all group text-left"
+          >
+            {/* Source icon */}
+            <div className={cn(
+              "w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 transition-colors",
+              item.source === "github"
+                ? "bg-white/8 border-white/12 group-hover:bg-white/12"
+                : "bg-[#f26207]/10 border-[#f26207]/20 group-hover:bg-[#f26207]/15"
+            )}>
+              {item.source === "github"
+                ? <SiGithub size={14} className="text-white/60" />
+                : <SiReplit size={14} className="text-[#f26207]/80" />
+              }
+            </div>
+
+            {/* Label + meta */}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white/80 truncate leading-tight">{item.label}</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={cn(
+                  "text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
+                  item.source === "github"
+                    ? "bg-white/6 text-white/30"
+                    : "bg-[#f26207]/10 text-[#f26207]/60"
+                )}>
+                  {item.source === "github" ? "GitHub" : "Replit"}
+                </span>
+                <span className="text-[10px] text-white/25">{timeAgo(item.importedAt)}</span>
+              </div>
+            </div>
+
+            {/* Re-import arrow + delete */}
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={(e) => handleRemove(e, item.url)}
+                className="w-6 h-6 flex items-center justify-center rounded-lg text-white/0 group-hover:text-white/25 hover:!text-white/60 hover:bg-white/8 transition-all"
+              >
+                <Trash2 size={12} />
+              </button>
+              <ChevronRight size={14} className="text-white/20 group-hover:text-white/40 transition-colors" />
+            </div>
+          </motion.button>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
 export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [showMenu, setShowMenu] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [, setLocation] = useLocation();
 
   const detected = detectImport(prompt);
@@ -321,14 +416,17 @@ export default function Home() {
   };
 
   const handleStartImport = (target: ImportTarget) => { setShowImport(false); setImportTarget(target); };
+  const handleReimport = (target: ImportTarget) => { setImportTarget(target); };
 
   const handleImportDone = () => {
     if (!importTarget) return;
-    const { url, source, label } = importTarget;
-    const prompt = source === "github"
+    saveToHistory(importTarget);
+    setHistoryVersion(v => v + 1);
+    const { url, source } = importTarget;
+    const chatPrompt = source === "github"
       ? `I've imported the GitHub repo ${url}. Analyze the project structure, explain what it does, and suggest what we can build or improve.`
       : `I've imported the Replit project ${url}. Analyze the project structure, explain what it does, and suggest what we can build or improve.`;
-    sessionStorage.setItem("chat_prompt", prompt);
+    sessionStorage.setItem("chat_prompt", chatPrompt);
     sessionStorage.setItem("imported_repo", url);
     setLocation("/chat");
   };
@@ -350,7 +448,6 @@ export default function Home() {
           >
             <MoreVertical size={22} />
           </button>
-
           <AnimatePresence>
             {showMenu && (
               <>
@@ -384,16 +481,14 @@ export default function Home() {
             )}
           </AnimatePresence>
         </div>
-
         <span className="text-sm font-medium text-white/60">jnar7804's workspace</span>
-
         <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center cursor-pointer" data-testid="avatar-user">
           <span className="text-sm font-bold text-white">N</span>
         </div>
       </header>
 
-      {/* Greeting */}
-      <div className="flex-1 flex flex-col">
+      {/* Body */}
+      <div className="flex-1 flex flex-col overflow-y-auto">
         <div className="flex-1 flex flex-col items-center justify-center px-4 pb-4">
           <h1 className="text-[28px] font-semibold text-white text-center leading-snug tracking-tight mb-6">
             Hi jnar7804,<br />
@@ -404,17 +499,15 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Input + Footer */}
-        <div className="px-4 pb-[78px] space-y-3">
+        {/* Input + sections */}
+        <div className="px-4 pb-[78px] space-y-4">
           <CreateInput value={prompt} onChange={setPrompt} onSubmit={handleSubmit} />
 
           {/* Auto-detect hint */}
           <AnimatePresence>
             {detected && (
               <motion.div
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 6 }}
+                initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
                 className="flex items-center gap-2.5 px-3.5 py-2.5 bg-[#161b22] border border-white/10 rounded-xl"
               >
                 {detected.source === "github"
@@ -428,6 +521,9 @@ export default function Home() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Recent imports */}
+          <RecentImportsSection key={historyVersion} onReimport={handleReimport} />
 
           {/* Quick links */}
           <div className="grid grid-cols-2 gap-2">
