@@ -1,25 +1,45 @@
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, GitBranch, FileText, Package, Zap, Layers, BookOpen, Compass, ChevronRight } from "lucide-react";
-import { SiGithub } from "react-icons/si";
+import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, Zap, Layers, BookOpen, Compass, ChevronRight } from "lucide-react";
+import { SiGithub, SiReplit } from "react-icons/si";
 import { CategoryChips } from "@/components/CategoryChips";
 import { CreateInput } from "@/components/CreateInput";
 import { cn } from "@/lib/utils";
 
+type ImportSource = "github" | "replit";
+
+interface ImportTarget {
+  url: string;
+  source: ImportSource;
+  label: string;
+}
+
 function isGitHubUrl(text: string): boolean {
+  return /^(https?:\/\/)?(www\.)?github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+/.test(text.trim());
+}
+
+function isReplitUrl(text: string): boolean {
+  return /^(https?:\/\/)?(www\.)?replit\.com\/@?[a-zA-Z0-9_.-]+(\/[a-zA-Z0-9_.-]+)?/.test(text.trim());
+}
+
+function detectImport(text: string): ImportTarget | null {
   const t = text.trim();
-  return /^(https?:\/\/)?(www\.)?github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+/.test(t);
+  if (isGitHubUrl(t)) {
+    const slug = t.replace(/^https?:\/\//, "").replace(/^github\.com\//, "").replace(/\.git$/, "");
+    return { url: `https://github.com/${slug}`, source: "github", label: slug };
+  }
+  if (isReplitUrl(t)) {
+    const slug = t.replace(/^https?:\/\//, "").replace(/^(www\.)?replit\.com\/@?/, "").replace(/^replit\.com\//, "");
+    const normalized = `https://replit.com/@${slug.replace(/^@/, "")}`;
+    return { url: normalized, source: "replit", label: slug };
+  }
+  return null;
 }
 
-function normalizeGitHubUrl(raw: string): string {
-  const t = raw.trim().replace(/^https?:\/\//, "").replace(/^github\.com\//, "");
-  return `https://github.com/${t.replace(/\.git$/, "")}`;
-}
-
-function ImportingScreen({ repoUrl, onDone }: { repoUrl: string; onDone: () => void }) {
-  const repoName = repoUrl.replace("https://github.com/", "");
+function ImportingScreen({ target, onDone }: { target: ImportTarget; onDone: () => void }) {
   const [phase, setPhase] = useState<"importing" | "setting-up" | "done">("importing");
+  const isGitHub = target.source === "github";
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase("setting-up"), 2200);
@@ -38,9 +58,9 @@ function ImportingScreen({ repoUrl, onDone }: { repoUrl: string; onDone: () => v
       {/* Top badge */}
       <div className="px-4 pt-12">
         <AnimatePresence mode="wait">
-          {phase === "importing" && (
+          {(phase === "importing" || phase === "setting-up") && (
             <motion.div
-              key="importing-badge"
+              key="progress-badge"
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
@@ -51,23 +71,11 @@ function ImportingScreen({ repoUrl, onDone }: { repoUrl: string; onDone: () => v
                 transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
                 className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white/70 shrink-0"
               />
-              <span className="text-sm text-white/70 font-medium">Setting up your project from Replit...</span>
-            </motion.div>
-          )}
-          {phase === "setting-up" && (
-            <motion.div
-              key="setting-badge"
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              className="flex items-center gap-2.5 bg-[#161b22] border border-white/10 rounded-2xl px-4 py-3"
-            >
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
-                className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white/70 shrink-0"
-              />
-              <span className="text-sm text-white/70 font-medium">Setting up your project from Replit...</span>
+              <span className="text-sm text-white/70 font-medium">
+                {phase === "importing"
+                  ? `Setting up your project from ${isGitHub ? "GitHub" : "Replit"}...`
+                  : "Preparing workspace..."}
+              </span>
             </motion.div>
           )}
           {phase === "done" && (
@@ -78,7 +86,9 @@ function ImportingScreen({ repoUrl, onDone }: { repoUrl: string; onDone: () => v
               className="flex items-center gap-2.5 bg-[#161b22] border border-white/10 rounded-2xl px-4 py-3"
             >
               <CheckCircle2 size={16} className="text-white/70 shrink-0" />
-              <span className="text-sm text-white/70 font-medium">Successfully imported from Replit</span>
+              <span className="text-sm text-white/70 font-medium">
+                Successfully imported from {isGitHub ? "GitHub" : "Replit"}
+              </span>
             </motion.div>
           )}
         </AnimatePresence>
@@ -99,23 +109,18 @@ function ImportingScreen({ repoUrl, onDone }: { repoUrl: string; onDone: () => v
                 {[0, 1, 2].map((i) => (
                   <motion.div
                     key={i}
-                    className="absolute w-10 h-10 rounded-xl bg-[#f25022]"
+                    className={cn(
+                      "absolute w-10 h-10 rounded-xl",
+                      isGitHub ? "bg-[#f25022]" : "bg-[#f26207]"
+                    )}
                     style={{
-                      top: i === 0 ? 0 : i === 1 ? "auto" : "auto",
-                      bottom: i === 0 ? "auto" : i === 1 ? 0 : 0,
-                      left: i === 0 ? 0 : i === 1 ? 0 : "auto",
-                      right: i === 0 ? "auto" : i === 1 ? "auto" : 0,
+                      top: i === 0 ? 0 : "auto",
+                      bottom: i === 0 ? "auto" : 0,
+                      left: i === 2 ? "auto" : 0,
+                      right: i === 2 ? 0 : "auto",
                     }}
-                    animate={{
-                      scale: [1, 0.85, 1],
-                      opacity: [0.9, 0.6, 0.9],
-                    }}
-                    transition={{
-                      duration: 0.9,
-                      repeat: Infinity,
-                      delay: i * 0.22,
-                      ease: "easeInOut",
-                    }}
+                    animate={{ scale: [1, 0.82, 1], opacity: [0.9, 0.55, 0.9] }}
+                    transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.22, ease: "easeInOut" }}
                   />
                 ))}
               </div>
@@ -166,17 +171,20 @@ function ImportingScreen({ repoUrl, onDone }: { repoUrl: string; onDone: () => v
           )}
         </AnimatePresence>
 
-        {/* Repo info */}
+        {/* Source info pill */}
         <div className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/8 rounded-full">
-          <SiGithub size={13} className="text-white/40 shrink-0" />
-          <span className="text-xs text-white/40 font-mono truncate max-w-[200px]">{repoName}</span>
+          {isGitHub
+            ? <SiGithub size={13} className="text-white/40 shrink-0" />
+            : <SiReplit size={13} className="text-[#f26207]/60 shrink-0" />
+          }
+          <span className="text-xs text-white/40 font-mono truncate max-w-[220px]">{target.label}</span>
         </div>
       </div>
     </motion.div>
   );
 }
 
-function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onImport: (url: string) => void }) {
+function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onImport: (target: ImportTarget) => void }) {
   const [repoUrl, setRepoUrl] = useState("");
   const [privacy, setPrivacy] = useState<"private" | "public">("private");
   const [importing, setImporting] = useState(false);
@@ -184,15 +192,16 @@ function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onI
   const username = (typeof localStorage !== "undefined" && localStorage.getItem("git_author_name")) || "username";
   const initial = username[0]?.toUpperCase() || "U";
 
-  const normalize = (raw: string) => raw.trim().replace(/^https?:\/\//, "").replace(/^github\.com\//, "");
-
   const handleImport = async () => {
-    const slug = normalize(repoUrl);
-    if (!slug || !slug.includes("/")) { setError("Enter a valid GitHub URL — e.g. github.com/user/repo"); return; }
+    const target = detectImport(repoUrl);
+    if (!target) {
+      setError("Enter a valid GitHub or Replit URL");
+      return;
+    }
     setError("");
     setImporting(true);
     await new Promise(r => setTimeout(r, 300));
-    onImport(`https://github.com/${slug}`);
+    onImport(target);
   };
 
   return (
@@ -209,22 +218,39 @@ function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onI
         </div>
         <div className="flex items-center justify-between px-5 pt-2 pb-4">
           <div className="w-8" />
-          <h2 className="text-xl font-bold text-white tracking-tight">Import From GitHub</h2>
+          <h2 className="text-xl font-bold text-white tracking-tight">Import Project</h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white transition-colors rounded-full hover:bg-white/8">
             <X size={18} />
           </button>
         </div>
         <div className="px-5 pb-8 space-y-5">
           <div>
-            <label className="block text-sm font-semibold text-white/80 mb-2">GitHub URL</label>
+            <label className="block text-sm font-semibold text-white/80 mb-2">GitHub or Replit URL</label>
             <input
               type="text" value={repoUrl}
               onChange={e => { setRepoUrl(e.target.value); setError(""); }}
-              placeholder="github.com/user/repo"
-              className={cn("w-full bg-transparent border rounded-xl px-4 py-3.5 text-sm text-white placeholder:text-white/30 outline-none transition-colors", error ? "border-red-400/60 focus:border-red-400" : "border-white/12 focus:border-white/30")}
+              placeholder="github.com/user/repo  or  replit.com/@user/project"
+              className={cn("w-full bg-transparent border rounded-xl px-4 py-3.5 text-sm text-white placeholder:text-white/25 outline-none transition-colors", error ? "border-red-400/60 focus:border-red-400" : "border-white/12 focus:border-white/30")}
               data-testid="input-github-repo-url" autoFocus
             />
             {error && <p className="text-xs text-red-400 mt-1.5">{error}</p>}
+            {/* Live detection hint */}
+            <AnimatePresence>
+              {repoUrl.trim() && detectImport(repoUrl) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="flex items-center gap-2 mt-2"
+                >
+                  {detectImport(repoUrl)?.source === "github"
+                    ? <SiGithub size={12} className="text-green-400" />
+                    : <SiReplit size={12} className="text-[#f26207]" />
+                  }
+                  <span className="text-xs text-green-400 font-medium">
+                    {detectImport(repoUrl)?.source === "github" ? "GitHub repo detected" : "Replit project detected"}
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
           <div>
             <label className="block text-sm font-semibold text-white/80 mb-2">Owner</label>
@@ -253,9 +279,6 @@ function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onI
                 </button>
               ))}
             </div>
-            <p className="text-xs text-white/35 mt-2 text-center leading-relaxed">
-              {privacy === "private" ? "Only you and collaborators can view and remix this Project." : "Anyone can view and remix this Project."}
-            </p>
           </div>
           <button
             onClick={handleImport}
@@ -275,35 +298,38 @@ export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [showMenu, setShowMenu] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [importingRepo, setImportingRepo] = useState<string | null>(null);
+  const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
   const [, setLocation] = useLocation();
 
+  const detected = detectImport(prompt);
+
   const handleChipSelect = (category: string) => {
-    const newText = prompt.length > 0 ? `${prompt} ${category}` : `I want to make a ${category}`;
-    setPrompt(newText);
+    setPrompt(p => p.length > 0 ? `${p} ${category}` : `I want to make a ${category}`);
   };
 
   const handleSubmit = () => {
     const trimmed = prompt.trim();
     if (!trimmed) return;
-
-    if (isGitHubUrl(trimmed)) {
-      const url = normalizeGitHubUrl(trimmed);
+    const target = detectImport(trimmed);
+    if (target) {
       setPrompt("");
-      setImportingRepo(url);
+      setImportTarget(target);
       return;
     }
-
     sessionStorage.setItem("chat_prompt", trimmed);
     setLocation("/chat");
   };
 
-  const handleImportGithub = () => { setShowMenu(false); setShowImport(true); };
-  const handleStartImport = (url: string) => { setShowImport(false); setImportingRepo(url); };
+  const handleStartImport = (target: ImportTarget) => { setShowImport(false); setImportTarget(target); };
+
   const handleImportDone = () => {
-    const slug = importingRepo!.replace("https://github.com/", "");
-    sessionStorage.setItem("chat_prompt", `I've imported the GitHub repo https://github.com/${slug}. Analyze the project structure, explain what it does, and suggest what we can build or improve.`);
-    sessionStorage.setItem("imported_repo", importingRepo!);
+    if (!importTarget) return;
+    const { url, source, label } = importTarget;
+    const prompt = source === "github"
+      ? `I've imported the GitHub repo ${url}. Analyze the project structure, explain what it does, and suggest what we can build or improve.`
+      : `I've imported the Replit project ${url}. Analyze the project structure, explain what it does, and suggest what we can build or improve.`;
+    sessionStorage.setItem("chat_prompt", prompt);
+    sessionStorage.setItem("imported_repo", url);
     setLocation("/chat");
   };
 
@@ -334,15 +360,24 @@ export default function Home() {
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, y: -4 }}
                   transition={{ duration: 0.12 }}
-                  className="absolute left-0 top-10 bg-[#252525] border border-white/10 shadow-2xl rounded-xl overflow-hidden z-50 min-w-[200px]"
+                  className="absolute left-0 top-10 bg-[#252525] border border-white/10 shadow-2xl rounded-xl overflow-hidden z-50 min-w-[210px]"
                 >
                   <button
-                    onClick={handleImportGithub}
+                    onClick={() => { setShowMenu(false); setShowImport(true); }}
                     className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-white/5 transition-colors text-left"
                     data-testid="button-import-github"
                   >
                     <SiGithub size={16} className="text-white shrink-0" />
                     <p className="text-sm font-medium text-white leading-tight">Import from GitHub</p>
+                  </button>
+                  <div className="h-px bg-white/6 mx-3" />
+                  <button
+                    onClick={() => { setShowMenu(false); setShowImport(true); }}
+                    className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-white/5 transition-colors text-left"
+                    data-testid="button-import-replit"
+                  >
+                    <SiReplit size={16} className="text-[#f26207] shrink-0" />
+                    <p className="text-sm font-medium text-white leading-tight">Import from Replit</p>
                   </button>
                 </motion.div>
               </>
@@ -364,7 +399,6 @@ export default function Home() {
             Hi jnar7804,<br />
             what do you want to make?
           </h1>
-
           <div className="w-full overflow-x-auto no-scrollbar -mx-4 px-4">
             <CategoryChips onSelect={handleChipSelect} />
           </div>
@@ -374,23 +408,28 @@ export default function Home() {
         <div className="px-4 pb-[78px] space-y-3">
           <CreateInput value={prompt} onChange={setPrompt} onSubmit={handleSubmit} />
 
-          {/* GitHub URL hint when user types a github link */}
+          {/* Auto-detect hint */}
           <AnimatePresence>
-            {isGitHubUrl(prompt) && (
+            {detected && (
               <motion.div
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 6 }}
                 className="flex items-center gap-2.5 px-3.5 py-2.5 bg-[#161b22] border border-white/10 rounded-xl"
               >
-                <SiGithub size={14} className="text-white/60 shrink-0" />
-                <span className="text-xs text-white/50 flex-1">GitHub URL detected — press send to import automatically</span>
+                {detected.source === "github"
+                  ? <SiGithub size={14} className="text-white/60 shrink-0" />
+                  : <SiReplit size={14} className="text-[#f26207]/80 shrink-0" />
+                }
+                <span className="text-xs text-white/50 flex-1">
+                  {detected.source === "github" ? "GitHub" : "Replit"} URL detected — press send to import automatically
+                </span>
                 <Zap size={12} className="text-yellow-400/60 shrink-0" />
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Quick links row */}
+          {/* Quick links */}
           <div className="grid grid-cols-2 gap-2">
             <Link href="/templates">
               <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-white/4 border border-white/8 hover:bg-white/7 transition-colors cursor-pointer">
@@ -455,7 +494,7 @@ export default function Home() {
         {showImport && <ImportFromGitHubSheet onClose={() => setShowImport(false)} onImport={handleStartImport} />}
       </AnimatePresence>
       <AnimatePresence>
-        {importingRepo && <ImportingScreen repoUrl={importingRepo} onDone={handleImportDone} />}
+        {importTarget && <ImportingScreen target={importTarget} onDone={handleImportDone} />}
       </AnimatePresence>
     </motion.div>
   );
