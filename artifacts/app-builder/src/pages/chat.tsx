@@ -2931,7 +2931,7 @@ export default function Chat() {
     try {
       const response = await fetch(
         `${BASE_URL}/api/anthropic/conversations/${convId}/messages`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) }
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, turbo: turboMode, planMode: planEnabled }) }
       );
       if (!response.ok || !response.body) throw new Error("Stream request failed");
       const reader = response.body.getReader();
@@ -2983,7 +2983,7 @@ export default function Chat() {
         timestamp: new Date()
       }]);
     }
-  }, [actionCount]);
+  }, [actionCount, turboMode, planEnabled]);
 
   const startConversation = useCallback(async (prompt: string) => {
     const userMsgId = `user-${Date.now()}`;
@@ -3180,17 +3180,29 @@ export default function Chat() {
       <AnimatePresence>
         {showQuickSuggestions && messages.length > 0 && !isThinking && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
-            className="shrink-0 px-3 py-2 bg-[#141414] border-t border-white/[0.05]">
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-              <span className="text-[10px] text-white/25 shrink-0">Suggestions</span>
+            className="shrink-0 bg-[#141414] border-t border-white/[0.05]">
+            {/* Category label */}
+            <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+              <span className="text-[10px] text-white/25 font-semibold uppercase tracking-wider">Quick actions</span>
+              <button onClick={() => setShowQuickSuggestions(false)} className="ml-auto text-white/20 hover:text-white/50 transition-colors">
+                <X size={13} />
+              </button>
+            </div>
+            {/* Scrollable chips */}
+            <div className="flex gap-2 overflow-x-auto no-scrollbar px-3 pb-2.5">
               {[
-                { label: "✨ Add dark mode", prompt: "Add a dark/light mode toggle with smooth transitions" },
-                { label: "🔐 Add auth", prompt: "Add user authentication with email and Google sign-in" },
-                { label: "📊 Add dashboard", prompt: "Create an analytics dashboard with charts and metrics" },
-                { label: "🚀 Deploy now", prompt: "Help me deploy this app to production" },
-                { label: "🧪 Write tests", prompt: "Write unit tests for the main components" },
-                { label: "⚡ Optimize", prompt: "Optimize the app for performance and reduce bundle size" },
-                { label: "📱 Mobile view", prompt: "Make the app fully responsive for mobile devices" },
+                { label: "🔐 Add auth", prompt: "Add user authentication with email/password and Google OAuth sign-in" },
+                { label: "📊 Analytics", prompt: "Add an analytics dashboard with real-time charts, user metrics, and activity tracking" },
+                { label: "💳 Payments", prompt: "Integrate Stripe payments with subscription plans and a billing portal" },
+                { label: "🌙 Dark mode", prompt: "Add a dark/light mode toggle with smooth theme transitions and system preference detection" },
+                { label: "📱 Make mobile", prompt: "Make the entire app fully responsive for mobile devices with touch-friendly UI" },
+                { label: "🔔 Notifications", prompt: "Add a real-time notification system with push alerts and an inbox" },
+                { label: "🔍 Search", prompt: "Add a powerful full-text search with filters, sorting, and instant results" },
+                { label: "📤 Export", prompt: "Add export to PDF, CSV, and Excel for all data tables and reports" },
+                { label: "🌐 i18n", prompt: "Add multi-language support with Arabic, English, French, and Spanish" },
+                { label: "⚡ Optimize", prompt: "Optimize for performance: lazy loading, caching, smaller bundle, faster load times" },
+                { label: "🛡 Security", prompt: "Audit and improve security: rate limiting, CSRF protection, input sanitization, HTTPS headers" },
+                { label: "🧪 Add tests", prompt: "Write comprehensive unit and integration tests for all main components and API routes" },
               ].map(s => (
                 <motion.button key={s.label} whileTap={{ scale: 0.95 }}
                   onClick={() => { setInput(s.prompt); setShowQuickSuggestions(false); }}
@@ -3198,9 +3210,24 @@ export default function Chat() {
                   {s.label}
                 </motion.button>
               ))}
-              <button onClick={() => setShowQuickSuggestions(false)} className="shrink-0 ml-1 text-white/20 hover:text-white/50 transition-colors">
-                <X size={13} />
-              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Plan Mode banner ── */}
+      <AnimatePresence>
+        {planEnabled && messages.length === 0 && (
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="shrink-0 mx-3 mb-2 bg-white/[0.04] border border-white/[0.09] rounded-2xl px-4 py-3 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-base">🧠</span>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white/80">Plan Mode is on</p>
+              <p className="text-[11px] text-white/40 leading-relaxed mt-0.5">
+                Describe what you want to build — I'll propose a full project plan with features and stack, then ask for your approval before writing any code.
+              </p>
             </div>
           </motion.div>
         )}
