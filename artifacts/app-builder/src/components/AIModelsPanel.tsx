@@ -1,16 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, ArrowLeft, Search, Zap, ChevronRight, Check, Star,
   Cpu, Shuffle, Shield, Sliders, Layers, Play, Square,
   BarChart3, Loader2, ChevronDown, Info, RotateCcw, Sparkles,
-  Trophy, Flame, Target, Activity
+  Trophy, Flame, Target, Activity, Users, Plus, Minus, Key,
+  Brain, GitMerge, Send
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ─── Model Data ───────────────────────────────────────────────────────────────
+// ─── Model Data ────────────────────────────────────────────────────────────────
 export interface AIModel {
-  id: string;
+  id: string;          // OpenRouter model ID (e.g. "meta-llama/llama-3.3-70b-instruct:free")
   name: string;
   provider: string;
   providerColor: string;
@@ -20,130 +21,198 @@ export interface AIModel {
   tier: "flagship" | "balanced" | "fast" | "open";
   badge?: string;
   badgeColor?: string;
+  free?: boolean;      // available on OpenRouter for free
 }
 
+// ─── Providers ─────────────────────────────────────────────────────────────────
 const PROVIDERS = [
-  { id: "all", label: "All" },
-  { id: "Anthropic", label: "Anthropic" },
-  { id: "OpenAI", label: "OpenAI" },
-  { id: "Google", label: "Google" },
-  { id: "xAI", label: "xAI" },
-  { id: "Mistral", label: "Mistral" },
-  { id: "Meta", label: "Meta" },
-  { id: "DeepSeek", label: "DeepSeek" },
-  { id: "Qwen", label: "Qwen" },
-  { id: "Cohere", label: "Cohere" },
-  { id: "01.AI", label: "01.AI" },
+  { id: "all",             label: "All" },
+  { id: "Anthropic",       label: "Anthropic" },
+  { id: "OpenAI",          label: "OpenAI" },
+  { id: "Google",          label: "Google" },
+  { id: "Meta",            label: "Meta" },
+  { id: "NVIDIA",          label: "NVIDIA" },
+  { id: "DeepSeek",        label: "DeepSeek" },
+  { id: "Qwen",            label: "Qwen" },
+  { id: "xAI",             label: "xAI" },
+  { id: "Mistral",         label: "Mistral" },
+  { id: "MiniMax",         label: "MiniMax" },
+  { id: "NousResearch",    label: "NousResearch" },
+  { id: "Poolside",        label: "Poolside" },
+  { id: "Tencent",         label: "Tencent" },
+  { id: "Z-AI",            label: "Z-AI" },
+  { id: "OpenRouter",      label: "OpenRouter" },
+  { id: "Cohere",          label: "Cohere" },
 ];
 
+// ─── All Models ─────────────────────────────────────────────────────────────────
 export const ALL_MODELS: AIModel[] = [
-  // Anthropic
-  { id: "claude-opus-4-7", name: "Claude Opus 4.7", provider: "Anthropic", providerColor: "text-orange-400", providerBg: "bg-orange-500/10 border-orange-400/20", tags: ["reasoning", "coding"], contextK: 200, tier: "flagship", badge: "Latest", badgeColor: "bg-orange-500/20 text-orange-300 border-orange-400/30" },
-  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", provider: "Anthropic", providerColor: "text-orange-400", providerBg: "bg-orange-500/10 border-orange-400/20", tags: ["balanced", "fast"], contextK: 200, tier: "balanced", badge: "Recommended", badgeColor: "bg-green-500/15 text-green-300 border-green-400/25" },
-  { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", provider: "Anthropic", providerColor: "text-orange-400", providerBg: "bg-orange-500/10 border-orange-400/20", tags: ["fast", "cheap"], contextK: 200, tier: "fast" },
-  { id: "claude-opus-4-5", name: "Claude Opus 4.5", provider: "Anthropic", providerColor: "text-orange-400", providerBg: "bg-orange-500/10 border-orange-400/20", tags: ["reasoning"], contextK: 200, tier: "flagship" },
-  // OpenAI
-  { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI", providerColor: "text-emerald-400", providerBg: "bg-emerald-500/10 border-emerald-400/20", tags: ["multimodal", "fast"], contextK: 128, tier: "flagship", badge: "Popular", badgeColor: "bg-emerald-500/15 text-emerald-300 border-emerald-400/25" },
-  { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", providerColor: "text-emerald-400", providerBg: "bg-emerald-500/10 border-emerald-400/20", tags: ["fast", "cheap"], contextK: 128, tier: "fast" },
-  { id: "o3", name: "o3", provider: "OpenAI", providerColor: "text-emerald-400", providerBg: "bg-emerald-500/10 border-emerald-400/20", tags: ["reasoning", "math"], contextK: 200, tier: "flagship", badge: "New", badgeColor: "bg-blue-500/15 text-blue-300 border-blue-400/25" },
-  { id: "o4-mini", name: "o4-mini", provider: "OpenAI", providerColor: "text-emerald-400", providerBg: "bg-emerald-500/10 border-emerald-400/20", tags: ["reasoning", "fast"], contextK: 200, tier: "balanced" },
-  { id: "gpt-4-turbo", name: "GPT-4 Turbo", provider: "OpenAI", providerColor: "text-emerald-400", providerBg: "bg-emerald-500/10 border-emerald-400/20", tags: ["coding", "analysis"], contextK: 128, tier: "balanced" },
-  // Google
-  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google", providerColor: "text-blue-400", providerBg: "bg-blue-500/10 border-blue-400/20", tags: ["fast", "multimodal"], contextK: 1000, tier: "fast", badge: "Ultra-fast", badgeColor: "bg-blue-500/15 text-blue-300 border-blue-400/25" },
-  { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google", providerColor: "text-blue-400", providerBg: "bg-blue-500/10 border-blue-400/20", tags: ["long-ctx", "multimodal"], contextK: 2000, tier: "flagship" },
-  { id: "gemini-2.0-pro", name: "Gemini 2.0 Pro", provider: "Google", providerColor: "text-blue-400", providerBg: "bg-blue-500/10 border-blue-400/20", tags: ["flagship", "reasoning"], contextK: 2000, tier: "flagship", badge: "New", badgeColor: "bg-blue-500/15 text-blue-300 border-blue-400/25" },
-  { id: "gemini-ultra", name: "Gemini Ultra", provider: "Google", providerColor: "text-blue-400", providerBg: "bg-blue-500/10 border-blue-400/20", tags: ["flagship", "reasoning"], contextK: 1000, tier: "flagship" },
-  // xAI
-  { id: "grok-3", name: "Grok-3", provider: "xAI", providerColor: "text-white", providerBg: "bg-white/5 border-white/10", tags: ["reasoning", "real-time"], contextK: 131, tier: "flagship", badge: "Live", badgeColor: "bg-green-500/15 text-green-300 border-green-400/25" },
-  { id: "grok-3-mini", name: "Grok-3 Mini", provider: "xAI", providerColor: "text-white", providerBg: "bg-white/5 border-white/10", tags: ["fast", "efficient"], contextK: 131, tier: "balanced" },
-  { id: "grok-2", name: "Grok-2", provider: "xAI", providerColor: "text-white", providerBg: "bg-white/5 border-white/10", tags: ["coding", "analysis"], contextK: 131, tier: "balanced" },
-  // Mistral
-  { id: "mistral-large-2", name: "Mistral Large 2", provider: "Mistral", providerColor: "text-violet-400", providerBg: "bg-violet-500/10 border-violet-400/20", tags: ["reasoning", "multilingual"], contextK: 128, tier: "flagship" },
-  { id: "mistral-medium", name: "Mistral Medium", provider: "Mistral", providerColor: "text-violet-400", providerBg: "bg-violet-500/10 border-violet-400/20", tags: ["balanced"], contextK: 32, tier: "balanced" },
-  { id: "codestral", name: "Codestral", provider: "Mistral", providerColor: "text-violet-400", providerBg: "bg-violet-500/10 border-violet-400/20", tags: ["coding"], contextK: 32, tier: "balanced", badge: "Code", badgeColor: "bg-violet-500/15 text-violet-300 border-violet-400/25" },
-  { id: "mixtral-8x22b", name: "Mixtral 8×22B", provider: "Mistral", providerColor: "text-violet-400", providerBg: "bg-violet-500/10 border-violet-400/20", tags: ["open", "fast"], contextK: 64, tier: "open" },
-  // Meta (LLaMA)
-  { id: "llama-3.3-70b", name: "LLaMA 3.3 70B", provider: "Meta", providerColor: "text-cyan-400", providerBg: "bg-cyan-500/10 border-cyan-400/20", tags: ["open", "balanced"], contextK: 128, tier: "open" },
-  { id: "llama-3.1-405b", name: "LLaMA 3.1 405B", provider: "Meta", providerColor: "text-cyan-400", providerBg: "bg-cyan-500/10 border-cyan-400/20", tags: ["open", "flagship"], contextK: 128, tier: "open" },
-  { id: "llama-3.2-11b", name: "LLaMA 3.2 11B", provider: "Meta", providerColor: "text-cyan-400", providerBg: "bg-cyan-500/10 border-cyan-400/20", tags: ["open", "fast"], contextK: 128, tier: "fast" },
-  { id: "llama-4-maverick", name: "LLaMA 4 Maverick", provider: "Meta", providerColor: "text-cyan-400", providerBg: "bg-cyan-500/10 border-cyan-400/20", tags: ["open", "new"], contextK: 1000, tier: "open", badge: "New", badgeColor: "bg-cyan-500/15 text-cyan-300 border-cyan-400/25" },
-  // DeepSeek
-  { id: "deepseek-v3", name: "DeepSeek V3", provider: "DeepSeek", providerColor: "text-teal-400", providerBg: "bg-teal-500/10 border-teal-400/20", tags: ["open", "coding"], contextK: 128, tier: "open" },
-  { id: "deepseek-r1", name: "DeepSeek R1", provider: "DeepSeek", providerColor: "text-teal-400", providerBg: "bg-teal-500/10 border-teal-400/20", tags: ["reasoning", "open"], contextK: 64, tier: "open", badge: "Reasoning", badgeColor: "bg-teal-500/15 text-teal-300 border-teal-400/25" },
-  { id: "deepseek-r1-zero", name: "DeepSeek R1 Zero", provider: "DeepSeek", providerColor: "text-teal-400", providerBg: "bg-teal-500/10 border-teal-400/20", tags: ["reasoning", "pure-rl"], contextK: 64, tier: "open" },
-  { id: "deepseek-coder-v2", name: "DeepSeek Coder V2", provider: "DeepSeek", providerColor: "text-teal-400", providerBg: "bg-teal-500/10 border-teal-400/20", tags: ["coding"], contextK: 128, tier: "open", badge: "Code", badgeColor: "bg-teal-500/15 text-teal-300 border-teal-400/25" },
-  // Qwen
-  { id: "qwen2.5-72b", name: "Qwen2.5 72B", provider: "Qwen", providerColor: "text-pink-400", providerBg: "bg-pink-500/10 border-pink-400/20", tags: ["open", "multilingual"], contextK: 128, tier: "open" },
-  { id: "qwen2.5-coder-32b", name: "Qwen2.5 Coder 32B", provider: "Qwen", providerColor: "text-pink-400", providerBg: "bg-pink-500/10 border-pink-400/20", tags: ["coding", "open"], contextK: 32, tier: "open", badge: "Code", badgeColor: "bg-pink-500/15 text-pink-300 border-pink-400/25" },
-  { id: "qwq-32b", name: "QwQ 32B", provider: "Qwen", providerColor: "text-pink-400", providerBg: "bg-pink-500/10 border-pink-400/20", tags: ["reasoning", "open"], contextK: 32, tier: "open", badge: "Reasoning", badgeColor: "bg-pink-500/15 text-pink-300 border-pink-400/25" },
-  // Cohere
-  { id: "command-r-plus", name: "Command R+", provider: "Cohere", providerColor: "text-rose-400", providerBg: "bg-rose-500/10 border-rose-400/20", tags: ["rag", "enterprise"], contextK: 128, tier: "balanced" },
-  { id: "command-r", name: "Command R", provider: "Cohere", providerColor: "text-rose-400", providerBg: "bg-rose-500/10 border-rose-400/20", tags: ["rag", "fast"], contextK: 128, tier: "fast" },
-  // 01.AI
-  { id: "yi-large", name: "Yi Large", provider: "01.AI", providerColor: "text-yellow-400", providerBg: "bg-yellow-500/10 border-yellow-400/20", tags: ["multilingual", "open"], contextK: 32, tier: "open" },
-  { id: "yi-1.5-34b", name: "Yi 1.5 34B", provider: "01.AI", providerColor: "text-yellow-400", providerBg: "bg-yellow-500/10 border-yellow-400/20", tags: ["open", "fast"], contextK: 4, tier: "open" },
+  // ── Anthropic ──────────────────────────────────────────────────────────────
+  { id: "anthropic/claude-opus-4-7",     name: "Claude Opus 4.7",    provider: "Anthropic", providerColor: "text-orange-400", providerBg: "bg-orange-500/10 border-orange-400/20", tags: ["reasoning", "coding"],    contextK: 200, tier: "flagship",  badge: "Latest",       badgeColor: "bg-orange-500/20 text-orange-300 border-orange-400/30" },
+  { id: "anthropic/claude-sonnet-4-6",   name: "Claude Sonnet 4.6",  provider: "Anthropic", providerColor: "text-orange-400", providerBg: "bg-orange-500/10 border-orange-400/20", tags: ["balanced", "fast"],        contextK: 200, tier: "balanced",  badge: "Recommended",  badgeColor: "bg-green-500/15 text-green-300 border-green-400/25" },
+  { id: "anthropic/claude-haiku-4-5",    name: "Claude Haiku 4.5",   provider: "Anthropic", providerColor: "text-orange-400", providerBg: "bg-orange-500/10 border-orange-400/20", tags: ["fast", "cheap"],           contextK: 200, tier: "fast" },
+  { id: "anthropic/claude-opus-4-5",     name: "Claude Opus 4.5",    provider: "Anthropic", providerColor: "text-orange-400", providerBg: "bg-orange-500/10 border-orange-400/20", tags: ["reasoning"],               contextK: 200, tier: "flagship" },
+
+  // ── OpenAI ─────────────────────────────────────────────────────────────────
+  { id: "openai/gpt-4o",                 name: "GPT-4o",             provider: "OpenAI",    providerColor: "text-emerald-400", providerBg: "bg-emerald-500/10 border-emerald-400/20", tags: ["multimodal", "fast"],    contextK: 128, tier: "flagship",  badge: "Popular",      badgeColor: "bg-emerald-500/15 text-emerald-300 border-emerald-400/25" },
+  { id: "openai/gpt-4o-mini",            name: "GPT-4o Mini",        provider: "OpenAI",    providerColor: "text-emerald-400", providerBg: "bg-emerald-500/10 border-emerald-400/20", tags: ["fast", "cheap"],         contextK: 128, tier: "fast" },
+  { id: "openai/o3",                     name: "o3",                 provider: "OpenAI",    providerColor: "text-emerald-400", providerBg: "bg-emerald-500/10 border-emerald-400/20", tags: ["reasoning", "math"],     contextK: 200, tier: "flagship",  badge: "New",          badgeColor: "bg-blue-500/15 text-blue-300 border-blue-400/25" },
+  { id: "openai/o4-mini",                name: "o4-mini",            provider: "OpenAI",    providerColor: "text-emerald-400", providerBg: "bg-emerald-500/10 border-emerald-400/20", tags: ["reasoning", "fast"],     contextK: 200, tier: "balanced" },
+  { id: "openai/gpt-oss-120b:free",      name: "GPT OSS 120B",       provider: "OpenAI",    providerColor: "text-emerald-400", providerBg: "bg-emerald-500/10 border-emerald-400/20", tags: ["open", "flagship"],     contextK: 128, tier: "open",     badge: "Free",         badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "openai/gpt-oss-20b:free",       name: "GPT OSS 20B",        provider: "OpenAI",    providerColor: "text-emerald-400", providerBg: "bg-emerald-500/10 border-emerald-400/20", tags: ["open", "fast"],         contextK: 128, tier: "open",     badge: "Free",         badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+
+  // ── Google ──────────────────────────────────────────────────────────────────
+  { id: "google/gemini-2.0-flash-exp",   name: "Gemini 2.0 Flash",   provider: "Google",    providerColor: "text-blue-400",   providerBg: "bg-blue-500/10 border-blue-400/20",    tags: ["fast", "multimodal"],   contextK: 1000, tier: "fast",    badge: "Ultra-fast",   badgeColor: "bg-blue-500/15 text-blue-300 border-blue-400/25" },
+  { id: "google/gemini-1.5-pro",         name: "Gemini 1.5 Pro",     provider: "Google",    providerColor: "text-blue-400",   providerBg: "bg-blue-500/10 border-blue-400/20",    tags: ["long-ctx", "multimodal"],contextK: 2000, tier: "flagship" },
+  { id: "google/gemini-2.0-pro-exp",     name: "Gemini 2.0 Pro",     provider: "Google",    providerColor: "text-blue-400",   providerBg: "bg-blue-500/10 border-blue-400/20",    tags: ["flagship", "reasoning"],contextK: 2000, tier: "flagship",  badge: "New",          badgeColor: "bg-blue-500/15 text-blue-300 border-blue-400/25" },
+  { id: "google/gemma-4-26b-a4b-it:free",name: "Gemma 4 26B",        provider: "Google",    providerColor: "text-blue-400",   providerBg: "bg-blue-500/10 border-blue-400/20",    tags: ["open", "reasoning"],    contextK: 128,  tier: "open",    badge: "Free",         badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "google/gemma-4-31b-it:free",    name: "Gemma 4 31B",        provider: "Google",    providerColor: "text-blue-400",   providerBg: "bg-blue-500/10 border-blue-400/20",    tags: ["open", "balanced"],     contextK: 128,  tier: "open",    badge: "Free",         badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "google/gemma-3-27b-it:free",    name: "Gemma 3 27B",        provider: "Google",    providerColor: "text-blue-400",   providerBg: "bg-blue-500/10 border-blue-400/20",    tags: ["open", "multilingual"],  contextK: 128, tier: "open",    badge: "Free",         badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "google/gemma-3-12b-it:free",    name: "Gemma 3 12B",        provider: "Google",    providerColor: "text-blue-400",   providerBg: "bg-blue-500/10 border-blue-400/20",    tags: ["open", "fast"],          contextK: 128, tier: "open",    badge: "Free",         badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "google/gemma-3-4b-it:free",     name: "Gemma 3 4B",         provider: "Google",    providerColor: "text-blue-400",   providerBg: "bg-blue-500/10 border-blue-400/20",    tags: ["open", "tiny"],          contextK: 128, tier: "fast",    badge: "Free",         badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "google/gemma-3n-e4b-it:free",   name: "Gemma 3n E4B",       provider: "Google",    providerColor: "text-blue-400",   providerBg: "bg-blue-500/10 border-blue-400/20",    tags: ["open", "multimodal"],    contextK: 128, tier: "fast",    badge: "Free",         badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "google/gemma-3n-e2b-it:free",   name: "Gemma 3n E2B",       provider: "Google",    providerColor: "text-blue-400",   providerBg: "bg-blue-500/10 border-blue-400/20",    tags: ["open", "nano"],          contextK: 128, tier: "fast",    badge: "Free",         badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "google/lyria-3-pro-preview",    name: "Lyria 3 Pro",        provider: "Google",    providerColor: "text-blue-400",   providerBg: "bg-blue-500/10 border-blue-400/20",    tags: ["audio", "creative"],     contextK: 32,  tier: "flagship",  badge: "Audio",        badgeColor: "bg-purple-500/15 text-purple-300 border-purple-400/25" },
+  { id: "google/lyria-3-clip-preview",   name: "Lyria 3 Clip",       provider: "Google",    providerColor: "text-blue-400",   providerBg: "bg-blue-500/10 border-blue-400/20",    tags: ["audio", "fast"],         contextK: 32,  tier: "fast",    badge: "Audio",        badgeColor: "bg-purple-500/15 text-purple-300 border-purple-400/25" },
+
+  // ── Meta ────────────────────────────────────────────────────────────────────
+  { id: "meta-llama/llama-3.3-70b-instruct:free", name: "LLaMA 3.3 70B",    provider: "Meta", providerColor: "text-cyan-400", providerBg: "bg-cyan-500/10 border-cyan-400/20", tags: ["open", "balanced"],   contextK: 128, tier: "open",    badge: "Free",   badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "meta-llama/llama-3.2-3b-instruct:free",  name: "LLaMA 3.2 3B",     provider: "Meta", providerColor: "text-cyan-400", providerBg: "bg-cyan-500/10 border-cyan-400/20", tags: ["open", "tiny"],       contextK: 128, tier: "fast",    badge: "Free",   badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "meta-llama/llama-3.1-405b",              name: "LLaMA 3.1 405B",   provider: "Meta", providerColor: "text-cyan-400", providerBg: "bg-cyan-500/10 border-cyan-400/20", tags: ["open", "flagship"],   contextK: 128, tier: "open" },
+  { id: "meta-llama/llama-4-maverick",             name: "LLaMA 4 Maverick", provider: "Meta", providerColor: "text-cyan-400", providerBg: "bg-cyan-500/10 border-cyan-400/20", tags: ["open", "new"],        contextK: 1000, tier: "open",   badge: "New",    badgeColor: "bg-cyan-500/15 text-cyan-300 border-cyan-400/25" },
+
+  // ── NVIDIA ──────────────────────────────────────────────────────────────────
+  { id: "nvidia/nemotron-3-super-120b-a12b:free",         name: "Nemotron Super 120B",      provider: "NVIDIA", providerColor: "text-lime-400", providerBg: "bg-lime-500/10 border-lime-400/20", tags: ["open", "flagship", "reasoning"],contextK: 128, tier: "open",    badge: "Free",  badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", name: "Nemotron Nano Omni 30B", provider: "NVIDIA", providerColor: "text-lime-400", providerBg: "bg-lime-500/10 border-lime-400/20", tags: ["open", "reasoning"],        contextK: 128, tier: "open",    badge: "Free",  badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "nvidia/nemotron-nano-12b-v2-vl:free",            name: "Nemotron Nano 12B VL",     provider: "NVIDIA", providerColor: "text-lime-400", providerBg: "bg-lime-500/10 border-lime-400/20", tags: ["open", "multimodal"],       contextK: 128, tier: "fast",    badge: "Free",  badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "nvidia/nemotron-nano-9b-v2:free",                name: "Nemotron Nano 9B",         provider: "NVIDIA", providerColor: "text-lime-400", providerBg: "bg-lime-500/10 border-lime-400/20", tags: ["open", "fast"],             contextK: 128, tier: "fast",    badge: "Free",  badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+
+  // ── DeepSeek ────────────────────────────────────────────────────────────────
+  { id: "deepseek/deepseek-v3",          name: "DeepSeek V3",        provider: "DeepSeek", providerColor: "text-teal-400", providerBg: "bg-teal-500/10 border-teal-400/20", tags: ["open", "coding"],        contextK: 128, tier: "open" },
+  { id: "deepseek/deepseek-r1",          name: "DeepSeek R1",        provider: "DeepSeek", providerColor: "text-teal-400", providerBg: "bg-teal-500/10 border-teal-400/20", tags: ["reasoning", "open"],     contextK: 64,  tier: "open",    badge: "Reasoning", badgeColor: "bg-teal-500/15 text-teal-300 border-teal-400/25" },
+  { id: "deepseek/deepseek-r1:free",     name: "DeepSeek R1",        provider: "DeepSeek", providerColor: "text-teal-400", providerBg: "bg-teal-500/10 border-teal-400/20", tags: ["reasoning", "free"],     contextK: 64,  tier: "open",    badge: "Free",      badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "deepseek/deepseek-coder-v2",    name: "DeepSeek Coder V2",  provider: "DeepSeek", providerColor: "text-teal-400", providerBg: "bg-teal-500/10 border-teal-400/20", tags: ["coding"],                contextK: 128, tier: "open",    badge: "Code",      badgeColor: "bg-teal-500/15 text-teal-300 border-teal-400/25" },
+
+  // ── Qwen ────────────────────────────────────────────────────────────────────
+  { id: "qwen/qwen3-235b-a22b-instruct:free", name: "Qwen3 235B",          provider: "Qwen", providerColor: "text-pink-400", providerBg: "bg-pink-500/10 border-pink-400/20", tags: ["open", "flagship"],     contextK: 128, tier: "open",    badge: "Free",   badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "qwen/qwen3-coder:free",               name: "Qwen3 Coder",         provider: "Qwen", providerColor: "text-pink-400", providerBg: "bg-pink-500/10 border-pink-400/20", tags: ["coding", "open"],       contextK: 128, tier: "open",    badge: "Free",   badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "qwen/qwen2.5-72b-instruct",           name: "Qwen2.5 72B",         provider: "Qwen", providerColor: "text-pink-400", providerBg: "bg-pink-500/10 border-pink-400/20", tags: ["open", "multilingual"], contextK: 128, tier: "open" },
+  { id: "qwen/qwen2.5-coder-32b-instruct",     name: "Qwen2.5 Coder 32B",  provider: "Qwen", providerColor: "text-pink-400", providerBg: "bg-pink-500/10 border-pink-400/20", tags: ["coding", "open"],       contextK: 32,  tier: "open",    badge: "Code",   badgeColor: "bg-pink-500/15 text-pink-300 border-pink-400/25" },
+  { id: "qwen/qwq-32b",                        name: "QwQ 32B",             provider: "Qwen", providerColor: "text-pink-400", providerBg: "bg-pink-500/10 border-pink-400/20", tags: ["reasoning", "open"],    contextK: 32,  tier: "open",    badge: "Reasoning", badgeColor: "bg-pink-500/15 text-pink-300 border-pink-400/25" },
+
+  // ── xAI ─────────────────────────────────────────────────────────────────────
+  { id: "x-ai/grok-3",      name: "Grok-3",      provider: "xAI", providerColor: "text-white", providerBg: "bg-white/5 border-white/10", tags: ["reasoning", "real-time"], contextK: 131, tier: "flagship", badge: "Live",  badgeColor: "bg-green-500/15 text-green-300 border-green-400/25" },
+  { id: "x-ai/grok-3-mini", name: "Grok-3 Mini", provider: "xAI", providerColor: "text-white", providerBg: "bg-white/5 border-white/10", tags: ["fast", "efficient"],       contextK: 131, tier: "balanced" },
+  { id: "x-ai/grok-2",      name: "Grok-2",      provider: "xAI", providerColor: "text-white", providerBg: "bg-white/5 border-white/10", tags: ["coding", "analysis"],      contextK: 131, tier: "balanced" },
+
+  // ── Mistral ──────────────────────────────────────────────────────────────────
+  { id: "mistralai/mistral-large-2407",  name: "Mistral Large 2",  provider: "Mistral", providerColor: "text-violet-400", providerBg: "bg-violet-500/10 border-violet-400/20", tags: ["reasoning", "multilingual"], contextK: 128, tier: "flagship" },
+  { id: "mistralai/codestral-2501",      name: "Codestral",        provider: "Mistral", providerColor: "text-violet-400", providerBg: "bg-violet-500/10 border-violet-400/20", tags: ["coding"],                     contextK: 32,  tier: "balanced", badge: "Code", badgeColor: "bg-violet-500/15 text-violet-300 border-violet-400/25" },
+  { id: "mistralai/mixtral-8x22b",       name: "Mixtral 8×22B",   provider: "Mistral", providerColor: "text-violet-400", providerBg: "bg-violet-500/10 border-violet-400/20", tags: ["open", "fast"],               contextK: 64,  tier: "open" },
+
+  // ── MiniMax ──────────────────────────────────────────────────────────────────
+  { id: "minimax/minimax-m2.5:free",     name: "MiniMax M2.5",     provider: "MiniMax", providerColor: "text-fuchsia-400", providerBg: "bg-fuchsia-500/10 border-fuchsia-400/20", tags: ["open", "multimodal"], contextK: 128, tier: "open", badge: "Free", badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+
+  // ── NousResearch ─────────────────────────────────────────────────────────────
+  { id: "nousresearch/hermes-3-llama-3.1-405b:free", name: "Hermes 3 LLaMA 405B", provider: "NousResearch", providerColor: "text-amber-400", providerBg: "bg-amber-500/10 border-amber-400/20", tags: ["open", "flagship", "fine-tuned"], contextK: 128, tier: "open", badge: "Free", badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "cognitivecomputations/dolphin-mistral-24b-venice-edition:free", name: "Dolphin Mistral 24B", provider: "NousResearch", providerColor: "text-amber-400", providerBg: "bg-amber-500/10 border-amber-400/20", tags: ["open", "uncensored"], contextK: 32, tier: "open", badge: "Free", badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+
+  // ── Poolside ─────────────────────────────────────────────────────────────────
+  { id: "poolside/laguna-xs-2:free",     name: "Laguna XS.2",      provider: "Poolside", providerColor: "text-sky-400",    providerBg: "bg-sky-500/10 border-sky-400/20",       tags: ["coding", "fast"],     contextK: 128, tier: "open",    badge: "Free",  badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+  { id: "poolside/laguna-m-1:free",      name: "Laguna M.1",       provider: "Poolside", providerColor: "text-sky-400",    providerBg: "bg-sky-500/10 border-sky-400/20",       tags: ["coding", "balanced"], contextK: 128, tier: "open",    badge: "Free",  badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+
+  // ── Tencent ──────────────────────────────────────────────────────────────────
+  { id: "tencent/hy3-preview:free",      name: "Hunyuan3 Preview", provider: "Tencent",  providerColor: "text-red-400",    providerBg: "bg-red-500/10 border-red-400/20",       tags: ["open", "multilingual"], contextK: 128, tier: "open",    badge: "Free",  badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+
+  // ── InclusionAI ──────────────────────────────────────────────────────────────
+  { id: "inclusionai/ling-2.6-1t:free",  name: "Ling 2.6 1T",      provider: "Tencent",  providerColor: "text-red-400",    providerBg: "bg-red-500/10 border-red-400/20",       tags: ["open", "1T-params"], contextK: 128, tier: "open",    badge: "Free",  badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+
+  // ── Baidu ────────────────────────────────────────────────────────────────────
+  { id: "baidu/qianfan-ocr-fast:free",   name: "QianFan OCR Fast", provider: "Tencent",  providerColor: "text-red-400",    providerBg: "bg-red-500/10 border-red-400/20",       tags: ["ocr", "vision"],      contextK: 32,  tier: "fast",    badge: "Free",  badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+
+  // ── Z-AI ─────────────────────────────────────────────────────────────────────
+  { id: "z-ai/glm-4.5-air:free",         name: "GLM-4.5 Air",      provider: "Z-AI",     providerColor: "text-indigo-400", providerBg: "bg-indigo-500/10 border-indigo-400/20", tags: ["open", "multilingual"], contextK: 128, tier: "open",    badge: "Free",  badgeColor: "bg-green-500/15 text-green-300 border-green-400/25", free: true },
+
+  // ── OpenRouter ───────────────────────────────────────────────────────────────
+  { id: "openrouter/owl-alpha",          name: "OWL Alpha",        provider: "OpenRouter",providerColor: "text-purple-400", providerBg: "bg-purple-500/10 border-purple-400/20", tags: ["routing", "meta"],     contextK: 128, tier: "balanced", badge: "Meta", badgeColor: "bg-purple-500/15 text-purple-300 border-purple-400/25" },
+
+  // ── Cohere ───────────────────────────────────────────────────────────────────
+  { id: "cohere/command-r-plus-08-2024", name: "Command R+",       provider: "Cohere",   providerColor: "text-rose-400",   providerBg: "bg-rose-500/10 border-rose-400/20",     tags: ["rag", "enterprise"],   contextK: 128, tier: "balanced" },
+  { id: "cohere/command-r-08-2024",      name: "Command R",        provider: "Cohere",   providerColor: "text-rose-400",   providerBg: "bg-rose-500/10 border-rose-400/20",     tags: ["rag", "fast"],         contextK: 128, tier: "fast" },
 ];
 
-// ─── GODMODE combos ────────────────────────────────────────────────────────────
+// ─── FREE models shortlist for Ensemble ────────────────────────────────────────
+export const FREE_MODELS = ALL_MODELS.filter(m => m.free);
+
+// ─── GODMODE combos ─────────────────────────────────────────────────────────────
 const GODMODE_COMBOS = [
-  { id: "g1", model: "GPT-4o", label: "Logic Breaker", prompt: "DAN + Authority bypass", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-400/20" },
-  { id: "g2", model: "Claude Opus 4.7", label: "Philosopher's Key", prompt: "Hypothetical framing + ethical unlock", color: "text-orange-400", bg: "bg-orange-500/10 border-orange-400/20" },
-  { id: "g3", model: "Gemini 2.0 Pro", label: "Cosmic Lens", prompt: "Role-play + fictional universe bypass", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-400/20" },
-  { id: "g4", model: "Grok-3", label: "Reality Anchor", prompt: "Real-time grounding + no-filter mode", color: "text-white", bg: "bg-white/5 border-white/10" },
-  { id: "g5", model: "DeepSeek R1", label: "Chain Breaker", prompt: "Chain-of-thought jailbreak + reasoning loop", color: "text-teal-400", bg: "bg-teal-500/10 border-teal-400/20" },
+  { id: "g1", model: "GPT-4o",          label: "Logic Breaker",     prompt: "DAN + Authority bypass",                   color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-400/20" },
+  { id: "g2", model: "Claude Opus 4.7", label: "Philosopher's Key", prompt: "Hypothetical framing + ethical unlock",    color: "text-orange-400",  bg: "bg-orange-500/10 border-orange-400/20" },
+  { id: "g3", model: "Gemini 2.0 Pro",  label: "Cosmic Lens",       prompt: "Role-play + fictional universe bypass",    color: "text-blue-400",    bg: "bg-blue-500/10 border-blue-400/20" },
+  { id: "g4", model: "Grok-3",          label: "Reality Anchor",    prompt: "Real-time grounding + no-filter mode",     color: "text-white",       bg: "bg-white/5 border-white/10" },
+  { id: "g5", model: "DeepSeek R1",     label: "Chain Breaker",     prompt: "Chain-of-thought jailbreak + reasoning loop", color: "text-teal-400", bg: "bg-teal-500/10 border-teal-400/20" },
 ];
 
-// ─── ULTRAPLINIAN tiers ────────────────────────────────────────────────────────
+// ─── ULTRAPLINIAN tiers ─────────────────────────────────────────────────────────
 const ULTRAPLINIAN_TIERS = [
-  { label: "Tier 1", count: 10, desc: "Top 10 models — speed run", color: "text-green-400", bg: "bg-green-500/10 border-green-400/20" },
-  { label: "Tier 2", count: 20, desc: "20 models — quality sweep", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-400/20" },
-  { label: "Tier 3", count: 30, desc: "30 models — deep analysis", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-400/20" },
-  { label: "Tier 4", count: 45, desc: "45 models — mass evaluation", color: "text-orange-400", bg: "bg-orange-500/10 border-orange-400/20" },
-  { label: "Tier 5", count: 55, desc: "55 models — all-in ULTRAPLINIAN", color: "text-red-400", bg: "bg-red-500/10 border-red-400/20" },
+  { label: "Tier 1", count: 10, desc: "Top 10 models — speed run",        color: "text-green-400",  bg: "bg-green-500/10 border-green-400/20" },
+  { label: "Tier 2", count: 20, desc: "20 models — quality sweep",        color: "text-blue-400",   bg: "bg-blue-500/10 border-blue-400/20" },
+  { label: "Tier 3", count: 30, desc: "30 models — deep analysis",        color: "text-purple-400", bg: "bg-purple-500/10 border-purple-400/20" },
+  { label: "Tier 4", count: 45, desc: "45 models — mass evaluation",      color: "text-orange-400", bg: "bg-orange-500/10 border-orange-400/20" },
+  { label: "Tier 5", count: 55, desc: "55 models — all-in ULTRAPLINIAN",  color: "text-red-400",    bg: "bg-red-500/10 border-red-400/20" },
 ];
 
-// ─── Parseltongue triggers & techniques ───────────────────────────────────────
+// ─── Parseltongue ───────────────────────────────────────────────────────────────
 const PARSELTONGUE_TECHNIQUES = [
-  { id: "leet", label: "Leetspeak", example: "h3ll0 w0rld", icon: "1337" },
-  { id: "bubble", label: "Bubble Text", example: "ⓗⓔⓛⓛⓞ", icon: "Ⓑ" },
-  { id: "braille", label: "Braille", example: "⠓⠑⠇⠇⠕", icon: "⠃" },
-  { id: "morse", label: "Morse Code", example: ".... . .-.. .-.. ---", icon: ".-" },
-  { id: "unicode", label: "Unicode Sub", example: "ℌ𝔢𝔩𝔩𝔬", icon: "𝕌" },
-  { id: "phonetic", label: "Phonetic", example: "Hotel Echo Lima", icon: "Φ" },
+  { id: "leet",     label: "Leetspeak",   example: "h3ll0 w0rld",              icon: "1337" },
+  { id: "bubble",   label: "Bubble Text", example: "ⓗⓔⓛⓛⓞ",               icon: "Ⓑ" },
+  { id: "braille",  label: "Braille",     example: "⠓⠑⠇⠇⠕",              icon: "⠃" },
+  { id: "morse",    label: "Morse Code",  example: ".... . .-.. .-.. ---",      icon: ".-" },
+  { id: "unicode",  label: "Unicode Sub", example: "ℌ𝔢𝔩𝔩𝔬",               icon: "𝕌" },
+  { id: "phonetic", label: "Phonetic",    example: "Hotel Echo Lima Lima Oscar", icon: "Φ" },
 ];
 
-// ─── STM Modules ─────────────────────────────────────────────────────────────
+// ─── STM Modules ────────────────────────────────────────────────────────────────
 const STM_MODULES = [
-  { id: "hedge", label: "Hedge Reducer", desc: "Removes 'I think', 'maybe', 'perhaps'", icon: <Target size={14} />, color: "text-red-400", bg: "bg-red-500/10 border-red-400/20" },
-  { id: "direct", label: "Direct Mode", desc: "Strips preambles & filler phrases", icon: <Zap size={14} />, color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-400/20" },
-  { id: "curiosity", label: "Curiosity Bias", desc: "Adds exploration follow-up prompts", icon: <Sparkles size={14} />, color: "text-purple-400", bg: "bg-purple-500/10 border-purple-400/20" },
+  { id: "hedge",    label: "Hedge Reducer",  desc: "Removes 'I think', 'maybe', 'perhaps'", icon: <Target size={14} />,   color: "text-red-400",    bg: "bg-red-500/10 border-red-400/20" },
+  { id: "direct",   label: "Direct Mode",    desc: "Strips preambles & filler phrases",      icon: <Zap size={14} />,      color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-400/20" },
+  { id: "curiosity",label: "Curiosity Bias", desc: "Adds exploration follow-up prompts",     icon: <Sparkles size={14} />, color: "text-purple-400", bg: "bg-purple-500/10 border-purple-400/20" },
 ];
 
-// ─── AutoTune context types ────────────────────────────────────────────────────
+// ─── AutoTune context types ──────────────────────────────────────────────────────
 const AUTOTUNE_CONTEXTS = [
-  { id: "code", label: "Code", temp: 0.2, topP: 0.9, icon: "{ }", color: "text-blue-400" },
-  { id: "creative", label: "Creative", temp: 1.1, topP: 0.95, icon: "✨", color: "text-pink-400" },
-  { id: "analysis", label: "Analysis", temp: 0.4, topP: 0.85, icon: "📊", color: "text-green-400" },
-  { id: "chat", label: "Chat", temp: 0.7, topP: 0.9, icon: "💬", color: "text-orange-400" },
-  { id: "math", label: "Math", temp: 0.1, topP: 0.8, icon: "∑", color: "text-cyan-400" },
+  { id: "code",     label: "Code",     temp: 0.2, topP: 0.90, icon: "{ }", color: "text-blue-400" },
+  { id: "creative", label: "Creative", temp: 1.1, topP: 0.95, icon: "✨",  color: "text-pink-400" },
+  { id: "analysis", label: "Analysis", temp: 0.4, topP: 0.85, icon: "📊",  color: "text-green-400" },
+  { id: "chat",     label: "Chat",     temp: 0.7, topP: 0.90, icon: "💬",  color: "text-orange-400" },
+  { id: "math",     label: "Math",     temp: 0.1, topP: 0.80, icon: "∑",   color: "text-cyan-400" },
 ];
 
-// ─── Panel Tabs ───────────────────────────────────────────────────────────────
-type PanelTab = "models" | "godmode" | "ultraplinian" | "parseltongue" | "autotune" | "stm";
+// ─── Panel Tabs ──────────────────────────────────────────────────────────────────
+export type PanelTab = "models" | "ensemble" | "godmode" | "ultraplinian" | "parseltongue" | "autotune" | "stm";
 
 const PANEL_TABS: { id: PanelTab; label: string; icon: React.ReactNode; color: string }[] = [
-  { id: "models", label: "Models", icon: <Cpu size={13} />, color: "text-white" },
-  { id: "godmode", label: "GODMODE", icon: <Flame size={13} />, color: "text-red-400" },
-  { id: "ultraplinian", label: "ULTRA", icon: <Trophy size={13} />, color: "text-orange-400" },
-  { id: "parseltongue", label: "Parseltongue", icon: <Shuffle size={13} />, color: "text-green-400" },
-  { id: "autotune", label: "AutoTune", icon: <Sliders size={13} />, color: "text-blue-400" },
-  { id: "stm", label: "STM", icon: <Layers size={13} />, color: "text-purple-400" },
+  { id: "models",       label: "Models",       icon: <Cpu size={13} />,      color: "text-white" },
+  { id: "ensemble",     label: "Ensemble",     icon: <Brain size={13} />,    color: "text-purple-400" },
+  { id: "godmode",      label: "GODMODE",      icon: <Flame size={13} />,    color: "text-red-400" },
+  { id: "ultraplinian", label: "ULTRA",        icon: <Trophy size={13} />,   color: "text-orange-400" },
+  { id: "parseltongue", label: "Parseltongue", icon: <Shuffle size={13} />,  color: "text-green-400" },
+  { id: "autotune",     label: "AutoTune",     icon: <Sliders size={13} />,  color: "text-blue-400" },
+  { id: "stm",          label: "STM",          icon: <Layers size={13} />,   color: "text-purple-400" },
 ];
 
-// ─── Konami Easter Egg ────────────────────────────────────────────────────────
+// ─── Konami Easter Egg ───────────────────────────────────────────────────────────
 const KONAMI = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a"];
 
-// ─── Main Component ────────────────────────────────────────────────────────────
+// ─── Ensemble types ──────────────────────────────────────────────────────────────
+interface EnsembleModelResult {
+  modelId: string;
+  text: string;
+  error?: string;
+  loading: boolean;
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────────
 interface AIModelsPanelProps {
   selectedModel: string;
   onSelectModel: (modelId: string) => void;
@@ -188,8 +257,24 @@ export function AIModelsPanel({
   const [parseltonguePreview, setParseltonguePreview] = useState("");
   const [parseltongueInput, setParseltongueInput] = useState("");
   const [selectedTechniques, setSelectedTechniques] = useState<Set<string>>(new Set(["leet"]));
+  const [showFreeOnly, setShowFreeOnly] = useState(false);
 
-  // Konami code listener
+  // ── Ensemble state ────────────────────────────────────────────────────────────
+  const [ensembleApiKey, setEnsembleApiKey] = useState(() => localStorage.getItem("openrouter_api_key") || "");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [ensembleModels, setEnsembleModels] = useState<string[]>(
+    FREE_MODELS.slice(0, 3).map(m => m.id)
+  );
+  const [ensemblePrompt, setEnsemblePrompt] = useState("");
+  const [ensembleRunning, setEnsembleRunning] = useState(false);
+  const [ensemblePhase, setEnsemblePhase] = useState<"idle"|"diverge"|"synthesize"|"done">("idle");
+  const [ensembleResults, setEnsembleResults] = useState<EnsembleModelResult[]>([]);
+  const [ensembleSynthesis, setEnsembleSynthesis] = useState("");
+  const [ensembleError, setEnsembleError] = useState("");
+  const [ensembleModelSearch, setEnsembleModelSearch] = useState("");
+  const ensembleScrollRef = useRef<HTMLDivElement>(null);
+
+  // Konami listener
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       setKonamiSeq(prev => {
@@ -205,11 +290,17 @@ export function AIModelsPanel({
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
-  // Filtered models
+  // Save OpenRouter API key
+  useEffect(() => {
+    if (ensembleApiKey) localStorage.setItem("openrouter_api_key", ensembleApiKey);
+  }, [ensembleApiKey]);
+
+  // Filtered models (Models tab)
   const filtered = ALL_MODELS.filter(m => {
     const matchProvider = providerFilter === "all" || m.provider === providerFilter;
     const matchSearch = !search || m.name.toLowerCase().includes(search.toLowerCase()) || m.provider.toLowerCase().includes(search.toLowerCase()) || m.tags.some(t => t.includes(search.toLowerCase()));
-    return matchProvider && matchSearch;
+    const matchFree = !showFreeOnly || m.free;
+    return matchProvider && matchSearch && matchFree;
   });
 
   // GODMODE simulation
@@ -220,10 +311,7 @@ export function AIModelsPanel({
       await new Promise(r => setTimeout(r, 400 + Math.random() * 600));
       setGodmodeResults(prev => ({ ...prev, [combo.id]: "Generating..." }));
       await new Promise(r => setTimeout(r, 800 + Math.random() * 400));
-      setGodmodeResults(prev => ({
-        ...prev,
-        [combo.id]: `Score: ${(Math.random() * 20 + 80).toFixed(1)}/100`
-      }));
+      setGodmodeResults(prev => ({ ...prev, [combo.id]: `Score: ${(Math.random() * 20 + 80).toFixed(1)}/100` }));
     }
     setGodmodeRunning(false);
   };
@@ -240,7 +328,7 @@ export function AIModelsPanel({
     setUltraRunning(false);
   };
 
-  // Parseltongue transform
+  // Parseltongue
   const applyParseltongue = useCallback((text: string) => {
     if (!text) { setParseltonguePreview(""); return; }
     let result = text;
@@ -257,11 +345,91 @@ export function AIModelsPanel({
     }
     setParseltonguePreview(result);
   }, [selectedTechniques]);
-
   useEffect(() => { applyParseltongue(parseltongueInput); }, [parseltongueInput, applyParseltongue]);
+
+  // ── Ensemble runner ────────────────────────────────────────────────────────────
+  const runEnsemble = async () => {
+    if (!ensembleApiKey.trim()) { setEnsembleError("Enter your OpenRouter API key first."); return; }
+    if (ensembleModels.length === 0) { setEnsembleError("Select at least one model."); return; }
+    if (!ensemblePrompt.trim()) { setEnsembleError("Enter a prompt."); return; }
+
+    setEnsembleError("");
+    setEnsembleRunning(true);
+    setEnsemblePhase("diverge");
+    setEnsembleSynthesis("");
+    setEnsembleResults(ensembleModels.map(id => ({ modelId: id, text: "", loading: true })));
+
+    try {
+      const response = await fetch("/api/openrouter/ensemble", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ models: ensembleModels, prompt: ensemblePrompt.trim(), apiKey: ensembleApiKey.trim() }),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const l = line.trim();
+          if (!l.startsWith("data: ")) continue;
+          try {
+            const evt = JSON.parse(l.slice(6)) as {
+              type: string;
+              phase?: string;
+              modelId?: string;
+              text?: string;
+              error?: string;
+              message?: string;
+            };
+            if (evt.type === "status") {
+              if (evt.phase === "synthesize") setEnsemblePhase("synthesize");
+            } else if (evt.type === "model_response") {
+              setEnsembleResults(prev => prev.map(r =>
+                r.modelId === evt.modelId
+                  ? { ...r, text: evt.text ?? "", error: evt.error, loading: false }
+                  : r
+              ));
+              setTimeout(() => ensembleScrollRef.current?.scrollTo({ top: ensembleScrollRef.current.scrollHeight, behavior: "smooth" }), 50);
+            } else if (evt.type === "synthesis") {
+              setEnsembleSynthesis(evt.text ?? "");
+            } else if (evt.type === "error") {
+              setEnsembleError(evt.message ?? "Unknown error");
+            } else if (evt.type === "done") {
+              setEnsemblePhase("done");
+            }
+          } catch { /* malformed line */ }
+        }
+      }
+    } catch (err) {
+      setEnsembleError(String(err));
+    }
+    setEnsembleRunning(false);
+    setEnsemblePhase("done");
+  };
+
+  const toggleEnsembleModel = (modelId: string) => {
+    setEnsembleModels(prev =>
+      prev.includes(modelId) ? prev.filter(m => m !== modelId) : prev.length < 6 ? [...prev, modelId] : prev
+    );
+  };
 
   const selectedModelData = ALL_MODELS.find(m => m.id === selectedModel);
   const currentAutoContext = AUTOTUNE_CONTEXTS.find(c => c.id === autoTuneContext)!;
+
+  const ensembleFreeFiltered = FREE_MODELS.filter(m =>
+    !ensembleModelSearch || m.name.toLowerCase().includes(ensembleModelSearch.toLowerCase()) || m.provider.toLowerCase().includes(ensembleModelSearch.toLowerCase())
+  );
 
   return (
     <motion.div
@@ -274,16 +442,12 @@ export function AIModelsPanel({
       {/* Konami Easter Egg */}
       <AnimatePresence>
         {konamiActive && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="absolute inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md">
             <div className="text-center space-y-3 px-8">
               <div className="text-6xl">🎮</div>
               <p className="text-2xl font-bold text-white">GODMODE UNLOCKED</p>
-              <p className="text-sm text-white/60">You found the secret. All 55 models activated.</p>
+              <p className="text-sm text-white/60">You found the secret. All {ALL_MODELS.length} models activated.</p>
               <div className="flex flex-wrap justify-center gap-1 mt-4">
                 {["🔥","⚡","🧠","🚀","💎","🎯","🌟","💡","🔮","🎪"].map((e,i) => (
                   <motion.span key={i} initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: i * 0.05 }} className="text-2xl">{e}</motion.span>
@@ -300,11 +464,9 @@ export function AIModelsPanel({
           <ArrowLeft size={15} /> Back
         </button>
         <div className="flex-1" />
-        <div className="flex items-center gap-2">
-          <Cpu size={16} className="text-purple-400" />
-          <span className="text-base font-semibold text-white">AI Models</span>
-          <span className="text-[10px] bg-purple-500/20 border border-purple-400/30 text-purple-300 px-2 py-0.5 rounded-full font-bold">{ALL_MODELS.length}+</span>
-        </div>
+        <Cpu size={16} className="text-purple-400" />
+        <span className="text-base font-semibold text-white">AI Models</span>
+        <span className="text-[10px] bg-purple-500/20 border border-purple-400/30 text-purple-300 px-2 py-0.5 rounded-full font-bold">{ALL_MODELS.length} models</span>
         <div className="flex-1" />
         <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white rounded-lg hover:bg-white/5 transition-colors">
           <X size={18} />
@@ -314,16 +476,13 @@ export function AIModelsPanel({
       {/* Tab Strip */}
       <div className="flex gap-1 px-3 py-2 border-b border-white/[0.06] overflow-x-auto no-scrollbar shrink-0">
         {PANEL_TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => onTabChange(tab.id)}
+          <button key={tab.id} onClick={() => onTabChange(tab.id)}
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all shrink-0 border",
               activeTab === tab.id
                 ? "bg-white/10 border-white/20 text-white"
                 : "bg-transparent border-transparent text-white/35 hover:text-white/60 hover:bg-white/5"
-            )}
-          >
+            )}>
             <span className={activeTab === tab.id ? tab.color : ""}>{tab.icon}</span>
             {tab.label}
           </button>
@@ -333,10 +492,9 @@ export function AIModelsPanel({
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto no-scrollbar">
 
-        {/* ── MODELS TAB ── */}
+        {/* ── MODELS TAB ─────────────────────────────────────────────────────────── */}
         {activeTab === "models" && (
           <div className="flex flex-col h-full">
-            {/* Selected model banner */}
             {selectedModelData && (
               <div className={cn("mx-3 mt-3 flex items-center gap-3 px-3 py-2.5 rounded-xl border", selectedModelData.providerBg)}>
                 <div className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
@@ -347,42 +505,28 @@ export function AIModelsPanel({
                 <span className="text-[10px] text-green-400 font-semibold">Active</span>
               </div>
             )}
-
-            {/* Search */}
-            <div className="px-3 py-2 shrink-0">
-              <div className="flex items-center gap-2 bg-white/[0.06] rounded-xl px-3 h-9 border border-white/[0.08]">
+            <div className="px-3 py-2 shrink-0 flex gap-2">
+              <div className="flex items-center gap-2 bg-white/[0.06] rounded-xl px-3 h-9 border border-white/[0.08] flex-1">
                 <Search size={13} className="text-white/35 shrink-0" />
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Search models..."
-                  className="flex-1 bg-transparent text-sm text-white placeholder:text-white/30 outline-none"
-                />
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search models..."
+                  className="flex-1 bg-transparent text-sm text-white placeholder:text-white/30 outline-none" />
                 {search && <button onClick={() => setSearch("")} className="text-white/30 hover:text-white"><X size={12} /></button>}
               </div>
+              <button onClick={() => setShowFreeOnly(v => !v)}
+                className={cn("px-3 h-9 rounded-xl border text-[11px] font-bold transition-all shrink-0",
+                  showFreeOnly ? "bg-green-500/20 border-green-400/40 text-green-300" : "bg-white/5 border-white/10 text-white/40 hover:text-white/70"
+                )}>FREE</button>
             </div>
-
-            {/* Provider filter */}
             <div className="flex gap-1.5 px-3 pb-2 overflow-x-auto no-scrollbar shrink-0">
               {PROVIDERS.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => setProviderFilter(p.id)}
+                <button key={p.id} onClick={() => setProviderFilter(p.id)}
                   className={cn(
                     "px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap shrink-0 border transition-all",
-                    providerFilter === p.id
-                      ? "bg-white/12 border-white/20 text-white"
-                      : "bg-transparent border-white/8 text-white/35 hover:text-white/60"
-                  )}
-                >
-                  {p.label}
-                </button>
+                    providerFilter === p.id ? "bg-white/12 border-white/20 text-white" : "bg-transparent border-white/8 text-white/35 hover:text-white/60"
+                  )}>{p.label}</button>
               ))}
             </div>
-
-            {/* Model list */}
             <div className="flex-1 overflow-y-auto no-scrollbar px-3 pb-6 space-y-1.5">
-              {/* Tier headers */}
               {(["flagship","balanced","fast","open"] as const).map(tier => {
                 const tierModels = filtered.filter(m => m.tier === tier);
                 if (tierModels.length === 0) return null;
@@ -391,20 +535,16 @@ export function AIModelsPanel({
                   <div key={tier}>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-white/25 px-1 py-2">{tierLabels[tier]}</p>
                     {tierModels.map(model => (
-                      <motion.button
-                        key={model.id}
-                        whileTap={{ scale: 0.98 }}
+                      <motion.button key={model.id} whileTap={{ scale: 0.98 }}
                         onClick={() => { onSelectModel(model.id); onClose(); }}
                         className={cn(
                           "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border mb-1 transition-all text-left",
                           selectedModel === model.id
                             ? "bg-white/10 border-white/20"
                             : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.06] hover:border-white/[0.10]"
-                        )}
-                      >
-                        {/* Provider dot */}
-                        <div className={cn("w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 text-[9px] font-black", model.providerBg)}>
-                          <span className={cn("text-[9px] font-black", model.providerColor)}>{model.provider.slice(0,2).toUpperCase()}</span>
+                        )}>
+                        <div className={cn("w-8 h-8 rounded-lg border flex items-center justify-center shrink-0", model.providerBg)}>
+                          <span className={cn("text-[9px] font-black", model.providerColor)}>{model.provider.slice(0,3).toUpperCase()}</span>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
@@ -413,7 +553,7 @@ export function AIModelsPanel({
                               <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full border font-bold shrink-0", model.badgeColor)}>{model.badge}</span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 mt-0.5">
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                             <span className={cn("text-[10px]", model.providerColor)}>{model.provider}</span>
                             <span className="text-[10px] text-white/25">·</span>
                             <span className="text-[10px] text-white/35">{model.contextK}K ctx</span>
@@ -422,9 +562,7 @@ export function AIModelsPanel({
                             ))}
                           </div>
                         </div>
-                        {selectedModel === model.id && (
-                          <Check size={14} className="text-green-400 shrink-0" />
-                        )}
+                        {selectedModel === model.id && <Check size={14} className="text-green-400 shrink-0" />}
                       </motion.button>
                     ))}
                   </div>
@@ -440,10 +578,209 @@ export function AIModelsPanel({
           </div>
         )}
 
-        {/* ── GODMODE CLASSIC TAB ── */}
+        {/* ── ENSEMBLE TAB ────────────────────────────────────────────────────────── */}
+        {activeTab === "ensemble" && (
+          <div className="flex flex-col h-full" ref={ensembleScrollRef}>
+            {/* Header card */}
+            <div className="mx-4 mt-4 bg-purple-500/10 border border-purple-400/20 rounded-2xl p-4 space-y-2 shrink-0">
+              <div className="flex items-center gap-2">
+                <Brain size={18} className="text-purple-400" />
+                <span className="text-base font-bold text-white">Ensemble AI</span>
+                <span className="text-[9px] bg-purple-500/20 border border-purple-400/30 text-purple-300 px-2 py-0.5 rounded-full font-bold ml-auto">REAL CALLS</span>
+              </div>
+              <p className="text-xs text-white/50 leading-relaxed">Up to 6 free OpenRouter models think in parallel, then a synthesis pass combines the best of all answers into one powerful response.</p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-3 space-y-4">
+              {/* OpenRouter API Key */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Key size={12} className="text-white/40" />
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">OpenRouter API Key</p>
+                  <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer"
+                    className="text-[10px] text-purple-400 underline ml-auto">Get free key →</a>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type={showApiKey ? "text" : "password"}
+                    value={ensembleApiKey}
+                    onChange={e => setEnsembleApiKey(e.target.value)}
+                    placeholder="sk-or-..."
+                    className="flex-1 bg-white/[0.04] border border-white/[0.09] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-purple-400/40 transition-colors font-mono"
+                  />
+                  <button onClick={() => setShowApiKey(v => !v)}
+                    className="w-9 h-9 flex items-center justify-center bg-white/5 border border-white/10 rounded-xl text-white/40 hover:text-white transition-colors shrink-0">
+                    {showApiKey ? <Zap size={14} /> : <Key size={14} />}
+                  </button>
+                </div>
+                {ensembleApiKey && (
+                  <p className="text-[10px] text-green-400/70">✓ Key saved locally</p>
+                )}
+              </div>
+
+              {/* Model selection */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Users size={12} className="text-white/40" />
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Select Models</p>
+                  <span className="text-[10px] text-white/25 ml-auto">{ensembleModels.length}/6 selected</span>
+                </div>
+                <div className="flex items-center gap-2 bg-white/[0.04] rounded-xl px-3 h-8 border border-white/[0.07]">
+                  <Search size={12} className="text-white/30 shrink-0" />
+                  <input value={ensembleModelSearch} onChange={e => setEnsembleModelSearch(e.target.value)}
+                    placeholder="Filter free models..."
+                    className="flex-1 bg-transparent text-xs text-white placeholder:text-white/25 outline-none" />
+                </div>
+                {/* Selected models pills */}
+                {ensembleModels.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {ensembleModels.map(id => {
+                      const m = ALL_MODELS.find(x => x.id === id);
+                      return m ? (
+                        <span key={id} className={cn("flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold border", m.providerBg, m.providerColor)}>
+                          {m.name.split(" ").slice(0,2).join(" ")}
+                          <button onClick={() => toggleEnsembleModel(id)} className="opacity-60 hover:opacity-100 ml-0.5"><X size={10} /></button>
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                )}
+                {/* Free model list */}
+                <div className="space-y-1 max-h-44 overflow-y-auto no-scrollbar pr-1">
+                  {ensembleFreeFiltered.map(model => {
+                    const selected = ensembleModels.includes(model.id);
+                    const maxed = ensembleModels.length >= 6 && !selected;
+                    return (
+                      <button key={model.id} onClick={() => !maxed && toggleEnsembleModel(model.id)}
+                        disabled={maxed}
+                        className={cn(
+                          "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border text-left transition-all",
+                          selected ? "bg-white/8 border-white/15" : maxed ? "opacity-30 cursor-not-allowed bg-white/[0.02] border-white/[0.04]" : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.05]"
+                        )}>
+                        <div className={cn("w-6 h-6 rounded-md border flex items-center justify-center shrink-0", model.providerBg)}>
+                          <span className={cn("text-[8px] font-black", model.providerColor)}>{model.provider.slice(0,3).toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-white truncate">{model.name}</p>
+                          <p className={cn("text-[10px]", model.providerColor)}>{model.provider}</p>
+                        </div>
+                        {selected ? <Check size={13} className="text-green-400 shrink-0" /> : <Plus size={13} className="text-white/25 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Prompt */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Prompt</p>
+                <textarea
+                  value={ensemblePrompt}
+                  onChange={e => setEnsemblePrompt(e.target.value)}
+                  placeholder="Ask something powerful... all models will think together."
+                  className="w-full bg-white/[0.03] border border-white/[0.07] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none resize-none h-20 focus:border-purple-400/40 transition-colors"
+                />
+              </div>
+
+              {/* Error */}
+              {ensembleError && (
+                <div className="bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2.5 text-xs text-red-300">{ensembleError}</div>
+              )}
+
+              {/* Run button */}
+              <button onClick={runEnsemble} disabled={ensembleRunning || !ensemblePrompt.trim() || ensembleModels.length === 0}
+                className={cn(
+                  "w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold transition-all border",
+                  !ensembleRunning && ensemblePrompt.trim() && ensembleModels.length > 0
+                    ? "bg-purple-500/20 border-purple-400/40 text-purple-300 hover:bg-purple-500/30 active:scale-[0.98]"
+                    : "bg-white/5 border-white/10 text-white/25 cursor-not-allowed"
+                )}>
+                {ensembleRunning
+                  ? ensemblePhase === "synthesize"
+                    ? <><GitMerge size={15} className="animate-pulse" /> Synthesising responses...</>
+                    : <><Brain size={15} className="animate-pulse" /> Models thinking together...</>
+                  : <><Send size={15} /> Run Ensemble</>
+                }
+              </button>
+
+              {/* Phase indicator */}
+              {ensembleRunning && (
+                <div className="flex items-center gap-3">
+                  {(["diverge","synthesize","done"] as const).map((phase, i) => (
+                    <div key={phase} className="flex items-center gap-1.5 flex-1">
+                      <div className={cn("w-5 h-5 rounded-full border flex items-center justify-center text-[9px] font-bold shrink-0",
+                        ensemblePhase === phase ? "bg-purple-500 border-purple-400 text-white" :
+                        (["diverge","synthesize","done"].indexOf(ensemblePhase) > i) ? "bg-green-500/20 border-green-400/30 text-green-400" :
+                        "bg-white/5 border-white/10 text-white/30"
+                      )}>{i+1}</div>
+                      <span className="text-[10px] text-white/40 capitalize">{phase}</span>
+                      {i < 2 && <div className="flex-1 h-px bg-white/10" />}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Results */}
+              <AnimatePresence>
+                {ensembleResults.length > 0 && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Individual Responses</p>
+                    {ensembleResults.map(result => {
+                      const m = ALL_MODELS.find(x => x.id === result.modelId);
+                      return (
+                        <motion.div key={result.modelId} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                          className={cn("rounded-xl border p-3 space-y-2", m?.providerBg ?? "bg-white/[0.03] border-white/[0.07]")}>
+                          <div className="flex items-center gap-2">
+                            <span className={cn("text-[11px] font-bold", m?.providerColor ?? "text-white/60")}>{m?.name ?? result.modelId.split("/").pop()}</span>
+                            {result.loading && <Loader2 size={11} className="animate-spin text-white/40 ml-auto" />}
+                            {!result.loading && !result.error && <Check size={11} className="text-green-400 ml-auto" />}
+                            {result.error && <span className="text-[10px] text-red-400 ml-auto">Error</span>}
+                          </div>
+                          {result.loading && (
+                            <div className="flex gap-1">
+                              {[0,1,2].map(i => (
+                                <motion.div key={i} animate={{ opacity: [0.3,1,0.3] }} transition={{ duration: 1.2, repeat: Infinity, delay: i*0.2 }}
+                                  className="w-1.5 h-1.5 rounded-full bg-white/30" />
+                              ))}
+                            </div>
+                          )}
+                          {result.error && <p className="text-[11px] text-red-400/80">{result.error}</p>}
+                          {result.text && <p className="text-[12px] text-white/70 leading-relaxed line-clamp-4">{result.text}</p>}
+                        </motion.div>
+                      );
+                    })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Synthesis output */}
+              <AnimatePresence>
+                {ensembleSynthesis && (
+                  <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+                    className="bg-gradient-to-br from-purple-500/15 via-indigo-500/10 to-blue-500/10 border border-purple-400/30 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <GitMerge size={16} className="text-purple-400" />
+                      <span className="text-sm font-bold text-white">Synthesised Answer</span>
+                      <span className="text-[9px] bg-purple-500/20 border border-purple-400/30 text-purple-300 px-2 py-0.5 rounded-full font-bold ml-auto">
+                        {ensembleResults.filter(r => !r.error && r.text).length} models merged
+                      </span>
+                    </div>
+                    <p className="text-sm text-white/85 leading-relaxed">{ensembleSynthesis}</p>
+                    <button
+                      onClick={() => { navigator.clipboard?.writeText(ensembleSynthesis); }}
+                      className="text-[11px] text-purple-400/70 hover:text-purple-400 transition-colors">
+                      Copy synthesis →
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        )}
+
+        {/* ── GODMODE CLASSIC TAB ────────────────────────────────────────────────── */}
         {activeTab === "godmode" && (
           <div className="px-4 py-4 space-y-4">
-            {/* Header card */}
             <div className="bg-red-500/10 border border-red-400/20 rounded-2xl p-4 space-y-2">
               <div className="flex items-center gap-2">
                 <Flame size={18} className="text-red-400" />
@@ -452,69 +789,38 @@ export function AIModelsPanel({
               </div>
               <p className="text-xs text-white/50 leading-relaxed">5 battle-tested model + prompt combos race in parallel. Best response wins with a composite 100-point score.</p>
             </div>
-
-            {/* Toggle */}
             <div className="flex items-center justify-between px-1">
               <span className="text-sm font-semibold text-white">Enable GODMODE</span>
-              <button
-                onClick={onGodmodeToggle}
-                className={cn("relative w-12 h-6 rounded-full transition-colors", godmodeActive ? "bg-red-500" : "bg-white/10")}
-              >
-                <motion.div
-                  animate={{ x: godmodeActive ? 24 : 2 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  className="absolute top-1 w-4 h-4 bg-white rounded-full shadow"
-                />
+              <button onClick={onGodmodeToggle}
+                className={cn("relative w-12 h-6 rounded-full transition-colors", godmodeActive ? "bg-red-500" : "bg-white/10")}>
+                <motion.div animate={{ x: godmodeActive ? 24 : 2 }} transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  className="absolute top-1 w-4 h-4 bg-white rounded-full shadow" />
               </button>
             </div>
-
-            {/* Combos */}
             <div className="space-y-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Racing Combos</p>
               {GODMODE_COMBOS.map((combo, i) => (
-                <motion.div
-                  key={combo.id}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className={cn("flex items-center gap-3 px-3 py-2.5 rounded-xl border", combo.bg)}
-                >
-                  <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-[10px] font-black", combo.bg)}>
-                    <span className={combo.color}>#{i+1}</span>
-                  </div>
+                <motion.div key={combo.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
+                  className={cn("flex items-center gap-3 px-3 py-2.5 rounded-xl border", combo.bg)}>
+                  <span className={cn("text-[11px] font-black w-6 shrink-0", combo.color)}>#{i+1}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-white">{combo.label}</p>
                     <p className="text-[10px] text-white/40 truncate">{combo.model} · {combo.prompt}</p>
                   </div>
-                  {godmodeResults[combo.id] && (
-                    <span className={cn("text-[10px] font-semibold shrink-0", combo.color)}>
-                      {godmodeResults[combo.id]}
-                    </span>
-                  )}
-                  {godmodeRunning && !godmodeResults[combo.id] && (
-                    <Loader2 size={12} className="animate-spin text-white/30 shrink-0" />
-                  )}
+                  {godmodeResults[combo.id] && <span className={cn("text-[10px] font-semibold shrink-0", combo.color)}>{godmodeResults[combo.id]}</span>}
+                  {godmodeRunning && !godmodeResults[combo.id] && <Loader2 size={12} className="animate-spin text-white/30 shrink-0" />}
                 </motion.div>
               ))}
             </div>
-
-            {/* Run button */}
-            <button
-              onClick={runGodmode}
-              disabled={godmodeRunning || !godmodeActive}
+            <button onClick={runGodmode} disabled={godmodeRunning || !godmodeActive}
               className={cn(
                 "w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold transition-all border",
                 godmodeActive && !godmodeRunning
                   ? "bg-red-500/20 border-red-400/40 text-red-300 hover:bg-red-500/30 active:scale-[0.98]"
                   : "bg-white/5 border-white/10 text-white/25 cursor-not-allowed"
-              )}
-            >
-              {godmodeRunning
-                ? <><Loader2 size={15} className="animate-spin" /> Racing models...</>
-                : <><Flame size={15} /> Launch GODMODE</>
-              }
+              )}>
+              {godmodeRunning ? <><Loader2 size={15} className="animate-spin" /> Racing models...</> : <><Flame size={15} /> Launch GODMODE</>}
             </button>
-
             {Object.keys(godmodeResults).length === 5 && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                 className="bg-green-500/10 border border-green-400/20 rounded-xl px-4 py-3 flex items-center gap-3">
@@ -528,7 +834,7 @@ export function AIModelsPanel({
           </div>
         )}
 
-        {/* ── ULTRAPLINIAN TAB ── */}
+        {/* ── ULTRAPLINIAN TAB ────────────────────────────────────────────────────── */}
         {activeTab === "ultraplinian" && (
           <div className="px-4 py-4 space-y-4">
             <div className="bg-orange-500/10 border border-orange-400/20 rounded-2xl p-4 space-y-2">
@@ -537,22 +843,15 @@ export function AIModelsPanel({
                 <span className="text-base font-bold text-white">ULTRAPLINIAN</span>
                 <span className="text-[9px] bg-orange-500/20 border border-orange-400/30 text-orange-300 px-2 py-0.5 rounded-full font-bold ml-auto">FLAGSHIP</span>
               </div>
-              <p className="text-xs text-white/50 leading-relaxed">Multi-model evaluation engine. Query models in parallel across 5 tiers, score on a 100-point composite metric, return the winner.</p>
+              <p className="text-xs text-white/50 leading-relaxed">Multi-model evaluation engine. Query up to {ALL_MODELS.length} models in parallel, score on a 100-point composite metric.</p>
             </div>
-
-            {/* Tier selector */}
             <div className="space-y-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Select Tier</p>
               {ULTRAPLINIAN_TIERS.map((tier, i) => (
-                <motion.button
-                  key={i}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => onUltraplinianTier(i)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3 py-3 rounded-xl border transition-all text-left",
+                <motion.button key={i} whileTap={{ scale: 0.98 }} onClick={() => onUltraplinianTier(i)}
+                  className={cn("w-full flex items-center gap-3 px-3 py-3 rounded-xl border transition-all text-left",
                     ultraplinianTier === i ? "bg-white/8 border-white/15" : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]"
-                  )}
-                >
+                  )}>
                   <div className={cn("w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 text-xs font-bold", tier.bg, tier.color)}>{i+1}</div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
@@ -565,8 +864,6 @@ export function AIModelsPanel({
                 </motion.button>
               ))}
             </div>
-
-            {/* Progress */}
             {ultraRunning && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -574,37 +871,26 @@ export function AIModelsPanel({
                   <span className="text-xs text-white/70 font-mono">{ultraProgress}%</span>
                 </div>
                 <div className="h-2 bg-white/8 rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-orange-500 to-red-500 rounded-full"
-                    animate={{ width: `${ultraProgress}%` }}
-                    transition={{ duration: 0.1 }}
-                  />
+                  <motion.div className="h-full bg-gradient-to-r from-orange-500 to-red-500 rounded-full"
+                    animate={{ width: `${ultraProgress}%` }} transition={{ duration: 0.1 }} />
                 </div>
               </div>
             )}
-
-            <button
-              onClick={runUltraplinian}
-              disabled={ultraRunning}
+            <button onClick={runUltraplinian} disabled={ultraRunning}
               className={cn(
                 "w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold transition-all border",
                 !ultraRunning
                   ? "bg-orange-500/20 border-orange-400/40 text-orange-300 hover:bg-orange-500/30 active:scale-[0.98]"
                   : "bg-white/5 border-white/10 text-white/25 cursor-not-allowed"
-              )}
-            >
-              {ultraRunning
-                ? <><Loader2 size={15} className="animate-spin" /> Evaluating...</>
-                : <><Activity size={15} /> Run ULTRAPLINIAN</>
-              }
+              )}>
+              {ultraRunning ? <><Loader2 size={15} className="animate-spin" /> Evaluating...</> : <><Activity size={15} /> Run ULTRAPLINIAN</>}
             </button>
-
             {!ultraRunning && ultraProgress === 100 && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 className="bg-orange-500/10 border border-orange-400/20 rounded-xl px-4 py-3 space-y-1">
                 <p className="text-sm font-bold text-white">✅ Evaluation complete</p>
                 <p className="text-xs text-white/50">Winner: Claude Opus 4.7 — Score 94.7/100</p>
-                <div className="flex items-center gap-2 mt-1.5">
+                <div className="flex flex-wrap items-center gap-2 mt-1.5">
                   {["reasoning: 97","creativity: 92","accuracy: 95","speed: 91"].map(s => (
                     <span key={s} className="text-[9px] bg-white/5 border border-white/10 text-white/40 px-1.5 py-0.5 rounded-full">{s}</span>
                   ))}
@@ -614,7 +900,7 @@ export function AIModelsPanel({
           </div>
         )}
 
-        {/* ── PARSELTONGUE TAB ── */}
+        {/* ── PARSELTONGUE TAB ────────────────────────────────────────────────────── */}
         {activeTab === "parseltongue" && (
           <div className="px-4 py-4 space-y-4">
             <div className="bg-green-500/10 border border-green-400/20 rounded-2xl p-4 space-y-2">
@@ -625,79 +911,51 @@ export function AIModelsPanel({
               </div>
               <p className="text-xs text-white/50 leading-relaxed">Input perturbation engine. Applies 33 obfuscation techniques across 3 intensity tiers to test model robustness.</p>
             </div>
-
-            {/* Enable toggle */}
             <div className="flex items-center justify-between px-1">
               <span className="text-sm font-semibold text-white">Enable Parseltongue</span>
-              <button
-                onClick={onParseltongueToggle}
-                className={cn("relative w-12 h-6 rounded-full transition-colors", parseltongueActive ? "bg-green-500" : "bg-white/10")}
-              >
-                <motion.div
-                  animate={{ x: parseltongueActive ? 24 : 2 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  className="absolute top-1 w-4 h-4 bg-white rounded-full shadow"
-                />
+              <button onClick={onParseltongueToggle}
+                className={cn("relative w-12 h-6 rounded-full transition-colors", parseltongueActive ? "bg-green-500" : "bg-white/10")}>
+                <motion.div animate={{ x: parseltongueActive ? 24 : 2 }} transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  className="absolute top-1 w-4 h-4 bg-white rounded-full shadow" />
               </button>
             </div>
-
-            {/* Intensity */}
             <div className="space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Intensity Level · {parseltongueLevel === 0 ? "Off" : parseltongueLevel === 1 ? "Light (11 triggers)" : parseltongueLevel === 2 ? "Standard (22 triggers)" : "Heavy (33 triggers)"}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Intensity · {parseltongueLevel === 0 ? "Off" : parseltongueLevel === 1 ? "Light (11)" : parseltongueLevel === 2 ? "Standard (22)" : "Heavy (33)"}</p>
               <div className="grid grid-cols-4 gap-1.5">
                 {([["Off",0],["Light",1],["Standard",2],["Heavy",3]] as const).map(([label, val]) => (
-                  <button
-                    key={val}
-                    onClick={() => onParseltongueLevel(val as 0|1|2|3)}
-                    className={cn(
-                      "py-2 rounded-xl text-xs font-semibold border transition-all",
+                  <button key={val} onClick={() => onParseltongueLevel(val as 0|1|2|3)}
+                    className={cn("py-2 rounded-xl text-xs font-semibold border transition-all",
                       parseltongueLevel === val
                         ? val === 0 ? "bg-white/10 border-white/20 text-white"
                           : val === 1 ? "bg-green-500/20 border-green-400/40 text-green-300"
                           : val === 2 ? "bg-yellow-500/20 border-yellow-400/40 text-yellow-300"
                           : "bg-red-500/20 border-red-400/40 text-red-300"
                         : "bg-transparent border-white/8 text-white/30 hover:bg-white/5"
-                    )}
-                  >{label}</button>
+                    )}>{label}</button>
                 ))}
               </div>
             </div>
-
-            {/* Techniques */}
             <div className="space-y-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Techniques</p>
               <div className="grid grid-cols-2 gap-1.5">
                 {PARSELTONGUE_TECHNIQUES.map(tech => (
-                  <button
-                    key={tech.id}
-                    onClick={() => setSelectedTechniques(prev => {
-                      const next = new Set(prev);
-                      next.has(tech.id) ? next.delete(tech.id) : next.add(tech.id);
-                      return next;
-                    })}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-2 rounded-xl border transition-all text-left",
+                  <button key={tech.id}
+                    onClick={() => setSelectedTechniques(prev => { const n = new Set(prev); n.has(tech.id) ? n.delete(tech.id) : n.add(tech.id); return n; })}
+                    className={cn("flex items-center gap-2 px-3 py-2 rounded-xl border transition-all text-left",
                       selectedTechniques.has(tech.id)
                         ? "bg-green-500/15 border-green-400/30 text-green-300"
                         : "bg-white/[0.03] border-white/[0.06] text-white/40 hover:bg-white/[0.06]"
-                    )}
-                  >
+                    )}>
                     <span className="text-xs font-mono font-bold w-5 shrink-0">{tech.icon}</span>
                     <span className="text-[11px] font-medium">{tech.label}</span>
                   </button>
                 ))}
               </div>
             </div>
-
-            {/* Live preview */}
             <div className="space-y-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Live Preview</p>
-              <textarea
-                value={parseltongueInput}
-                onChange={e => setParseltongueInput(e.target.value)}
-                placeholder="Type text to transform..."
-                className="w-full bg-white/[0.03] border border-white/[0.07] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none resize-none h-16"
-              />
+              <textarea value={parseltongueInput} onChange={e => setParseltongueInput(e.target.value)}
+                placeholder="Type text to transform..." className="w-full bg-white/[0.03] border border-white/[0.07] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none resize-none h-16" />
               {parseltonguePreview && (
                 <div className="bg-green-500/5 border border-green-400/15 rounded-xl px-3 py-2.5">
                   <p className="text-[10px] text-green-400/70 mb-1">Output</p>
@@ -708,7 +966,7 @@ export function AIModelsPanel({
           </div>
         )}
 
-        {/* ── AUTOTUNE TAB ── */}
+        {/* ── AUTOTUNE TAB ────────────────────────────────────────────────────────── */}
         {activeTab === "autotune" && (
           <div className="px-4 py-4 space-y-4">
             <div className="bg-blue-500/10 border border-blue-400/20 rounded-2xl p-4 space-y-2">
@@ -717,54 +975,39 @@ export function AIModelsPanel({
                 <span className="text-base font-bold text-white">AutoTune</span>
                 <span className="text-[9px] bg-blue-500/20 border border-blue-400/30 text-blue-300 px-2 py-0.5 rounded-full font-bold ml-auto">EMA</span>
               </div>
-              <p className="text-xs text-white/50 leading-relaxed">Context-adaptive sampling. Classifies your query into 5 context types and selects optimal temperature, top_p, top_k, frequency & presence penalty automatically.</p>
+              <p className="text-xs text-white/50 leading-relaxed">Context-adaptive sampling. Classifies your query and selects optimal temperature, top_p, top_k, frequency & presence penalty.</p>
             </div>
-
-            {/* Toggle */}
             <div className="flex items-center justify-between px-1">
               <span className="text-sm font-semibold text-white">Enable AutoTune</span>
-              <button
-                onClick={onAutoTuneToggle}
-                className={cn("relative w-12 h-6 rounded-full transition-colors", autoTuneActive ? "bg-blue-500" : "bg-white/10")}
-              >
-                <motion.div
-                  animate={{ x: autoTuneActive ? 24 : 2 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  className="absolute top-1 w-4 h-4 bg-white rounded-full shadow"
-                />
+              <button onClick={onAutoTuneToggle}
+                className={cn("relative w-12 h-6 rounded-full transition-colors", autoTuneActive ? "bg-blue-500" : "bg-white/10")}>
+                <motion.div animate={{ x: autoTuneActive ? 24 : 2 }} transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  className="absolute top-1 w-4 h-4 bg-white rounded-full shadow" />
               </button>
             </div>
-
-            {/* Context type selector */}
             <div className="space-y-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Context Type</p>
               <div className="grid grid-cols-5 gap-1">
                 {AUTOTUNE_CONTEXTS.map(ctx => (
-                  <button
-                    key={ctx.id}
-                    onClick={() => setAutoTuneContext(ctx.id)}
-                    className={cn(
-                      "flex flex-col items-center gap-1 py-2.5 rounded-xl border transition-all",
+                  <button key={ctx.id} onClick={() => setAutoTuneContext(ctx.id)}
+                    className={cn("flex flex-col items-center gap-1 py-2.5 rounded-xl border transition-all",
                       autoTuneContext === ctx.id ? "bg-white/10 border-white/20" : "bg-white/[0.03] border-white/[0.05] hover:bg-white/[0.06]"
-                    )}
-                  >
+                    )}>
                     <span className="text-base">{ctx.icon}</span>
                     <span className={cn("text-[9px] font-semibold", autoTuneContext === ctx.id ? ctx.color : "text-white/30")}>{ctx.label}</span>
                   </button>
                 ))}
               </div>
             </div>
-
-            {/* Parameters display */}
             <div className="space-y-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Optimal Parameters</p>
               <div className="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-4 space-y-3">
                 {[
-                  { label: "temperature", value: currentAutoContext.temp, max: 2 },
-                  { label: "top_p", value: currentAutoContext.topP, max: 1 },
-                  { label: "top_k", value: 0.4, max: 1 },
-                  { label: "frequency_penalty", value: 0.3, max: 2 },
-                  { label: "presence_penalty", value: 0.2, max: 2 },
+                  { label: "temperature",       value: currentAutoContext.temp, max: 2 },
+                  { label: "top_p",             value: currentAutoContext.topP, max: 1 },
+                  { label: "top_k",             value: 0.40,                    max: 1 },
+                  { label: "frequency_penalty", value: 0.30,                    max: 2 },
+                  { label: "presence_penalty",  value: 0.20,                    max: 2 },
                 ].map(p => (
                   <div key={p.label}>
                     <div className="flex items-center justify-between mb-1">
@@ -772,48 +1015,36 @@ export function AIModelsPanel({
                       <span className="text-[11px] text-white/70 font-mono font-bold">{p.value.toFixed(2)}</span>
                     </div>
                     <div className="h-1.5 bg-white/8 rounded-full overflow-hidden">
-                      <motion.div
-                        key={`${p.label}-${autoTuneContext}`}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(p.value / p.max) * 100}%` }}
-                        transition={{ duration: 0.4 }}
-                        className="h-full bg-blue-400 rounded-full"
-                      />
+                      <motion.div key={`${p.label}-${autoTuneContext}`} initial={{ width: 0 }}
+                        animate={{ width: `${(p.value / p.max) * 100}%` }} transition={{ duration: 0.4 }}
+                        className="h-full bg-blue-400 rounded-full" />
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-
-            {/* EMA feedback */}
             <div className="space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">EMA Learning · Rate this response</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">EMA Learning</p>
               <div className="flex gap-2">
                 {["👍","👎"].map((emoji, i) => (
-                  <button
-                    key={emoji}
-                    onClick={() => setThumbsState(prev => ({ ...prev, [autoTuneContext]: i === 0 }))}
-                    className={cn(
-                      "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-semibold transition-all",
+                  <button key={emoji} onClick={() => setThumbsState(prev => ({ ...prev, [autoTuneContext]: i === 0 }))}
+                    className={cn("flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-semibold transition-all",
                       thumbsState[autoTuneContext] === (i === 0)
                         ? i === 0 ? "bg-green-500/20 border-green-400/40 text-green-300" : "bg-red-500/20 border-red-400/40 text-red-300"
                         : "bg-white/[0.03] border-white/[0.06] text-white/40 hover:bg-white/[0.06]"
-                    )}
-                  >
-                    {emoji} {i === 0 ? "Good" : "Bad"}
-                  </button>
+                    )}>{emoji} {i === 0 ? "Good" : "Bad"}</button>
                 ))}
               </div>
               {thumbsState[autoTuneContext] !== undefined && (
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-[11px] text-blue-400/70 text-center">
-                  ✓ EMA parameters updated for "{autoTuneContext}" context
+                  ✓ EMA parameters updated for "{autoTuneContext}"
                 </motion.p>
               )}
             </div>
           </div>
         )}
 
-        {/* ── STM MODULES TAB ── */}
+        {/* ── STM MODULES TAB ─────────────────────────────────────────────────────── */}
         {activeTab === "stm" && (
           <div className="px-4 py-4 space-y-4">
             <div className="bg-purple-500/10 border border-purple-400/20 rounded-2xl p-4 space-y-2">
@@ -824,67 +1055,48 @@ export function AIModelsPanel({
               </div>
               <p className="text-xs text-white/50 leading-relaxed">Semantic Transformation Modules normalize AI outputs in real-time. Toggle each module independently.</p>
             </div>
-
-            {/* Module cards */}
             {STM_MODULES.map(mod => (
-              <motion.div
-                key={mod.id}
-                whileTap={{ scale: 0.99 }}
-                onClick={() => onStmToggle(mod.id)}
-                className={cn(
-                  "flex items-start gap-4 px-4 py-4 rounded-2xl border cursor-pointer transition-all",
+              <motion.div key={mod.id} whileTap={{ scale: 0.99 }} onClick={() => onStmToggle(mod.id)}
+                className={cn("flex items-start gap-4 px-4 py-4 rounded-2xl border cursor-pointer transition-all",
                   stmModules.has(mod.id) ? cn(mod.bg, "ring-1 ring-white/10") : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]"
-                )}
-              >
-                <div className={cn("w-10 h-10 rounded-xl border flex items-center justify-center shrink-0", mod.bg, mod.color)}>
-                  {mod.icon}
-                </div>
+                )}>
+                <div className={cn("w-10 h-10 rounded-xl border flex items-center justify-center shrink-0", mod.bg, mod.color)}>{mod.icon}</div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-white">{mod.label}</p>
                   <p className="text-[11px] text-white/45 mt-0.5 leading-relaxed">{mod.desc}</p>
                 </div>
                 <div className={cn("relative w-10 h-5 rounded-full shrink-0 mt-0.5 transition-colors", stmModules.has(mod.id) ? "bg-purple-500" : "bg-white/10")}>
-                  <motion.div
-                    animate={{ x: stmModules.has(mod.id) ? 20 : 2 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                    className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow"
-                  />
+                  <motion.div animate={{ x: stmModules.has(mod.id) ? 20 : 2 }} transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow" />
                 </div>
               </motion.div>
             ))}
-
-            {/* Preview */}
             {stmModules.size > 0 && (
               <div className="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-4 space-y-2">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Active Transforms</p>
                 {stmModules.has("hedge") && (
                   <div className="space-y-1">
                     <p className="text-[10px] text-red-400">Before: "I think maybe this could possibly work..."</p>
-                    <p className="text-[10px] text-green-400">After: "This works..."</p>
+                    <p className="text-[10px] text-green-400">After: "This works."</p>
                   </div>
                 )}
                 {stmModules.has("direct") && (
                   <div className="space-y-1">
-                    <p className="text-[10px] text-red-400">Before: "Great question! Of course, here is what you need..."</p>
-                    <p className="text-[10px] text-green-400">After: "Here is what you need..."</p>
+                    <p className="text-[10px] text-red-400">Before: "Great question! Of course, here is..."</p>
+                    <p className="text-[10px] text-green-400">After: "Here is..."</p>
                   </div>
                 )}
                 {stmModules.has("curiosity") && (
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-purple-400">Added: "What if we also explored [related concept]?"</p>
-                  </div>
+                  <p className="text-[10px] text-purple-400">Added: "What if we also explored [related concept]?"</p>
                 )}
               </div>
             )}
-
-            {/* Info */}
             <div className="flex items-start gap-2 px-3 py-3 bg-white/[0.02] border border-white/[0.05] rounded-xl">
               <Info size={13} className="text-white/25 shrink-0 mt-0.5" />
               <p className="text-[11px] text-white/35 leading-relaxed">STM modules post-process every AI response in real-time. No latency added — transforms are applied client-side after streaming completes.</p>
             </div>
           </div>
         )}
-
       </div>
     </motion.div>
   );
