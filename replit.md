@@ -7,7 +7,7 @@ A mobile-first Replit clone with two apps: **App Builder** (mobile UI matching t
 - `pnpm install` — install all dependencies
 - `pnpm run typecheck` — typecheck all packages
 - `pnpm run build` — build all packages
-- API Server: `PORT=8080 pnpm --filter @workspace/api-server run dev`
+- API Server: `PORT=8000 pnpm --filter @workspace/api-server run dev`
 - App Builder: `PORT=5000 BASE_PATH=/ pnpm --filter @workspace/app-builder run dev` (webview port)
 - DB push: `pnpm --filter @workspace/db run push`
 - Required env vars: `AI_INTEGRATIONS_ANTHROPIC_BASE_URL`, `AI_INTEGRATIONS_ANTHROPIC_API_KEY` (auto-provisioned via Replit AI integration), `DATABASE_URL`
