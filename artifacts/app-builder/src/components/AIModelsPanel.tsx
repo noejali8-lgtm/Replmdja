@@ -300,6 +300,8 @@ export function AIModelsPanel({
   const [debateSynthesis, setDebateSynthesis] = useState("");
   const [debateRunning, setDebateRunning] = useState(false);
   const [debateError, setDebateError] = useState("");
+  const [reasoningTrace, setReasoningTrace] = useState(false);
+  const [openTraces, setOpenTraces] = useState<Set<string>>(new Set());
   const ensembleScrollRef = useRef<HTMLDivElement>(null);
 
   // ── Arena state ────────────────────────────────────────────────────────────────
@@ -396,6 +398,27 @@ export function AIModelsPanel({
   }, [selectedTechniques]);
   useEffect(() => { applyParseltongue(parseltongueInput); }, [parseltongueInput, applyParseltongue]);
 
+  // ── Reasoning trace parser ─────────────────────────────────────────────────────
+  const parseReasoningTrace = (text: string): { steps: string[]; finalAnswer: string } => {
+    const steps: string[] = [];
+    const stepRegex = /\*\*Step\s*\d+:?\*\*\s*([\s\S]+?)(?=\*\*Step\s*\d+|$)/gi;
+    let match: RegExpExecArray | null;
+    while ((match = stepRegex.exec(text)) !== null) {
+      const content = match[1].replace(/\*\*Final Answer:?\*\*[\s\S]*/i, "").trim();
+      if (content && !content.toLowerCase().startsWith("final answer")) steps.push(content);
+    }
+    const finalMatch = /\*\*Final Answer:?\*\*\s*([\s\S]+?)$/i.exec(text);
+    const finalAnswer = finalMatch ? finalMatch[1].trim() : text;
+    return { steps, finalAnswer };
+  };
+
+  const toggleTrace = (modelId: string) =>
+    setOpenTraces(prev => {
+      const next = new Set(prev);
+      next.has(modelId) ? next.delete(modelId) : next.add(modelId);
+      return next;
+    });
+
   // ── Ensemble runner ────────────────────────────────────────────────────────────
   const runEnsemble = async () => {
     if (!ensembleApiKey.trim()) { setEnsembleError("Enter your OpenRouter API key first."); return; }
@@ -412,7 +435,13 @@ export function AIModelsPanel({
       const response = await fetch("/api/openrouter/ensemble", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ models: ensembleModels, prompt: ensemblePrompt.trim(), apiKey: ensembleApiKey.trim() }),
+        body: JSON.stringify({
+          models: ensembleModels,
+          prompt: reasoningTrace
+            ? `Think through this carefully, step by step. Use this EXACT format and nothing else:\n\n**Step 1:** [your first reasoning step]\n**Step 2:** [next step]\n...(add as many steps as needed)\n**Final Answer:** [your final conclusion]\n\nQuestion: ${ensemblePrompt.trim()}`
+            : ensemblePrompt.trim(),
+          apiKey: ensembleApiKey.trim(),
+        }),
       });
 
       if (!response.ok || !response.body) {
@@ -912,6 +941,24 @@ export function AIModelsPanel({
                 />
               </div>
 
+              {/* Reasoning Trace toggle */}
+              <div className={cn("flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all",
+                reasoningTrace ? "bg-cyan-500/10 border-cyan-400/20" : "bg-white/[0.03] border-white/[0.06]"
+              )}>
+                <div className="flex items-center gap-2">
+                  <GitMerge size={13} className={reasoningTrace ? "text-cyan-400" : "text-white/30"} />
+                  <div>
+                    <p className={cn("text-xs font-semibold", reasoningTrace ? "text-cyan-300" : "text-white/60")}>Reasoning Trace</p>
+                    <p className="text-[10px] text-white/30">See each model's step-by-step thinking</p>
+                  </div>
+                </div>
+                <button onClick={() => setReasoningTrace(v => !v)}
+                  className={cn("relative w-10 h-5 rounded-full transition-colors shrink-0", reasoningTrace ? "bg-cyan-500" : "bg-white/10")}>
+                  <motion.div animate={{ x: reasoningTrace ? 20 : 2 }} transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow" />
+                </button>
+              </div>
+
               {/* Debate Mode toggle */}
               <div className={cn("flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all",
                 debateMode ? "bg-amber-500/10 border-amber-400/20" : "bg-white/[0.03] border-white/[0.06]"
@@ -1004,21 +1051,70 @@ export function AIModelsPanel({
               <AnimatePresence>
                 {!debateMode && ensembleResults.length > 0 && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Individual Responses</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Individual Responses</p>
+                      {reasoningTrace && <span className="text-[9px] bg-cyan-500/15 border border-cyan-400/25 text-cyan-400 px-1.5 py-0.5 rounded-full font-bold ml-auto">Reasoning Trace ON</span>}
+                    </div>
                     {ensembleResults.map(result => {
                       const m = ALL_MODELS.find(x => x.id === result.modelId);
+                      const parsed = reasoningTrace && result.text ? parseReasoningTrace(result.text) : null;
+                      const traceOpen = openTraces.has(result.modelId);
                       return (
                         <motion.div key={result.modelId} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                           className={cn("rounded-xl border p-3 space-y-2", m?.providerBg ?? "bg-white/[0.03] border-white/[0.07]")}>
+                          {/* Header row */}
                           <div className="flex items-center gap-2">
                             <span className={cn("text-[11px] font-bold", m?.providerColor ?? "text-white/60")}>{m?.name ?? result.modelId.split("/").pop()}</span>
                             {result.loading && <Loader2 size={11} className="animate-spin text-white/40 ml-auto" />}
-                            {!result.loading && !result.error && <Check size={11} className="text-green-400 ml-auto" />}
+                            {!result.loading && !result.error && parsed && (
+                              <span className="text-[9px] text-cyan-400/70 ml-auto">{parsed.steps.length} steps</span>
+                            )}
+                            {!result.loading && !result.error && !parsed && <Check size={11} className="text-green-400 ml-auto" />}
                             {result.error && <span className="text-[10px] text-red-400 ml-auto">Error</span>}
                           </div>
+
+                          {/* Loading shimmer */}
                           {result.loading && <div className="flex gap-1">{[0,1,2].map(i => <motion.div key={i} animate={{ opacity:[0.3,1,0.3] }} transition={{ duration:1.2, repeat:Infinity, delay:i*0.2 }} className="w-1.5 h-1.5 rounded-full bg-white/30" />)}</div>}
                           {result.error && <p className="text-[11px] text-red-400/80">{result.error}</p>}
-                          {result.text && <p className="text-[12px] text-white/70 leading-relaxed line-clamp-4">{result.text}</p>}
+
+                          {/* Normal mode */}
+                          {result.text && !parsed && <p className="text-[12px] text-white/70 leading-relaxed line-clamp-4">{result.text}</p>}
+
+                          {/* Reasoning Trace mode */}
+                          {parsed && (
+                            <div className="space-y-2">
+                              {/* Collapsible steps */}
+                              {parsed.steps.length > 0 && (
+                                <div className="space-y-1">
+                                  <button onClick={() => toggleTrace(result.modelId)}
+                                    className="flex items-center gap-1.5 text-[10px] text-cyan-400/70 hover:text-cyan-400 transition-colors">
+                                    <ChevronDown size={11} className={cn("transition-transform", traceOpen ? "rotate-180" : "")} />
+                                    {traceOpen ? "Hide" : "Show"} reasoning ({parsed.steps.length} step{parsed.steps.length !== 1 ? "s" : ""})
+                                  </button>
+                                  <AnimatePresence>
+                                    {traceOpen && (
+                                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                                        className="overflow-hidden">
+                                        <div className="pl-3 border-l border-cyan-400/20 space-y-2 pt-1 pb-1">
+                                          {parsed.steps.map((step, i) => (
+                                            <div key={i} className="flex gap-2">
+                                              <div className="w-4 h-4 rounded-full bg-cyan-500/20 border border-cyan-400/25 flex items-center justify-center text-[8px] font-bold text-cyan-400 shrink-0 mt-0.5">{i+1}</div>
+                                              <p className="text-[11px] text-white/55 leading-relaxed">{step}</p>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              )}
+                              {/* Final Answer — always visible */}
+                              <div className="bg-cyan-500/8 border border-cyan-400/15 rounded-lg px-3 py-2 space-y-1">
+                                <p className="text-[9px] font-bold uppercase tracking-wider text-cyan-400/60">Final Answer</p>
+                                <p className="text-[12px] text-white/80 leading-relaxed">{parsed.finalAnswer}</p>
+                              </div>
+                            </div>
+                          )}
                         </motion.div>
                       );
                     })}
