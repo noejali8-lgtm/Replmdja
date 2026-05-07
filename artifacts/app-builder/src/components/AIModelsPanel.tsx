@@ -5,7 +5,8 @@ import {
   Cpu, Shuffle, Shield, Sliders, Layers, Play, Square,
   BarChart3, Loader2, ChevronDown, Info, RotateCcw, Sparkles,
   Trophy, Flame, Target, Activity, Users, Plus, Minus, Key,
-  Brain, GitMerge, Send
+  Brain, GitMerge, Send, Swords, ThumbsUp, ThumbsDown,
+  Minus as MinusIcon, MessageSquare, CornerDownRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -189,11 +190,12 @@ const AUTOTUNE_CONTEXTS = [
 ];
 
 // ─── Panel Tabs ──────────────────────────────────────────────────────────────────
-export type PanelTab = "models" | "ensemble" | "godmode" | "ultraplinian" | "parseltongue" | "autotune" | "stm";
+export type PanelTab = "models" | "ensemble" | "arena" | "godmode" | "ultraplinian" | "parseltongue" | "autotune" | "stm";
 
 const PANEL_TABS: { id: PanelTab; label: string; icon: React.ReactNode; color: string }[] = [
   { id: "models",       label: "Models",       icon: <Cpu size={13} />,      color: "text-white" },
   { id: "ensemble",     label: "Ensemble",     icon: <Brain size={13} />,    color: "text-purple-400" },
+  { id: "arena",        label: "Arena",        icon: <Swords size={13} />,   color: "text-yellow-400" },
   { id: "godmode",      label: "GODMODE",      icon: <Flame size={13} />,    color: "text-red-400" },
   { id: "ultraplinian", label: "ULTRA",        icon: <Trophy size={13} />,   color: "text-orange-400" },
   { id: "parseltongue", label: "Parseltongue", icon: <Shuffle size={13} />,  color: "text-green-400" },
@@ -208,8 +210,28 @@ const KONAMI = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRi
 interface EnsembleModelResult {
   modelId: string;
   text: string;
+  debateText?: string;      // post-debate revised answer
   error?: string;
   loading: boolean;
+  debating?: boolean;
+}
+
+// ─── Arena types ─────────────────────────────────────────────────────────────────
+interface ArenaSlot {
+  modelId: string;
+  text: string;
+  error?: string;
+  loading: boolean;
+}
+
+type ArenaVote = "A" | "tie" | "B" | null;
+interface ArenaMatch {
+  modelA: string;
+  modelB: string;
+  prompt: string;
+  textA: string;
+  textB: string;
+  vote: ArenaVote;
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────────────
@@ -272,7 +294,27 @@ export function AIModelsPanel({
   const [ensembleSynthesis, setEnsembleSynthesis] = useState("");
   const [ensembleError, setEnsembleError] = useState("");
   const [ensembleModelSearch, setEnsembleModelSearch] = useState("");
+  const [debateMode, setDebateMode] = useState(false);
+  const [debateResults, setDebateResults] = useState<EnsembleModelResult[]>([]);
+  const [debatePhase, setDebatePhase] = useState<"idle"|"diverge"|"debate"|"synthesize"|"done">("idle");
+  const [debateSynthesis, setDebateSynthesis] = useState("");
+  const [debateRunning, setDebateRunning] = useState(false);
+  const [debateError, setDebateError] = useState("");
   const ensembleScrollRef = useRef<HTMLDivElement>(null);
+
+  // ── Arena state ────────────────────────────────────────────────────────────────
+  const [arenaModelA, setArenaModelA] = useState(FREE_MODELS[0]?.id ?? "");
+  const [arenaModelB, setArenaModelB] = useState(FREE_MODELS[1]?.id ?? "");
+  const [arenaPrompt, setArenaPrompt] = useState("");
+  const [arenaRunning, setArenaRunning] = useState(false);
+  const [arenaSlotA, setArenaSlotA] = useState<ArenaSlot | null>(null);
+  const [arenaSlotB, setArenaSlotB] = useState<ArenaSlot | null>(null);
+  const [arenaVote, setArenaVote] = useState<ArenaVote>(null);
+  const [arenaHistory, setArenaHistory] = useState<ArenaMatch[]>([]);
+  const [arenaSearchA, setArenaSearchA] = useState("");
+  const [arenaSearchB, setArenaSearchB] = useState("");
+  const [arenaPickerOpen, setArenaPickerOpen] = useState<"A"|"B"|null>(null);
+  const [arenaError, setArenaError] = useState("");
 
   // Konami listener
   useEffect(() => {
@@ -423,6 +465,138 @@ export function AIModelsPanel({
       prev.includes(modelId) ? prev.filter(m => m !== modelId) : prev.length < 6 ? [...prev, modelId] : prev
     );
   };
+
+  // ── Debate runner (Ensemble with debate phase) ─────────────────────────────────
+  const runDebate = async () => {
+    const apiKey = ensembleApiKey.trim();
+    if (!apiKey) { setDebateError("Enter your OpenRouter API key first."); return; }
+    if (ensembleModels.length === 0) { setDebateError("Select at least one model."); return; }
+    if (!ensemblePrompt.trim()) { setDebateError("Enter a prompt."); return; }
+
+    setDebateError("");
+    setDebateRunning(true);
+    setDebatePhase("diverge");
+    setDebateSynthesis("");
+    setDebateResults(ensembleModels.map(id => ({ modelId: id, text: "", loading: true, debating: false })));
+
+    try {
+      const response = await fetch("/api/openrouter/debate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ models: ensembleModels, prompt: ensemblePrompt.trim(), apiKey }),
+      });
+      if (!response.ok || !response.body) throw new Error(`Server error: ${response.status}`);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const l = line.trim();
+          if (!l.startsWith("data: ")) continue;
+          try {
+            const evt = JSON.parse(l.slice(6)) as {
+              type: string; phase?: string; modelId?: string;
+              text?: string; error?: string; message?: string;
+            };
+            if (evt.type === "status") {
+              if (evt.phase === "debate")     setDebatePhase("debate");
+              if (evt.phase === "synthesize") setDebatePhase("synthesize");
+            } else if (evt.type === "model_response") {
+              setDebateResults(prev => prev.map(r =>
+                r.modelId === evt.modelId ? { ...r, text: evt.text ?? "", error: evt.error, loading: false, debating: true } : r
+              ));
+            } else if (evt.type === "debate_response") {
+              setDebateResults(prev => prev.map(r =>
+                r.modelId === evt.modelId ? { ...r, debateText: evt.text ?? "", debating: false } : r
+              ));
+            } else if (evt.type === "synthesis") {
+              setDebateSynthesis(evt.text ?? "");
+            } else if (evt.type === "error") {
+              setDebateError(evt.message ?? "Unknown error");
+            } else if (evt.type === "done") {
+              setDebatePhase("done");
+            }
+          } catch { /* malformed */ }
+        }
+      }
+    } catch (err) {
+      setDebateError(String(err));
+    }
+    setDebateRunning(false);
+    setDebatePhase("done");
+  };
+
+  // ── Arena runner ───────────────────────────────────────────────────────────────
+  const runArena = async () => {
+    const apiKey = ensembleApiKey.trim();
+    if (!apiKey) { setArenaError("Enter your OpenRouter API key in the Ensemble tab first."); return; }
+    if (!arenaModelA || !arenaModelB) { setArenaError("Select two models."); return; }
+    if (arenaModelA === arenaModelB) { setArenaError("Pick two different models."); return; }
+    if (!arenaPrompt.trim()) { setArenaError("Enter a prompt."); return; }
+
+    setArenaError("");
+    setArenaVote(null);
+    setArenaRunning(true);
+    setArenaSlotA({ modelId: arenaModelA, text: "", loading: true });
+    setArenaSlotB({ modelId: arenaModelB, text: "", loading: true });
+
+    try {
+      const response = await fetch("/api/openrouter/arena", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelA: arenaModelA, modelB: arenaModelB, prompt: arenaPrompt.trim(), apiKey }),
+      });
+      if (!response.ok || !response.body) throw new Error(`Server error: ${response.status}`);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const l = line.trim();
+          if (!l.startsWith("data: ")) continue;
+          try {
+            const evt = JSON.parse(l.slice(6)) as {
+              type: string; slot?: "A"|"B"; modelId?: string; text?: string; error?: string;
+            };
+            if (evt.type === "slot_response") {
+              const slot: ArenaSlot = { modelId: evt.modelId ?? "", text: evt.text ?? "", error: evt.error, loading: false };
+              if (evt.slot === "A") setArenaSlotA(slot);
+              else setArenaSlotB(slot);
+            }
+          } catch { /* malformed */ }
+        }
+      }
+    } catch (err) {
+      setArenaError(String(err));
+    }
+    setArenaRunning(false);
+  };
+
+  const castArenaVote = (vote: ArenaVote) => {
+    setArenaVote(vote);
+    if (arenaSlotA && arenaSlotB) {
+      setArenaHistory(prev => [
+        { modelA: arenaModelA, modelB: arenaModelB, prompt: arenaPrompt, textA: arenaSlotA.text, textB: arenaSlotB.text, vote },
+        ...prev.slice(0, 9),
+      ]);
+    }
+  };
+
+  const arenaWins = (modelId: string) => arenaHistory.filter(m =>
+    (m.vote === "A" && m.modelA === modelId) || (m.vote === "B" && m.modelB === modelId)
+  ).length;
 
   const selectedModelData = ALL_MODELS.find(m => m.id === selectedModel);
   const currentAutoContext = AUTOTUNE_CONTEXTS.find(c => c.id === autoTuneContext)!;
@@ -682,36 +856,70 @@ export function AIModelsPanel({
                 />
               </div>
 
+              {/* Debate Mode toggle */}
+              <div className={cn("flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all",
+                debateMode ? "bg-amber-500/10 border-amber-400/20" : "bg-white/[0.03] border-white/[0.06]"
+              )}>
+                <div className="flex items-center gap-2">
+                  <MessageSquare size={13} className={debateMode ? "text-amber-400" : "text-white/30"} />
+                  <div>
+                    <p className={cn("text-xs font-semibold", debateMode ? "text-amber-300" : "text-white/60")}>Debate Mode</p>
+                    <p className="text-[10px] text-white/30">Models see & challenge each other's answers</p>
+                  </div>
+                </div>
+                <button onClick={() => setDebateMode(v => !v)}
+                  className={cn("relative w-10 h-5 rounded-full transition-colors shrink-0", debateMode ? "bg-amber-500" : "bg-white/10")}>
+                  <motion.div animate={{ x: debateMode ? 20 : 2 }} transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow" />
+                </button>
+              </div>
+
               {/* Error */}
-              {ensembleError && (
-                <div className="bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2.5 text-xs text-red-300">{ensembleError}</div>
+              {(ensembleError || debateError) && (
+                <div className="bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2.5 text-xs text-red-300">{ensembleError || debateError}</div>
               )}
 
-              {/* Run button */}
-              <button onClick={runEnsemble} disabled={ensembleRunning || !ensemblePrompt.trim() || ensembleModels.length === 0}
-                className={cn(
-                  "w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold transition-all border",
-                  !ensembleRunning && ensemblePrompt.trim() && ensembleModels.length > 0
-                    ? "bg-purple-500/20 border-purple-400/40 text-purple-300 hover:bg-purple-500/30 active:scale-[0.98]"
-                    : "bg-white/5 border-white/10 text-white/25 cursor-not-allowed"
-                )}>
-                {ensembleRunning
-                  ? ensemblePhase === "synthesize"
-                    ? <><GitMerge size={15} className="animate-pulse" /> Synthesising responses...</>
-                    : <><Brain size={15} className="animate-pulse" /> Models thinking together...</>
-                  : <><Send size={15} /> Run Ensemble</>
-                }
-              </button>
+              {/* Run buttons */}
+              <div className={cn("grid gap-2", debateMode ? "grid-cols-1" : "grid-cols-1")}>
+                {!debateMode ? (
+                  <button onClick={runEnsemble} disabled={ensembleRunning || !ensemblePrompt.trim() || ensembleModels.length === 0}
+                    className={cn(
+                      "w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold transition-all border",
+                      !ensembleRunning && ensemblePrompt.trim() && ensembleModels.length > 0
+                        ? "bg-purple-500/20 border-purple-400/40 text-purple-300 hover:bg-purple-500/30 active:scale-[0.98]"
+                        : "bg-white/5 border-white/10 text-white/25 cursor-not-allowed"
+                    )}>
+                    {ensembleRunning
+                      ? ensemblePhase === "synthesize"
+                        ? <><GitMerge size={15} className="animate-pulse" /> Synthesising…</>
+                        : <><Brain size={15} className="animate-pulse" /> Thinking together…</>
+                      : <><Send size={15} /> Run Ensemble</>}
+                  </button>
+                ) : (
+                  <button onClick={runDebate} disabled={debateRunning || !ensemblePrompt.trim() || ensembleModels.length === 0}
+                    className={cn(
+                      "w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold transition-all border",
+                      !debateRunning && ensemblePrompt.trim() && ensembleModels.length > 0
+                        ? "bg-amber-500/20 border-amber-400/40 text-amber-300 hover:bg-amber-500/30 active:scale-[0.98]"
+                        : "bg-white/5 border-white/10 text-white/25 cursor-not-allowed"
+                    )}>
+                    {debateRunning
+                      ? debatePhase === "debate"     ? <><Swords size={15} className="animate-pulse" /> Models debating…</>
+                        : debatePhase === "synthesize" ? <><GitMerge size={15} className="animate-pulse" /> Synthesising debate…</>
+                        : <><Brain size={15} className="animate-pulse" /> Forming positions…</>
+                      : <><Swords size={15} /> Run Debate Mode</>}
+                  </button>
+                )}
+              </div>
 
-              {/* Phase indicator */}
-              {ensembleRunning && (
+              {/* Phase indicator — Ensemble */}
+              {ensembleRunning && !debateMode && (
                 <div className="flex items-center gap-3">
                   {(["diverge","synthesize","done"] as const).map((phase, i) => (
                     <div key={phase} className="flex items-center gap-1.5 flex-1">
                       <div className={cn("w-5 h-5 rounded-full border flex items-center justify-center text-[9px] font-bold shrink-0",
                         ensemblePhase === phase ? "bg-purple-500 border-purple-400 text-white" :
-                        (["diverge","synthesize","done"].indexOf(ensemblePhase) > i) ? "bg-green-500/20 border-green-400/30 text-green-400" :
-                        "bg-white/5 border-white/10 text-white/30"
+                        (["diverge","synthesize","done"].indexOf(ensemblePhase) > i) ? "bg-green-500/20 border-green-400/30 text-green-400" : "bg-white/5 border-white/10 text-white/30"
                       )}>{i+1}</div>
                       <span className="text-[10px] text-white/40 capitalize">{phase}</span>
                       {i < 2 && <div className="flex-1 h-px bg-white/10" />}
@@ -720,9 +928,25 @@ export function AIModelsPanel({
                 </div>
               )}
 
-              {/* Results */}
+              {/* Phase indicator — Debate */}
+              {debateRunning && debateMode && (
+                <div className="flex items-center gap-2">
+                  {(["diverge","debate","synthesize","done"] as const).map((phase, i) => (
+                    <div key={phase} className="flex items-center gap-1 flex-1">
+                      <div className={cn("w-5 h-5 rounded-full border flex items-center justify-center text-[9px] font-bold shrink-0",
+                        debatePhase === phase ? "bg-amber-500 border-amber-400 text-white" :
+                        (["diverge","debate","synthesize","done"].indexOf(debatePhase) > i) ? "bg-green-500/20 border-green-400/30 text-green-400" : "bg-white/5 border-white/10 text-white/30"
+                      )}>{i+1}</div>
+                      <span className="text-[9px] text-white/35 capitalize">{phase}</span>
+                      {i < 3 && <div className="flex-1 h-px bg-white/10" />}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Ensemble Results */}
               <AnimatePresence>
-                {ensembleResults.length > 0 && (
+                {!debateMode && ensembleResults.length > 0 && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Individual Responses</p>
                     {ensembleResults.map(result => {
@@ -736,14 +960,7 @@ export function AIModelsPanel({
                             {!result.loading && !result.error && <Check size={11} className="text-green-400 ml-auto" />}
                             {result.error && <span className="text-[10px] text-red-400 ml-auto">Error</span>}
                           </div>
-                          {result.loading && (
-                            <div className="flex gap-1">
-                              {[0,1,2].map(i => (
-                                <motion.div key={i} animate={{ opacity: [0.3,1,0.3] }} transition={{ duration: 1.2, repeat: Infinity, delay: i*0.2 }}
-                                  className="w-1.5 h-1.5 rounded-full bg-white/30" />
-                              ))}
-                            </div>
-                          )}
+                          {result.loading && <div className="flex gap-1">{[0,1,2].map(i => <motion.div key={i} animate={{ opacity:[0.3,1,0.3] }} transition={{ duration:1.2, repeat:Infinity, delay:i*0.2 }} className="w-1.5 h-1.5 rounded-full bg-white/30" />)}</div>}
                           {result.error && <p className="text-[11px] text-red-400/80">{result.error}</p>}
                           {result.text && <p className="text-[12px] text-white/70 leading-relaxed line-clamp-4">{result.text}</p>}
                         </motion.div>
@@ -753,30 +970,281 @@ export function AIModelsPanel({
                 )}
               </AnimatePresence>
 
-              {/* Synthesis output */}
+              {/* Debate Results */}
               <AnimatePresence>
-                {ensembleSynthesis && (
+                {debateMode && debateResults.length > 0 && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Debate Positions</p>
+                    {debateResults.map(result => {
+                      const m = ALL_MODELS.find(x => x.id === result.modelId);
+                      return (
+                        <motion.div key={result.modelId} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                          className={cn("rounded-xl border p-3 space-y-2", m?.providerBg ?? "bg-white/[0.03] border-white/[0.07]")}>
+                          <div className="flex items-center gap-2">
+                            <span className={cn("text-[11px] font-bold", m?.providerColor ?? "text-white/60")}>{m?.name ?? result.modelId.split("/").pop()}</span>
+                            {result.loading && <Loader2 size={11} className="animate-spin text-white/40 ml-auto" />}
+                            {result.debating && !result.loading && <Swords size={11} className="animate-pulse text-amber-400 ml-auto" />}
+                            {result.debateText && !result.debating && <Check size={11} className="text-green-400 ml-auto" />}
+                          </div>
+                          {result.loading && <div className="flex gap-1">{[0,1,2].map(i => <motion.div key={i} animate={{ opacity:[0.3,1,0.3] }} transition={{ duration:1.2, repeat:Infinity, delay:i*0.2 }} className="w-1.5 h-1.5 rounded-full bg-white/30" />)}</div>}
+                          {/* Initial answer */}
+                          {result.text && (
+                            <div className="space-y-1">
+                              <p className="text-[9px] font-bold uppercase text-white/25 tracking-wider">Initial position</p>
+                              <p className="text-[11px] text-white/55 leading-relaxed line-clamp-3">{result.text}</p>
+                            </div>
+                          )}
+                          {/* Debated answer */}
+                          {result.debateText && (
+                            <div className="space-y-1 pt-1 border-t border-white/[0.06]">
+                              <div className="flex items-center gap-1">
+                                <CornerDownRight size={10} className="text-amber-400" />
+                                <p className="text-[9px] font-bold uppercase text-amber-400/70 tracking-wider">After debate</p>
+                              </div>
+                              <p className="text-[12px] text-white/75 leading-relaxed line-clamp-4">{result.debateText}</p>
+                            </div>
+                          )}
+                          {result.debating && !result.debateText && (
+                            <div className="flex items-center gap-1.5">
+                              <Swords size={10} className="text-amber-400 animate-pulse" />
+                              <span className="text-[10px] text-amber-400/70">Reading other answers…</span>
+                            </div>
+                          )}
+                        </motion.div>
+                      );
+                    })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Ensemble Synthesis */}
+              <AnimatePresence>
+                {!debateMode && ensembleSynthesis && (
                   <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                     className="bg-gradient-to-br from-purple-500/15 via-indigo-500/10 to-blue-500/10 border border-purple-400/30 rounded-2xl p-4 space-y-3">
                     <div className="flex items-center gap-2">
                       <GitMerge size={16} className="text-purple-400" />
                       <span className="text-sm font-bold text-white">Synthesised Answer</span>
-                      <span className="text-[9px] bg-purple-500/20 border border-purple-400/30 text-purple-300 px-2 py-0.5 rounded-full font-bold ml-auto">
-                        {ensembleResults.filter(r => !r.error && r.text).length} models merged
-                      </span>
+                      <span className="text-[9px] bg-purple-500/20 border border-purple-400/30 text-purple-300 px-2 py-0.5 rounded-full font-bold ml-auto">{ensembleResults.filter(r => !r.error && r.text).length} models</span>
                     </div>
                     <p className="text-sm text-white/85 leading-relaxed">{ensembleSynthesis}</p>
-                    <button
-                      onClick={() => { navigator.clipboard?.writeText(ensembleSynthesis); }}
-                      className="text-[11px] text-purple-400/70 hover:text-purple-400 transition-colors">
-                      Copy synthesis →
-                    </button>
+                    <button onClick={() => navigator.clipboard?.writeText(ensembleSynthesis)} className="text-[11px] text-purple-400/70 hover:text-purple-400 transition-colors">Copy →</button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Debate Synthesis */}
+              <AnimatePresence>
+                {debateMode && debateSynthesis && (
+                  <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+                    className="bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-red-500/10 border border-amber-400/30 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Swords size={16} className="text-amber-400" />
+                      <span className="text-sm font-bold text-white">Post-Debate Synthesis</span>
+                      <span className="text-[9px] bg-amber-500/20 border border-amber-400/30 text-amber-300 px-2 py-0.5 rounded-full font-bold ml-auto">Battle-hardened</span>
+                    </div>
+                    <p className="text-sm text-white/85 leading-relaxed">{debateSynthesis}</p>
+                    <button onClick={() => navigator.clipboard?.writeText(debateSynthesis)} className="text-[11px] text-amber-400/70 hover:text-amber-400 transition-colors">Copy →</button>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
           </div>
         )}
+
+        {/* ── ARENA TAB ───────────────────────────────────────────────────────────── */}
+        {activeTab === "arena" && (() => {
+          const mA = ALL_MODELS.find(m => m.id === arenaModelA);
+          const mB = ALL_MODELS.find(m => m.id === arenaModelB);
+          const freeFiltered = (search: string) => FREE_MODELS.filter(m =>
+            !search || m.name.toLowerCase().includes(search.toLowerCase()) || m.provider.toLowerCase().includes(search.toLowerCase())
+          );
+          const wins: Record<string, number> = {};
+          arenaHistory.forEach(h => {
+            if (h.vote === "A") wins[h.modelA] = (wins[h.modelA] ?? 0) + 1;
+            if (h.vote === "B") wins[h.modelB] = (wins[h.modelB] ?? 0) + 1;
+          });
+          const topModel = Object.entries(wins).sort((a,b) => b[1]-a[1])[0];
+          return (
+            <div className="flex flex-col h-full">
+              {/* Header */}
+              <div className="mx-4 mt-4 bg-yellow-500/10 border border-yellow-400/20 rounded-2xl p-4 space-y-2 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Swords size={18} className="text-yellow-400" />
+                  <span className="text-base font-bold text-white">Arena Battle</span>
+                  <span className="text-[9px] bg-yellow-500/20 border border-yellow-400/30 text-yellow-300 px-2 py-0.5 rounded-full font-bold ml-auto">REAL CALLS</span>
+                </div>
+                <p className="text-xs text-white/50 leading-relaxed">Two models answer the same prompt simultaneously. You judge which is better — results build a live leaderboard.</p>
+                {!ensembleApiKey && <p className="text-[11px] text-amber-400">⚠ Add your OpenRouter API key in the Ensemble tab first.</p>}
+              </div>
+
+              <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-3 space-y-4">
+                {/* Model pickers */}
+                <div className="grid grid-cols-2 gap-2">
+                  {(["A","B"] as const).map(slot => {
+                    const selected = slot === "A" ? mA : mB;
+                    const setModel = slot === "A" ? setArenaModelA : setArenaModelB;
+                    const searchVal = slot === "A" ? arenaSearchA : arenaSearchB;
+                    const setSearch = slot === "A" ? setArenaSearchA : setArenaSearchB;
+                    const isOpen = arenaPickerOpen === slot;
+                    const slotColor = slot === "A" ? "text-blue-400 border-blue-400/30 bg-blue-500/10" : "text-rose-400 border-rose-400/30 bg-rose-500/10";
+                    return (
+                      <div key={slot} className="space-y-1">
+                        <p className={cn("text-[10px] font-bold uppercase tracking-widest", slot === "A" ? "text-blue-400" : "text-rose-400")}>Model {slot}</p>
+                        <button onClick={() => setArenaPickerOpen(isOpen ? null : slot)}
+                          className={cn("w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all", slotColor)}>
+                          <div className={cn("w-5 h-5 rounded flex items-center justify-center text-[8px] font-black border shrink-0", selected?.providerBg ?? "bg-white/5 border-white/10", selected?.providerColor ?? "text-white/40")}>
+                            {selected ? selected.provider.slice(0,3).toUpperCase() : "?"}
+                          </div>
+                          <span className="text-[11px] font-semibold text-white truncate flex-1">{selected?.name ?? "Pick model"}</span>
+                          <ChevronDown size={11} className={cn("shrink-0 transition-transform", isOpen ? "rotate-180" : "")} />
+                        </button>
+                        <AnimatePresence>
+                          {isOpen && (
+                            <motion.div initial={{ opacity:0, y:-4 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-4 }}
+                              className="bg-[#161b22] border border-white/10 rounded-xl overflow-hidden z-10 relative">
+                              <div className="px-2 pt-2">
+                                <input value={searchVal} onChange={e => setSearch(e.target.value)} placeholder="Search…"
+                                  className="w-full bg-white/5 rounded-lg px-2 py-1.5 text-xs text-white placeholder:text-white/25 outline-none" />
+                              </div>
+                              <div className="max-h-36 overflow-y-auto no-scrollbar p-2 space-y-1">
+                                {freeFiltered(searchVal).map(m => (
+                                  <button key={m.id} onClick={() => { setModel(m.id); setArenaPickerOpen(null); setSearch(""); }}
+                                    className={cn("w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-all",
+                                      m.id === (slot === "A" ? arenaModelA : arenaModelB) ? "bg-white/10" : "hover:bg-white/5"
+                                    )}>
+                                    <div className={cn("w-4 h-4 rounded text-[7px] font-black flex items-center justify-center border shrink-0", m.providerBg, m.providerColor)}>{m.provider.slice(0,3).toUpperCase()}</div>
+                                    <span className="text-[11px] text-white truncate">{m.name}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* VS divider */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-px bg-white/8" />
+                  <span className="text-[11px] font-black text-white/30">VS</span>
+                  <div className="flex-1 h-px bg-white/8" />
+                </div>
+
+                {/* Prompt */}
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Question / Task</p>
+                  <textarea value={arenaPrompt} onChange={e => setArenaPrompt(e.target.value)}
+                    placeholder="Ask something where the better answer matters..."
+                    className="w-full bg-white/[0.03] border border-white/[0.07] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none resize-none h-20 focus:border-yellow-400/30 transition-colors" />
+                </div>
+
+                {arenaError && <div className="bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2.5 text-xs text-red-300">{arenaError}</div>}
+
+                {/* Run button */}
+                <button onClick={runArena} disabled={arenaRunning || !arenaPrompt.trim() || !arenaModelA || !arenaModelB}
+                  className={cn(
+                    "w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold transition-all border",
+                    !arenaRunning && arenaPrompt.trim() && arenaModelA && arenaModelB
+                      ? "bg-yellow-500/20 border-yellow-400/40 text-yellow-300 hover:bg-yellow-500/30 active:scale-[0.98]"
+                      : "bg-white/5 border-white/10 text-white/25 cursor-not-allowed"
+                  )}>
+                  {arenaRunning
+                    ? <><Loader2 size={15} className="animate-spin" /> Models battling…</>
+                    : <><Swords size={15} /> Start Battle</>}
+                </button>
+
+                {/* Side-by-side results */}
+                <AnimatePresence>
+                  {(arenaSlotA || arenaSlotB) && (
+                    <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        {([{ slot: arenaSlotA, label: "A", color: "border-blue-400/30 bg-blue-500/10", header: "text-blue-400" },
+                           { slot: arenaSlotB, label: "B", color: "border-rose-400/30 bg-rose-500/10", header: "text-rose-400" }] as const).map(({ slot, label, color, header }) => (
+                          <div key={label} className={cn("rounded-xl border p-3 space-y-2 min-h-[100px]", color)}>
+                            <div className="flex items-center gap-1.5">
+                              <span className={cn("text-[11px] font-black", header)}>Model {label}</span>
+                              {slot?.loading && <Loader2 size={10} className="animate-spin text-white/40 ml-auto" />}
+                              {slot && !slot.loading && !slot.error && <Check size={10} className="text-green-400 ml-auto" />}
+                            </div>
+                            {slot?.loading && <div className="flex gap-1">{[0,1,2].map(i => <motion.div key={i} animate={{ opacity:[0.3,1,0.3] }} transition={{ duration:1.2, repeat:Infinity, delay:i*0.2 }} className="w-1 h-1 rounded-full bg-white/30" />)}</div>}
+                            {slot?.error && <p className="text-[10px] text-red-400/80">{slot.error}</p>}
+                            {slot?.text && <p className="text-[11px] text-white/75 leading-relaxed">{slot.text}</p>}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Vote row — only shown when both done */}
+                      {arenaSlotA && !arenaSlotA.loading && arenaSlotB && !arenaSlotB.loading && !arenaRunning && (
+                        <div className="space-y-2">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 text-center">Your verdict</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {([
+                              { vote: "A" as ArenaVote, label: "👈 A wins", cls: "bg-blue-500/20 border-blue-400/40 text-blue-300 hover:bg-blue-500/30" },
+                              { vote: "tie" as ArenaVote, label: "🤝 Tie",   cls: "bg-white/8 border-white/15 text-white/60 hover:bg-white/12" },
+                              { vote: "B" as ArenaVote, label: "B wins 👉", cls: "bg-rose-500/20 border-rose-400/40 text-rose-300 hover:bg-rose-500/30" },
+                            ]).map(opt => (
+                              <button key={opt.vote} onClick={() => castArenaVote(opt.vote)}
+                                className={cn("py-2.5 rounded-xl border text-xs font-semibold transition-all",
+                                  arenaVote === opt.vote ? cn(opt.cls, "ring-2 ring-white/20 scale-[1.03]") : opt.cls
+                                )}>{opt.label}</button>
+                            ))}
+                          </div>
+                          {arenaVote && (
+                            <motion.p initial={{ opacity:0 }} animate={{ opacity:1 }} className="text-[11px] text-center text-white/40">
+                              ✓ Vote recorded — {arenaHistory.length} battle{arenaHistory.length !== 1 ? "s" : ""} logged
+                            </motion.p>
+                          )}
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Leaderboard */}
+                {arenaHistory.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Trophy size={12} className="text-yellow-400" />
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Session Leaderboard</p>
+                      <span className="text-[10px] text-white/20 ml-auto">{arenaHistory.length} battles</span>
+                    </div>
+                    {topModel && (
+                      <div className="bg-yellow-500/10 border border-yellow-400/20 rounded-xl px-3 py-2.5 flex items-center gap-3">
+                        <Trophy size={16} className="text-yellow-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] text-white/50">Current champion</p>
+                          <p className="text-sm font-bold text-white truncate">{ALL_MODELS.find(m=>m.id===topModel[0])?.name ?? topModel[0].split("/").pop()}</p>
+                        </div>
+                        <span className="text-sm font-black text-yellow-400">{topModel[1]}W</span>
+                      </div>
+                    )}
+                    <div className="space-y-1 max-h-32 overflow-y-auto no-scrollbar">
+                      {[...new Set(Object.keys(wins))].sort((a,b) => (wins[b]??0)-(wins[a]??0)).map(id => {
+                        const m = ALL_MODELS.find(x=>x.id===id);
+                        const w = wins[id] ?? 0;
+                        return (
+                          <div key={id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.02]">
+                            <div className={cn("w-5 h-5 rounded text-[7px] font-black flex items-center justify-center border shrink-0", m?.providerBg ?? "bg-white/5 border-white/10", m?.providerColor ?? "text-white/40")}>{m?.provider.slice(0,3).toUpperCase()}</div>
+                            <span className="text-xs text-white/60 flex-1 truncate">{m?.name ?? id.split("/").pop()}</span>
+                            <span className="text-xs font-bold text-white/70">{w}W</span>
+                            <div className="w-12 h-1 bg-white/8 rounded-full overflow-hidden">
+                              <div className="h-full bg-yellow-400 rounded-full" style={{ width: `${Math.round((w / (topModel?.[1] ?? 1)) * 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button onClick={() => { setArenaHistory([]); }}
+                      className="text-[10px] text-white/20 hover:text-white/40 transition-colors">Reset leaderboard</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── GODMODE CLASSIC TAB ────────────────────────────────────────────────── */}
         {activeTab === "godmode" && (

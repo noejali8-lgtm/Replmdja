@@ -2875,7 +2875,7 @@ export default function Chat() {
   // AI Models Panel state
   const [showAIModels, setShowAIModels] = useState(false);
   const [selectedModelId, setSelectedModelId] = useState("claude-sonnet-4-6");
-  const [aiActiveTab, setAiActiveTab] = useState<"models"|"ensemble"|"godmode"|"ultraplinian"|"parseltongue"|"autotune"|"stm">("models");
+  const [aiActiveTab, setAiActiveTab] = useState<"models"|"ensemble"|"arena"|"godmode"|"ultraplinian"|"parseltongue"|"autotune"|"stm">("models");
   const [godmodeActive, setGodmodeActive] = useState(false);
   const [ultraplinianTier, setUltraplinianTier] = useState(0);
   const [parseltongueLevel, setParseltongueLevel] = useState<0|1|2|3>(0);
