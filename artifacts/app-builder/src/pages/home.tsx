@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, GitBranch, FileText, Package, Zap } from "lucide-react";
+import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, GitBranch, FileText, Package, Zap, BookOpen, Compass, ChevronRight } from "lucide-react";
 import { SiGithub } from "react-icons/si";
 import { CategoryChips } from "@/components/CategoryChips";
 import { CreateInput } from "@/components/CreateInput";
@@ -272,6 +272,35 @@ export default function Home() {
         {/* Input + Footer pinned to bottom */}
         <div className="px-4 pb-[78px] space-y-3">
           <CreateInput value={prompt} onChange={setPrompt} onSubmit={handleSubmit} />
+
+          {/* Quick links row */}
+          <div className="grid grid-cols-2 gap-2">
+            <Link href="/templates">
+              <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-white/4 border border-white/8 hover:bg-white/7 transition-colors cursor-pointer">
+                <div className="w-7 h-7 rounded-lg bg-blue-500/20 border border-blue-400/25 flex items-center justify-center shrink-0">
+                  <BookOpen size={13} className="text-blue-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-white leading-tight">Templates</p>
+                  <p className="text-[10px] text-white/35 truncate">قوالب جاهزة</p>
+                </div>
+                <ChevronRight size={12} className="text-white/20 ml-auto shrink-0" />
+              </div>
+            </Link>
+            <Link href="/explore">
+              <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-white/4 border border-white/8 hover:bg-white/7 transition-colors cursor-pointer">
+                <div className="w-7 h-7 rounded-lg bg-purple-500/20 border border-purple-400/25 flex items-center justify-center shrink-0">
+                  <Compass size={13} className="text-purple-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-white leading-tight">Explore</p>
+                  <p className="text-[10px] text-white/35 truncate">دليل Replit</p>
+                </div>
+                <ChevronRight size={12} className="text-white/20 ml-auto shrink-0" />
+              </div>
+            </Link>
+          </div>
+
           <div className="flex flex-col items-center gap-0.5 text-[13px] pb-2">
             <span className="text-white/40">Start creating for free</span>
             <a href="#" className="text-white/70 underline underline-offset-2 font-medium hover:text-white transition-colors">

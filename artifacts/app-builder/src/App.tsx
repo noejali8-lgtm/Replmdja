@@ -10,6 +10,8 @@ import Home from "@/pages/home";
 import Chat from "@/pages/chat";
 import Projects from "@/pages/projects";
 import Account from "@/pages/account";
+import Explore from "@/pages/explore";
+import Templates from "@/pages/templates";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -21,6 +23,8 @@ function Router() {
         <Route path="/" component={Home} />
         <Route path="/chat" component={Chat} />
         <Route path="/projects" component={Projects} />
+        <Route path="/templates" component={Templates} />
+        <Route path="/explore" component={Explore} />
         <Route path="/account" component={Account} />
         <Route component={NotFound} />
       </Switch>
