@@ -19,3 +19,8 @@
 
 export * from "./conversations";
 export * from "./messages";
+export * from "./agents";
+export * from "./swarms";
+export * from "./memory";
+export * from "./workers";
+export * from "./plugins";

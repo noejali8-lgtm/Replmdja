@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AnimatePresence } from "framer-motion";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BottomNav } from "@/components/BottomNav";
+import { CapabilitiesTour } from "@/components/CapabilitiesTour";
 
 import Home from "@/pages/home";
 import Chat from "@/pages/chat";
@@ -19,7 +20,24 @@ import ProFeatures from "@/pages/pro-features";
 import FeaturesPage from "@/pages/features";
 import NotFound from "@/pages/not-found";
 
+import AgentsPage from "@/pages/agents";
+import SwarmPage from "@/pages/swarm";
+import MemoryPage from "@/pages/memory";
+import WorkersPage from "@/pages/workers";
+import PluginsPage from "@/pages/plugins";
+import ProvidersPage from "@/pages/providers";
+import SecurityPage from "@/pages/security";
+import FederationPage from "@/pages/federation";
+import GoalPlannerPage from "@/pages/goap";
+import McpPage from "@/pages/mcp";
+
 const queryClient = new QueryClient();
+
+const RUFLO_PAGES = [
+  "/agents", "/swarm", "/memory", "/workers",
+  "/plugins", "/providers", "/security",
+  "/federation", "/goap", "/mcp",
+];
 
 function Router() {
   return (
@@ -36,6 +54,19 @@ function Router() {
         <Route path="/pro-features" component={ProFeatures} />
         <Route path="/features" component={FeaturesPage} />
         <Route path="/account" component={Account} />
+
+        {/* RuFlo Agent System */}
+        <Route path="/agents" component={AgentsPage} />
+        <Route path="/swarm" component={SwarmPage} />
+        <Route path="/memory" component={MemoryPage} />
+        <Route path="/workers" component={WorkersPage} />
+        <Route path="/plugins" component={PluginsPage} />
+        <Route path="/providers" component={ProvidersPage} />
+        <Route path="/security" component={SecurityPage} />
+        <Route path="/federation" component={FederationPage} />
+        <Route path="/goap" component={GoalPlannerPage} />
+        <Route path="/mcp" component={McpPage} />
+
         <Route component={NotFound} />
       </Switch>
     </AnimatePresence>
@@ -44,13 +75,32 @@ function Router() {
 
 function AppLayout() {
   const [location] = useLocation();
+  const [showTour, setShowTour] = useState(false);
+
   const isChat = location === "/chat";
+  const isRufloPage = RUFLO_PAGES.some(p => location === p || location.startsWith(p + "/"));
+  const hideBottomNav = isChat || isRufloPage;
+
+  // Show tour on first visit
+  useEffect(() => {
+    const seen = localStorage.getItem("ruflo_tour_seen");
+    if (!seen) {
+      const timer = setTimeout(() => setShowTour(true), 1200);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  function closeTour() {
+    localStorage.setItem("ruflo_tour_seen", "1");
+    setShowTour(false);
+  }
 
   return (
     <div className="min-h-[100dvh] w-full bg-background text-foreground font-sans selection:bg-primary selection:text-primary-foreground overflow-x-hidden">
       <div className="relative min-h-[100dvh] w-full mx-auto max-w-[480px] bg-background shadow-2xl overflow-hidden sm:border-x border-border">
         <Router />
-        {!isChat && <BottomNav />}
+        {!hideBottomNav && <BottomNav />}
+        {showTour && <CapabilitiesTour onClose={closeTour} />}
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, Zap, Layers, BookOpen, Compass, ChevronRight, Clock, Trash2, WifiOff, ShoppingBag, Video, Brain, Cloud, Bug, Smartphone, Shield, GraduationCap, DollarSign, Settings, Eye, Terminal, Users, Rocket, Mic, Cpu, RefreshCw } from "lucide-react";
+import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, Zap, Layers, BookOpen, Compass, ChevronRight, Clock, Trash2, WifiOff, ShoppingBag, Video, Brain, Cloud, Bug, Smartphone, Shield, GraduationCap, DollarSign, Settings, Eye, Terminal, Users, Rocket, Mic, Cpu, RefreshCw, Bot, Network, Database, Package, Target, Plug, Sparkles } from "lucide-react";
 import { SiGithub, SiReplit } from "react-icons/si";
 import { CategoryChips } from "@/components/CategoryChips";
 import { CreateInput } from "@/components/CreateInput";
@@ -653,6 +653,60 @@ function RecentImportsSection({ onReimport }: { onReimport: (target: ImportTarge
   );
 }
 
+const RUFLO_LINKS = [
+  { path: "/agents",    icon: Bot,      color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-400/20", label: "Agents",       sub: "95+ specialist agents" },
+  { path: "/swarm",     icon: Network,  color: "text-amber-400",  bg: "bg-amber-500/10",  border: "border-amber-400/20",  label: "Swarm",        sub: "Hierarchical · Mesh" },
+  { path: "/memory",    icon: Database, color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-400/20", label: "AgentDB",      sub: "HNSW vector memory" },
+  { path: "/workers",   icon: Settings, color: "text-sky-400",    bg: "bg-sky-500/10",    border: "border-sky-400/20",    label: "Workers",      sub: "12 background tasks" },
+  { path: "/plugins",   icon: Package,  color: "text-pink-400",   bg: "bg-pink-500/10",   border: "border-pink-400/20",   label: "Plugins",      sub: "32 native + 21 npm" },
+  { path: "/providers", icon: Cpu,      color: "text-cyan-400",   bg: "bg-cyan-500/10",   border: "border-cyan-400/20",   label: "Providers",    sub: "8 AI providers" },
+  { path: "/security",  icon: Shield,   color: "text-red-400",    bg: "bg-red-500/10",    border: "border-red-400/20",    label: "Security",     sub: "AIDefence + CVE" },
+  { path: "/federation",icon: Globe,    color: "text-blue-400",   bg: "bg-blue-500/10",   border: "border-blue-400/20",   label: "Federation",   sub: "Zero-trust mesh" },
+  { path: "/goap",      icon: Target,   color: "text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-400/20", label: "Goal Planner", sub: "A* path planning" },
+  { path: "/mcp",       icon: Plug,     color: "text-teal-400",   bg: "bg-teal-500/10",   border: "border-teal-400/20",   label: "MCP Servers",  sub: "18 native tools" },
+];
+
+function RuFloSection() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.15 }}
+      className="space-y-3"
+    >
+      <div className="flex items-center justify-between px-0.5">
+        <div className="flex items-center gap-2">
+          <Sparkles size={12} className="text-purple-400" />
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-white/40">RuFlo Agent System</span>
+        </div>
+        <span className="text-[10px] text-white/25">10 modules</span>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {RUFLO_LINKS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link key={item.path} href={item.path}>
+              <div className={cn(
+                "flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all active:scale-[0.97] cursor-pointer",
+                item.bg, item.border,
+                "hover:brightness-110"
+              )}>
+                <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0", item.bg, `border ${item.border}`)}>
+                  <Icon size={13} className={item.color} />
+                </div>
+                <div className="min-w-0">
+                  <p className={cn("text-[11px] font-semibold leading-tight", item.color)}>{item.label}</p>
+                  <p className="text-[9px] text-white/30 truncate leading-tight mt-0.5">{item.sub}</p>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+}
+
 export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [showMenu, setShowMenu] = useState(false);
@@ -841,6 +895,9 @@ export default function Home() {
               </div>
             </Link>
           </div>
+
+          {/* RuFlo Agent System */}
+          <RuFloSection />
 
           {/* Platform Features Showcase */}
           <PlatformFeaturesSection />
