@@ -3021,6 +3021,184 @@ function MessageBubble({ msg }: { msg: Message }) {
   );
 }
 
+/* ─────────────────── Artifact Preview Panel ─────────────────── */
+const PREVIEW_ARTIFACTS = [
+  { id: "web", label: "Web App", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-400/20", status: "ready" as const, url: "/" as string | null },
+  { id: "mobile", label: "Mobile", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-400/20", status: "idle" as const, url: null as string | null },
+  { id: "slides", label: "Slides", color: "text-green-400", bg: "bg-green-500/10 border-green-400/20", status: "idle" as const, url: null as string | null },
+  { id: "api", label: "API", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-400/20", status: "building" as const, url: null as string | null },
+  { id: "desktop", label: "Desktop", color: "text-cyan-400", bg: "bg-cyan-500/10 border-cyan-400/20", status: "idle" as const, url: null as string | null },
+] as const;
+
+function ArtifactIcon({ id, size = 14 }: { id: string; size?: number }) {
+  if (id === "web") return <Globe size={size} />;
+  if (id === "mobile") return <Monitor size={size} />;
+  if (id === "slides") return <LayoutPanelLeft size={size} />;
+  if (id === "api") return <Server size={size} />;
+  if (id === "desktop") return <Monitor size={size} />;
+  return <Globe size={size} />;
+}
+
+function ArtifactPreviewPanel({ onClose }: { onClose: () => void }) {
+  const [activeId, setActiveId] = useState<string>("web");
+  const [loadError, setLoadError] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const active = PREVIEW_ARTIFACTS.find(a => a.id === activeId) ?? PREVIEW_ARTIFACTS[0];
+
+  return (
+    <motion.div
+      initial={{ y: "100%" }}
+      animate={{ y: 0 }}
+      exit={{ y: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 36 }}
+      className="absolute inset-0 z-50 flex flex-col bg-[#0d1117]"
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-white/[0.07] shrink-0 bg-[#0d1117]">
+        <button onClick={onClose} className="flex items-center gap-1 text-sm text-white/50 hover:text-white transition-colors">
+          <ArrowLeft size={15} />
+          <span className="text-[13px]">Back</span>
+        </button>
+        <div className="flex-1 flex items-center justify-center gap-2">
+          <Monitor size={16} className="text-cyan-400" />
+          <span className="text-base font-semibold text-white">Preview</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setRefreshKey(k => k + 1)}
+            className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white rounded-lg hover:bg-white/8 transition-colors"
+          >
+            <RefreshCw size={15} />
+          </button>
+          <button
+            onClick={() => active.url && window.open(window.location.origin + active.url, "_blank")}
+            disabled={!active.url}
+            className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white rounded-lg hover:bg-white/8 transition-colors disabled:opacity-25"
+          >
+            <ExternalLink size={15} />
+          </button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white rounded-lg hover:bg-white/8 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* URL bar */}
+      <div className="px-3 py-2 border-b border-white/[0.06] bg-[#0d1117] shrink-0">
+        <div className="flex items-center gap-2 bg-white/[0.05] rounded-lg px-3 h-8 border border-white/[0.08]">
+          <Globe size={11} className="text-white/30 shrink-0" />
+          <span className="flex-1 text-[11px] text-white/45 truncate font-mono">
+            {active.url ? `${window.location.origin}${active.url}` : "No URL — ask Agent to build this artifact"}
+          </span>
+          {active.status === "ready" && <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />}
+          {active.status === "building" && <Loader2 size={10} className="animate-spin text-yellow-400 shrink-0" />}
+        </div>
+      </div>
+
+      {/* Preview */}
+      <div className="flex-1 relative overflow-hidden">
+        {active.url ? (
+          <>
+            <iframe
+              key={refreshKey}
+              src={active.url}
+              className="w-full h-full border-0 bg-white"
+              title={active.label}
+              onError={() => setLoadError(true)}
+            />
+            {loadError && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#0d1117]">
+                <AlertCircle size={32} className="text-red-400" />
+                <p className="text-sm font-semibold text-white/70">Preview failed to load</p>
+                <button
+                  onClick={() => { setLoadError(false); setRefreshKey(k => k + 1); }}
+                  className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-500 transition-colors"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-[#0d1117]">
+            <div className={cn("w-20 h-20 rounded-3xl flex items-center justify-center border-2", active.bg)}>
+              <span className={cn("transition-colors", active.color)}>
+                <ArtifactIcon id={active.id} size={32} />
+              </span>
+            </div>
+            <div className="text-center px-8">
+              <p className="text-base font-semibold text-white/80">{active.label} artifact</p>
+              <p className="text-xs text-white/35 mt-1.5 leading-relaxed">
+                {active.status === "building"
+                  ? "Agent is building this artifact..."
+                  : `Ask Agent to create your ${active.label.toLowerCase()} to see a preview here`
+                }
+              </p>
+            </div>
+            {active.status === "building" && (
+              <div className="flex items-center gap-2 text-yellow-400/70 text-xs">
+                <Loader2 size={13} className="animate-spin" />
+                <span>Building...</span>
+              </div>
+            )}
+            {active.status === "idle" && (
+              <button className="px-5 py-2.5 bg-white/[0.06] border border-white/[0.10] rounded-xl text-xs font-semibold text-white/60 hover:text-white hover:bg-white/[0.10] transition-all">
+                Ask Agent to build this
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Artifact type cards row */}
+      <div className="shrink-0 bg-[#0d1117] border-t border-white/[0.07]">
+        <div className="flex items-stretch divide-x divide-white/[0.06] overflow-x-auto no-scrollbar">
+          {PREVIEW_ARTIFACTS.map(a => (
+            <button
+              key={a.id}
+              onClick={() => setActiveId(a.id)}
+              className={cn(
+                "flex-none flex flex-col items-center gap-1.5 px-5 py-3 min-w-[76px] transition-colors",
+                activeId === a.id ? "bg-white/[0.06]" : "hover:bg-white/[0.03]"
+              )}
+            >
+              <div className={cn(
+                "w-8 h-8 rounded-xl flex items-center justify-center border transition-colors",
+                activeId === a.id ? a.bg : "bg-white/[0.04] border-white/[0.08]"
+              )}>
+                <span className={cn("transition-colors", activeId === a.id ? a.color : "text-white/25")}>
+                  <ArtifactIcon id={a.id} size={14} />
+                </span>
+              </div>
+              <span className={cn(
+                "text-[10px] font-medium transition-colors",
+                activeId === a.id ? "text-white/80" : "text-white/30"
+              )}>
+                {a.label}
+              </span>
+              <div className="flex items-center gap-1">
+                <div className={cn("w-1 h-1 rounded-full", {
+                  "bg-green-400": a.status === "ready",
+                  "bg-yellow-400 animate-pulse": a.status === "building",
+                  "bg-white/20": a.status === "idle",
+                })} />
+                <span className={cn("text-[9px]", {
+                  "text-green-400": a.status === "ready",
+                  "text-yellow-400": a.status === "building",
+                  "text-white/25": a.status === "idle",
+                })}>
+                  {a.status}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function Chat() {
   const [, setLocation] = useLocation();
   const [conversationId, setConversationId] = useState<number | null>(null);
@@ -3051,6 +3229,10 @@ export default function Chat() {
   const [showCanvas, setShowCanvas] = useState(false);
   const [showBranching, setShowBranching] = useState(false);
   const [showMultiArtifact, setShowMultiArtifact] = useState(false);
+  const [showPreviewArtifacts, setShowPreviewArtifacts] = useState(false);
+  const [showCreditsBanner, setShowCreditsBanner] = useState(true);
+  const [isRecording, setIsRecording] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [showMemory, setShowMemory] = useState(false);
   const [showCheckpoints, setShowCheckpoints] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
@@ -3115,10 +3297,12 @@ export default function Chat() {
     setShowBuildProgress(false);
     const assistantMsgId = `assistant-${Date.now()}`;
     let isFirst = true;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     try {
       const response = await fetch(
         `${BASE_URL}/api/anthropic/conversations/${convId}/messages`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, turbo: turboMode, planMode: planEnabled }) }
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, turbo: turboMode, planMode: planEnabled }), signal: controller.signal }
       );
       if (!response.ok || !response.body) throw new Error("Stream request failed");
       const reader = response.body.getReader();
@@ -3162,13 +3346,22 @@ export default function Chat() {
           } catch { /* ignore */ }
         }
       }
-    } catch {
+    } catch (err: unknown) {
+      const isAbort = err instanceof Error && err.name === "AbortError";
       setIsThinking(false);
-      setMessages((prev) => [...prev, {
-        id: assistantMsgId, role: "assistant",
-        content: "Sorry, something went wrong. Please try again.",
-        timestamp: new Date()
-      }]);
+      setCurrentToolCall(null);
+      setMessages((prev) => prev.map(m =>
+        m.id === assistantMsgId ? { ...m, isStreaming: false } : m
+      ));
+      if (!isAbort && isFirst) {
+        setMessages((prev) => [...prev, {
+          id: assistantMsgId, role: "assistant",
+          content: "Something went wrong — please try again.",
+          timestamp: new Date()
+        }]);
+      }
+    } finally {
+      abortControllerRef.current = null;
     }
   }, [actionCount, turboMode, planEnabled]);
 
@@ -3294,6 +3487,38 @@ export default function Chat() {
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 no-scrollbar">
         {/* Activity summary card */}
         <ActivityCard msgCount={msgCount} actionCount={actionCount} startTime={startTime} />
+
+        {/* Credits banner */}
+        <AnimatePresence>
+          {showCreditsBanner && messages.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="mx-0 mb-1 bg-amber-500/10 border border-amber-400/20 rounded-2xl px-4 py-3 flex items-center gap-3"
+            >
+              <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-400/20 flex items-center justify-center shrink-0">
+                <Star size={15} className="text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-amber-300">You're out of credits</p>
+                <p className="text-[11px] text-amber-300/55 leading-tight mt-0.5">Upgrade to Core for unlimited AI usage + more features</p>
+              </div>
+              <button
+                onClick={() => {}}
+                className="text-[11px] font-bold text-amber-900 bg-amber-400 hover:bg-amber-300 transition-colors px-3 py-1.5 rounded-lg shrink-0"
+              >
+                Upgrade
+              </button>
+              <button
+                onClick={() => setShowCreditsBanner(false)}
+                className="text-amber-400/40 hover:text-amber-400 transition-colors shrink-0"
+              >
+                <X size={14} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <AnimatePresence initial={false}>
           {messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)}
@@ -3555,6 +3780,25 @@ export default function Chat() {
               <Plus size={14} />
             </motion.button>
 
+            {/* Voice / Record button */}
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setIsRecording(v => !v)}
+              className={cn(
+                "w-7 h-7 rounded-full flex items-center justify-center border transition-all shrink-0",
+                isRecording
+                  ? "bg-red-500/20 border-red-400/40 text-red-400"
+                  : "bg-white/8 border-white/10 text-white/50 hover:text-white"
+              )}
+              data-testid="button-record"
+              title="Voice input"
+            >
+              {isRecording
+                ? <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.8, repeat: Infinity }}><Square size={8} fill="currentColor" className="text-red-400" /></motion.div>
+                : <div className="w-2.5 h-2.5 rounded-full bg-current" />
+              }
+            </motion.button>
+
             {/* Plan toggle */}
             <button
               onClick={() => setPlanEnabled(v => !v)}
@@ -3600,7 +3844,7 @@ export default function Chat() {
             {/* Stop / Send button */}
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={isThinking ? () => {} : handleSubmit}
+              onClick={isThinking ? () => { abortControllerRef.current?.abort(); setIsThinking(false); setCurrentToolCall(null); } : handleSubmit}
               className={cn(
                 "w-9 h-9 rounded-xl flex items-center justify-center transition-all shrink-0",
                 isThinking
@@ -3695,8 +3939,8 @@ export default function Chat() {
             <Network size={20} strokeWidth={1.5} />
           </motion.button>
 
-          {/* Multi-Artifact */}
-          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowMultiArtifact(true)}
+          {/* Multi-Artifact / Preview */}
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowPreviewArtifacts(true)}
             className="flex-1 h-full flex items-center justify-center text-white/35 hover:text-white transition-colors"
             data-testid="toolbar-multi-artifact">
             <Layers size={20} strokeWidth={1.5} />
@@ -3792,6 +4036,11 @@ export default function Chat() {
       {/* ── Multi-Artifact Panel ── */}
       <AnimatePresence>
         {showMultiArtifact && <MultiArtifactPanel onClose={() => setShowMultiArtifact(false)} />}
+      </AnimatePresence>
+
+      {/* ── Preview Artifacts Panel ── */}
+      <AnimatePresence>
+        {showPreviewArtifacts && <ArtifactPreviewPanel onClose={() => setShowPreviewArtifacts(false)} />}
       </AnimatePresence>
 
       {/* ── Agent Memory Panel ── */}
