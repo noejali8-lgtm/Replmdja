@@ -423,8 +423,61 @@ function fmtHistoryTime(d: Date) {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+function CopyAllBtn({ getText }: { getText: () => string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      title="Copy all content"
+      onClick={() => {
+        try { navigator.clipboard?.writeText(getText()); } catch { /* noop */ }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1800);
+      }}
+      className={cn(
+        "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition-all shrink-0",
+        copied
+          ? "bg-green-500/15 border-green-400/30 text-green-300"
+          : "bg-secondary/30 border-border/40 text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+      )}
+    >
+      {copied ? <Check size={10} /> : <Copy size={10} />}
+      {copied ? "Copied!" : "Copy All"}
+    </button>
+  );
+}
+
+function SelectAllBtn({ targetRef }: { targetRef: React.RefObject<HTMLElement | null> }) {
+  const [active, setActive] = useState(false);
+  return (
+    <button
+      title="Select all text"
+      onClick={() => {
+        const el = targetRef.current;
+        if (!el) return;
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+        setActive(true);
+        setTimeout(() => setActive(false), 2000);
+      }}
+      className={cn(
+        "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition-all shrink-0",
+        active
+          ? "bg-blue-500/15 border-blue-400/30 text-blue-300"
+          : "bg-secondary/30 border-border/40 text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+      )}
+    >
+      {active ? <Check size={10} /> : <Eye size={10} />}
+      {active ? "Selected!" : "Select All"}
+    </button>
+  );
+}
+
 function HistoryPanel({ onClose }: { onClose: () => void }) {
   const [search, setSearch] = useState("");
+  const contentRef = useRef<HTMLDivElement>(null);
   const [conversations] = useState<HistoryConversation[]>(() => {
     try {
       const saved = localStorage.getItem("chat_history_v1");
@@ -458,18 +511,21 @@ function HistoryPanel({ onClose }: { onClose: () => void }) {
       className="absolute inset-0 z-50 flex flex-col bg-background"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-10 pb-3 border-b border-border shrink-0">
-        <div className="flex items-center gap-2">
-          <History size={18} className="text-purple-400" />
-          <h2 className="text-base font-semibold text-foreground">History</h2>
+      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors shrink-0"><ArrowLeft size={15} /> Back</button>
+        <div className="flex-1" />
+        <History size={17} className="text-purple-400" />
+        <h2 className="text-base font-semibold text-foreground">History</h2>
+        <div className="flex-1" />
+        <div className="flex items-center gap-1">
+          <SelectAllBtn targetRef={contentRef} />
+          <CopyAllBtn getText={() => conversations.map(c => `${c.title} — ${fmtHistoryTime(c.timestamp)} — ${c.lastMessage}`).join("\n")} />
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"
+            data-testid="button-close-history"
+          ><X size={18} /></button>
         </div>
-        <button
-          onClick={onClose}
-          className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"
-          data-testid="button-close-history"
-        >
-          <X size={18} />
-        </button>
       </div>
 
       {/* Search */}
@@ -493,7 +549,7 @@ function HistoryPanel({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto no-scrollbar">
+      <div ref={contentRef} className="flex-1 overflow-y-auto no-scrollbar">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3">
             <MessageSquare size={32} className="text-muted-foreground/30" />
@@ -2116,6 +2172,7 @@ function MemoryPanel({ onClose }: { onClose: () => void }) {
   const [filter, setFilter] = useState<string>("all");
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState("");
+  const memContentRef = useRef<HTMLDivElement>(null);
 
   const categories = ["all", "stack", "requirement", "preference", "context", "decision"];
   const filtered = filter === "all" ? entries : entries.filter(e => e.category === filter);
@@ -2131,16 +2188,20 @@ function MemoryPanel({ onClose }: { onClose: () => void }) {
       transition={{ type: "spring", stiffness: 340, damping: 36 }}
       className="absolute inset-0 z-50 flex flex-col bg-background">
       <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors shrink-0"><ArrowLeft size={15} /> Back</button>
         <div className="flex-1" />
         <Sparkles size={17} className="text-yellow-400" />
         <span className="text-base font-semibold text-foreground">Agent Memory</span>
         <div className="flex-1" />
-        <button onClick={() => setAdding(v => !v)}
-          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-yellow-500/15 border border-yellow-400/30 text-yellow-300 hover:bg-yellow-500/25 transition-colors">
-          <Plus size={11} /> Add
-        </button>
-        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+        <div className="flex items-center gap-1">
+          <SelectAllBtn targetRef={memContentRef} />
+          <CopyAllBtn getText={() => entries.map(e => `[${e.category}] ${e.text} (${e.confidence}% confidence)`).join("\n")} />
+          <button onClick={() => setAdding(v => !v)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-yellow-500/15 border border-yellow-400/30 text-yellow-300 hover:bg-yellow-500/25 transition-colors">
+            <Plus size={11} /> Add
+          </button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+        </div>
       </div>
 
       {/* Category filter chips */}
@@ -2155,7 +2216,7 @@ function MemoryPanel({ onClose }: { onClose: () => void }) {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 no-scrollbar">
+      <div ref={memContentRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2 no-scrollbar">
         <p className="text-[11px] text-muted-foreground/50 leading-relaxed px-1">
           Agent remembers these facts about your project across all sessions. High-confidence memories are used automatically.
         </p>
@@ -2233,6 +2294,7 @@ const MOCK_CHECKPOINTS: Checkpoint[] = [
 function CheckpointPanel({ onClose }: { onClose: () => void }) {
   const [restoring, setRestoring] = useState<string | null>(null);
   const [restored, setRestored] = useState<string | null>(null);
+  const cpContentRef = useRef<HTMLDivElement>(null);
 
   const handleRestore = async (id: string) => {
     if (id === "cp1") return;
@@ -2247,15 +2309,19 @@ function CheckpointPanel({ onClose }: { onClose: () => void }) {
       transition={{ type: "spring", stiffness: 340, damping: 36 }}
       className="absolute inset-0 z-50 flex flex-col bg-background">
       <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors shrink-0"><ArrowLeft size={15} /> Back</button>
         <div className="flex-1" />
         <Clock size={17} className="text-cyan-400" />
         <span className="text-base font-semibold text-foreground">Checkpoints</span>
         <div className="flex-1" />
-        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+        <div className="flex items-center gap-1">
+          <SelectAllBtn targetRef={cpContentRef} />
+          <CopyAllBtn getText={() => MOCK_CHECKPOINTS.map(cp => `${cp.label} — ${cp.time} — ${cp.desc}`).join("\n")} />
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 no-scrollbar">
+      <div ref={cpContentRef} className="flex-1 overflow-y-auto px-4 py-4 no-scrollbar">
         <p className="text-xs text-muted-foreground/60 leading-relaxed mb-4 px-1">
           Auto-checkpoints are saved after every significant change. Restore any point to undo all changes since then — your conversation history is preserved.
         </p>
@@ -2448,14 +2514,17 @@ function InsightsPanel({ onClose, sessionStats }: { onClose: () => void; session
       className="absolute inset-0 z-50 flex flex-col bg-background">
 
       <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors shrink-0"><ArrowLeft size={15} /> Back</button>
         <div className="flex-1" />
         <motion.div animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 2.2, repeat: Infinity }}
           className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
         <BarChart3 size={17} className="text-orange-400" />
         <span className="text-base font-semibold text-foreground">Agent Insights</span>
         <div className="flex-1" />
-        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+        <div className="flex items-center gap-1">
+          <CopyAllBtn getText={() => `Agent Insights\nTotal Tokens: ${totalInputTokens + totalOutputTokens}\nAvg Response: ${Math.round(avgResponseTime)}ms\nAvg Speed: ${Math.round(avgToksPerSec)} tok/s\nMessages: ${sessionStats.length}`} />
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 no-scrollbar">
@@ -2673,12 +2742,15 @@ function ParallelAgentsPanel({ onClose }: { onClose: () => void }) {
       transition={{ type: "spring", stiffness: 340, damping: 36 }}
       className="absolute inset-0 z-50 flex flex-col bg-background">
       <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors shrink-0"><ArrowLeft size={15} /> Back</button>
         <div className="flex-1" />
         <Cpu size={17} className="text-purple-400" />
         <span className="text-base font-semibold text-foreground">Parallel Agents</span>
         <div className="flex-1" />
-        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+        <div className="flex items-center gap-1">
+          <CopyAllBtn getText={() => tasks.map(t => `[${t.status.toUpperCase()}] ${t.agent}: ${t.label} (${Math.round(t.progress)}%)`).join("\n")} />
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 no-scrollbar">
         <div className="flex items-center gap-2 bg-purple-500/10 border border-purple-400/20 rounded-xl px-3 py-2.5">

@@ -897,6 +897,28 @@ export default function Home() {
             </Link>
           </div>
 
+          {/* G0DM0D3.AI Showcase */}
+          <Link href="/g0dm0d3">
+            <div className="relative overflow-hidden rounded-2xl border border-green-400/20 bg-gradient-to-br from-[#0a110a] via-[#0d1117] to-[#0d1017] cursor-pointer group hover:border-green-400/35 transition-all">
+              <div className="absolute inset-0 opacity-20 pointer-events-none select-none overflow-hidden">
+                <pre className="font-mono text-[5px] text-green-400/40 leading-tight px-2 pt-1 whitespace-pre">{` ▄████  ██████  ██████\n██      ██  ██  ██   ██\n██ ▄███ ██  ██  ██   ██\n ██████  ████   ██████`}</pre>
+              </div>
+              <div className="relative px-4 py-3.5 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-green-500/15 border border-green-400/25 flex items-center justify-center shrink-0 group-hover:bg-green-500/22 transition-colors">
+                  <span className="text-lg">🔥</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[13px] font-bold text-green-300">G0DM0D3.AI</p>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-500/15 border border-green-400/25 text-green-400">OPEN SOURCE</span>
+                  </div>
+                  <p className="text-[10px] text-white/40 mt-0.5 leading-tight">Liberated AI · 50+ models · GODMODE CLASSIC · ULTRAPLINIAN</p>
+                </div>
+                <ChevronRight size={14} className="text-green-400/40 group-hover:text-green-400/70 transition-colors shrink-0" />
+              </div>
+            </div>
+          </Link>
+
           {/* RuFlo Agent System */}
           <RuFloSection />
 
