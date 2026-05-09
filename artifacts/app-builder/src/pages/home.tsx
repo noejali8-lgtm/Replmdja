@@ -534,7 +534,7 @@ export default function Home() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-white leading-tight">Templates</p>
-                  <p className="text-[10px] text-white/35 truncate">قوالب جاهزة</p>
+                  <p className="text-[10px] text-white/35 truncate">Starter templates</p>
                 </div>
                 <ChevronRight size={12} className="text-white/20 ml-auto shrink-0" />
               </div>
@@ -546,7 +546,7 @@ export default function Home() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-white leading-tight">Explore</p>
-                  <p className="text-[10px] text-white/35 truncate">دليل Replit</p>
+                  <p className="text-[10px] text-white/35 truncate">Community repls</p>
                 </div>
                 <ChevronRight size={12} className="text-white/20 ml-auto shrink-0" />
               </div>

@@ -3923,7 +3923,10 @@ export default function Chat() {
         </button>
 
         <button
-          className="w-9 h-9 flex items-center justify-center text-white/50 hover:text-white rounded-xl hover:bg-white/8 transition-colors"
+          onClick={() => setShowMoreTools(v => !v)}
+          className={cn("w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
+            showMoreTools ? "text-white bg-white/10" : "text-white/50 hover:text-white hover:bg-white/8"
+          )}
           data-testid="button-more"
         >
           <MoreHorizontal size={20} />
