@@ -12,6 +12,7 @@ import securityRouter from "./security";
 import federationRouter from "./federation";
 import goapRouter from "./goap";
 import mcpRouter from "./mcp";
+import multiChatRouter from "./multi-chat";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use("/security", securityRouter);
 router.use("/federation", federationRouter);
 router.use("/goap", goapRouter);
 router.use("/mcp", mcpRouter);
+router.use("/multi-chat", multiChatRouter);
 
 export default router;

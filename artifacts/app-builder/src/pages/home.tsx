@@ -654,8 +654,9 @@ function RecentImportsSection({ onReimport }: { onReimport: (target: ImportTarge
 }
 
 const RUFLO_LINKS = [
-  { path: "/agents",    icon: Bot,      color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-400/20", label: "Agents",       sub: "95+ specialist agents" },
-  { path: "/swarm",     icon: Network,  color: "text-amber-400",  bg: "bg-amber-500/10",  border: "border-amber-400/20",  label: "Swarm",        sub: "Hierarchical · Mesh" },
+  { path: "/agents",     icon: Bot,      color: "text-purple-400",  bg: "bg-purple-500/10",  border: "border-purple-400/20",  label: "Agents",       sub: "95+ specialist agents" },
+  { path: "/agent-chat", icon: Users,    color: "text-violet-400",  bg: "bg-violet-500/10",  border: "border-violet-400/20",  label: "Agent Chat",   sub: "Real-time collaboration" },
+  { path: "/swarm",      icon: Network,  color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-400/20",   label: "Swarm",        sub: "Hierarchical · Mesh" },
   { path: "/memory",    icon: Database, color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-400/20", label: "AgentDB",      sub: "HNSW vector memory" },
   { path: "/workers",   icon: Settings, color: "text-sky-400",    bg: "bg-sky-500/10",    border: "border-sky-400/20",    label: "Workers",      sub: "12 background tasks" },
   { path: "/plugins",   icon: Package,  color: "text-pink-400",   bg: "bg-pink-500/10",   border: "border-pink-400/20",   label: "Plugins",      sub: "32 native + 21 npm" },
@@ -679,7 +680,7 @@ function RuFloSection() {
           <Sparkles size={12} className="text-purple-400" />
           <span className="text-[11px] font-semibold uppercase tracking-widest text-white/40">RuFlo Agent System</span>
         </div>
-        <span className="text-[10px] text-white/25">10 modules</span>
+        <span className="text-[10px] text-white/25">11 modules</span>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         {RUFLO_LINKS.map((item) => {

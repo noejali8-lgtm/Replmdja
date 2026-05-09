@@ -21,6 +21,7 @@ import FeaturesPage from "@/pages/features";
 import NotFound from "@/pages/not-found";
 
 import AgentsPage from "@/pages/agents";
+import AgentChatPage from "@/pages/agent-chat";
 import SwarmPage from "@/pages/swarm";
 import MemoryPage from "@/pages/memory";
 import WorkersPage from "@/pages/workers";
@@ -34,7 +35,7 @@ import McpPage from "@/pages/mcp";
 const queryClient = new QueryClient();
 
 const RUFLO_PAGES = [
-  "/agents", "/swarm", "/memory", "/workers",
+  "/agents", "/agent-chat", "/swarm", "/memory", "/workers",
   "/plugins", "/providers", "/security",
   "/federation", "/goap", "/mcp",
 ];
@@ -57,6 +58,7 @@ function Router() {
 
         {/* RuFlo Agent System */}
         <Route path="/agents" component={AgentsPage} />
+        <Route path="/agent-chat" component={AgentChatPage} />
         <Route path="/swarm" component={SwarmPage} />
         <Route path="/memory" component={MemoryPage} />
         <Route path="/workers" component={WorkersPage} />
