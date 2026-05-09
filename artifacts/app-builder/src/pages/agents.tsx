@@ -56,7 +56,7 @@ interface LogEntry {
   type?: string;
 }
 
-type Tab = "dashboard" | "catalog" | "active";
+type Tab = "dashboard" | "catalog" | "active" | "live";
 type AgentTab = "run" | "logs";
 
 const LEVEL_STYLES: Record<string, { color: string; bg: string; label: string }> = {
@@ -261,6 +261,134 @@ function TerminalPanel({ agent, onClose }: { agent: LiveAgent; onClose: () => vo
   );
 }
 
+function GlobalLogFeed() {
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [connected, setConnected] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+  const esRef = useRef<EventSource | null>(null);
+  const pausedRef = useRef(false);
+  const bufferRef = useRef<LogEntry[]>([]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+    if (!paused && bufferRef.current.length > 0) {
+      setLogs(prev => [...prev, ...bufferRef.current].slice(-500));
+      bufferRef.current = [];
+    }
+  }, [paused]);
+
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
+
+  useEffect(() => {
+    const es = new EventSource(`${BASE_URL}/api/agents/logs/stream-all`);
+    esRef.current = es;
+
+    es.onopen = () => setConnected(true);
+    es.onerror = () => setConnected(false);
+    es.onmessage = (e) => {
+      try {
+        const entry = JSON.parse(e.data) as LogEntry;
+        if (entry.type === "connected") { setConnected(true); return; }
+        if (!entry.level) return;
+        if (pausedRef.current) {
+          bufferRef.current = [...bufferRef.current, entry].slice(-200);
+        } else {
+          setLogs(prev => [...prev.slice(-499), entry]);
+        }
+      } catch { /* ignore */ }
+    };
+
+    return () => { es.close(); setConnected(false); };
+  }, []);
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-4 space-y-3">
+      {/* Header bar */}
+      <div className="flex items-center gap-2">
+        <div className={cn("flex items-center gap-1.5 text-[11px] font-medium", connected ? "text-green-400" : "text-white/30")}>
+          {connected ? <Wifi size={11} /> : <WifiOff size={11} />}
+          {connected ? "Connected · All Agents" : "Disconnected"}
+        </div>
+        <div className="flex-1" />
+        <span className="text-[10px] text-white/30">{logs.length} events</span>
+        <button
+          onClick={() => setPaused(p => !p)}
+          className={cn(
+            "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium border transition-all",
+            paused
+              ? "bg-yellow-500/10 border-yellow-400/30 text-yellow-300"
+              : "bg-white/5 border-white/10 text-white/40 hover:text-white"
+          )}
+        >
+          {paused ? "▶ Resume" : "⏸ Pause"}
+          {paused && bufferRef.current.length > 0 && (
+            <span className="bg-yellow-400/20 text-yellow-300 rounded-full px-1 ml-0.5 text-[9px]">+{bufferRef.current.length}</span>
+          )}
+        </button>
+        <button onClick={() => setLogs([])} className="px-2 py-1 rounded-md text-[10px] border border-white/10 text-white/30 hover:text-white/60 bg-white/5 transition-colors">
+          Clear
+        </button>
+      </div>
+
+      {/* Terminal */}
+      <div className="bg-[#0a0e14] border border-white/[0.07] rounded-xl overflow-hidden">
+        <div className="flex items-center gap-1.5 px-3 py-2 bg-[#0d1117] border-b border-white/[0.06]">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-500/50" />
+          <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/50" />
+          <span className="w-2.5 h-2.5 rounded-full bg-green-500/50" />
+          <span className="text-[10px] text-white/30 font-mono ml-1 flex items-center gap-1.5">
+            <Radio size={9} className={cn("shrink-0", connected ? "text-green-400 animate-pulse" : "text-white/20")} />
+            global agent log stream
+          </span>
+        </div>
+
+        <div className="h-96 overflow-y-auto p-2 space-y-0.5 font-mono text-[10px]">
+          {logs.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-white/20 gap-2">
+              <Radio size={24} />
+              <p>{connected ? "Waiting for agent activity…" : "Connecting to log stream…"}</p>
+              <p className="text-[10px]">Spawn an agent and run a task to see live logs</p>
+            </div>
+          ) : (
+            logs.map((entry, i) => {
+              const style = LEVEL_STYLES[entry.level] ?? LEVEL_STYLES.INFO;
+              const ts = new Date(entry.createdAt).toLocaleTimeString("en", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+              return (
+                <div key={i} className="flex items-start gap-1.5 leading-relaxed group">
+                  <span className="text-white/20 shrink-0 mt-0.5">{ts}</span>
+                  <span className="text-white/25 shrink-0 mt-0.5">A{entry.agentId}</span>
+                  <span className={cn("shrink-0 px-1 py-0.5 rounded text-[9px] font-bold tracking-wide mt-0.5", style.color, style.bg)}>
+                    {style.label.trim()}
+                  </span>
+                  <span className={cn("flex-1 break-words", style.color === "text-white/80" ? "text-white/70" : style.color)}>
+                    {entry.message}
+                  </span>
+                </div>
+              );
+            })
+          )}
+          <div ref={logsEndRef} />
+        </div>
+      </div>
+
+      {!connected && (
+        <div className="text-center py-4">
+          <p className="text-[11px] text-white/30">No agents running yet.</p>
+          <button
+            onClick={() => {}}
+            className="mt-2 px-3 py-1.5 bg-purple-600/20 border border-purple-400/30 rounded-lg text-purple-300 text-[11px]"
+          >
+            Go to Catalog →
+          </button>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 export default function AgentsPage() {
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("dashboard");
@@ -344,9 +472,18 @@ export default function AgentsPage() {
           </div>
         </div>
         <div className="flex gap-1 pb-3">
-          {(["dashboard", "catalog", "active"] as Tab[]).map(t => (
+          {(["dashboard", "catalog", "active", "live"] as Tab[]).map(t => (
             <button key={t} onClick={() => setTab(t)} className={cn("flex-1 py-1.5 rounded-lg text-[12px] font-medium capitalize transition-colors", tab === t ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70")}>
-              {t} {t === "active" && liveAgents.length > 0 && <span className="ml-1 text-[10px] bg-green-500/30 text-green-300 px-1.5 rounded-full">{liveAgents.length}</span>}
+              {t === "live" ? (
+                <span className="flex items-center justify-center gap-1">
+                  <Radio size={10} className={tab === "live" ? "text-green-400 animate-pulse" : "text-white/40"} />
+                  Live
+                </span>
+              ) : (
+                <>
+                  {t} {t === "active" && liveAgents.length > 0 && <span className="ml-1 text-[10px] bg-green-500/30 text-green-300 px-1.5 rounded-full">{liveAgents.length}</span>}
+                </>
+              )}
             </button>
           ))}
         </div>
@@ -469,6 +606,9 @@ export default function AgentsPage() {
             </div>
           </motion.div>
         )}
+
+        {/* ── Live Feed ────────────────────────────────────────────────── */}
+        {tab === "live" && <GlobalLogFeed />}
 
         {/* ── Active Agents ─────────────────────────────────────────────── */}
         {tab === "active" && (

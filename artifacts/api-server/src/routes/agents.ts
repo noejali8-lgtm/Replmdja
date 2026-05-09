@@ -40,6 +40,7 @@ async function writeLog(
       createdAt: row.createdAt.toISOString(),
     };
     logBus.emit(`agent:${agentId}`, entry);
+    logBus.emit("all-agents", entry);
   } catch {
     /* non-fatal */
   }
@@ -378,6 +379,141 @@ router.delete("/:id", async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: String(err) });
+  }
+});
+
+/* ── GET /api/agents/logs/stream-all ─────────────────────────────────────── */
+router.get("/logs/stream-all", (req: Request, res: Response) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  send({ type: "connected", message: "Global agent log stream connected" });
+
+  const onEntry = (entry: LogEntry) => send(entry);
+  logBus.on("all-agents", onEntry);
+
+  const keepAlive = setInterval(() => res.write(": ping\n\n"), 25_000);
+
+  req.on("close", () => {
+    clearInterval(keepAlive);
+    logBus.off("all-agents", onEntry);
+    res.end();
+  });
+});
+
+/* ── POST /api/agents/debate ─────────────────────────────────────────────── */
+const DEBATE_PERSONAS: Record<string, { name: string; icon: string; systemPrompt: string }> = {
+  coder: {
+    name: "Coder",
+    icon: "💻",
+    systemPrompt: "You are the Coder agent — a pragmatic software engineer. Focus on implementation details, code quality, performance, and practical solutions. Argue from a developer's perspective. Keep responses concise (2-3 paragraphs max).",
+  },
+  tester: {
+    name: "Tester",
+    icon: "🧪",
+    systemPrompt: "You are the Tester agent — a quality-focused QA engineer. Focus on edge cases, reliability, test coverage, and failure modes. Challenge assumptions with testing scenarios. Keep responses concise (2-3 paragraphs max).",
+  },
+  security: {
+    name: "Security",
+    icon: "🛡️",
+    systemPrompt: "You are the Security agent — a security-first engineer. Focus on vulnerabilities, attack surfaces, compliance, and secure-by-default design. Flag risks and argue for security posture. Keep responses concise (2-3 paragraphs max).",
+  },
+  architect: {
+    name: "Architect",
+    icon: "🏗️",
+    systemPrompt: "You are the Architect agent — a systems design expert. Focus on scalability, maintainability, patterns, and long-term architecture decisions. Argue from a holistic system perspective. Keep responses concise (2-3 paragraphs max).",
+  },
+  performance: {
+    name: "Perf",
+    icon: "⚡",
+    systemPrompt: "You are the Performance agent — an optimization specialist. Focus on latency, throughput, resource efficiency, and benchmarks. Argue from data and performance metrics. Keep responses concise (2-3 paragraphs max).",
+  },
+  devops: {
+    name: "DevOps",
+    icon: "🔄",
+    systemPrompt: "You are the DevOps agent — an infrastructure and deployment expert. Focus on CI/CD, observability, reliability, and operational concerns. Argue from an ops and deployment perspective. Keep responses concise (2-3 paragraphs max).",
+  },
+};
+
+router.post("/debate", async (req: Request, res: Response) => {
+  try {
+    const { topic, agents: agentIds, rounds = 2 } = req.body as {
+      topic: string;
+      agents: string[];
+      rounds?: number;
+    };
+
+    if (!topic || !agentIds || agentIds.length < 2) {
+      res.status(400).json({ error: "topic and at least 2 agents required" });
+      return;
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+    const history: { role: "user" | "assistant"; content: string }[] = [];
+    const clampedRounds = Math.max(1, Math.min(5, rounds));
+
+    for (let round = 1; round <= clampedRounds; round++) {
+      for (const agentId of agentIds) {
+        const persona = DEBATE_PERSONAS[agentId] ?? {
+          name: agentId,
+          icon: "🤖",
+          systemPrompt: `You are the ${agentId} agent. Contribute your perspective to the debate. Keep responses concise.`,
+        };
+
+        const userContent =
+          history.length === 0
+            ? `Debate topic: "${topic}"\n\nProvide your initial position and key arguments.`
+            : `Debate topic: "${topic}"\n\nPrevious arguments:\n${history
+                .slice(-4)
+                .map(h => h.content)
+                .join("\n\n")}\n\nRound ${round}: Respond to the arguments above. Challenge their points and strengthen your position.`;
+
+        send({
+          type: "round_start",
+          round,
+          agentId,
+          agentName: persona.name,
+          icon: persona.icon,
+        });
+
+        let fullContent = "";
+
+        const stream = anthropic.messages.stream({
+          model: "claude-haiku-4-5",
+          max_tokens: 512,
+          system: persona.systemPrompt,
+          messages: [...history, { role: "user", content: userContent }],
+        });
+
+        for await (const event of stream) {
+          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+            const text = event.delta.text;
+            fullContent += text;
+            send({ type: "chunk", agentId, content: text });
+          }
+        }
+
+        history.push({ role: "user", content: userContent });
+        history.push({ role: "assistant", content: `[${persona.name}]: ${fullContent}` });
+
+        send({ type: "round_end", round, agentId, agentName: persona.name, content: fullContent });
+      }
+    }
+
+    send({ type: "done" });
+    res.end();
+  } catch (err) {
+    res.write(`data: ${JSON.stringify({ type: "error", error: String(err) })}\n\n`);
+    res.end();
   }
 });
 

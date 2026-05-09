@@ -20,6 +20,8 @@ import {
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import { AIModelsPanel, ALL_MODELS } from "@/components/AIModelsPanel";
+import { AgentDebatePanel } from "@/components/AgentDebatePanel";
+import { DeploySheet } from "@/components/DeploySheet";
 
 interface MessageStats {
   inputTokens: number;
@@ -4248,6 +4250,8 @@ export default function Chat() {
   const [currentToolCall, setCurrentToolCall] = useState<{ name: string; input: Record<string, unknown> } | null>(null);
   const [showQuickSuggestions, setShowQuickSuggestions] = useState(true);
   const [showMoreTools, setShowMoreTools] = useState(false);
+  const [showDebate, setShowDebate] = useState(false);
+  const [showDeploy, setShowDeploy] = useState(false);
   const [agentPhase, setAgentPhase] = useState(0);
   const [monologueIdx, setMonologueIdx] = useState(0);
   const [selfHealingError, setSelfHealingError] = useState<string | null>(null);
@@ -4906,6 +4910,8 @@ export default function Chat() {
                 { icon: <AlignJustify size={14} className="text-muted-foreground" />, label: "Files", action: () => { setShowFiles(true); setShowMoreTools(false); } },
                 { icon: <Globe size={14} className="text-blue-400" />, label: "Publishing", action: () => { setShowPublishing(true); setShowMoreTools(false); } },
                 { icon: <Globe size={14} className="text-blue-400" />, label: "Webview Preview", action: () => { setShowWebview(true); setShowMoreTools(false); } },
+                { icon: <Zap size={14} className="text-purple-400" />, label: "Agent Debate", action: () => { setShowDebate(true); setShowMoreTools(false); } },
+                { icon: <Rocket size={14} className="text-blue-400" />, label: "Deploy", action: () => { setShowDeploy(true); setShowMoreTools(false); } },
               ].map(item => (
                 <button key={item.label} onClick={item.action}
                   className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/50 transition-colors">
@@ -5342,6 +5348,16 @@ export default function Chat() {
             onClose={() => setShowAIModels(false)}
           />
         )}
+      </AnimatePresence>
+
+      {/* ── Agent Debate Panel ── */}
+      <AnimatePresence>
+        {showDebate && <AgentDebatePanel onClose={() => setShowDebate(false)} />}
+      </AnimatePresence>
+
+      {/* ── Deploy Sheet ── */}
+      <AnimatePresence>
+        {showDeploy && <DeploySheet onClose={() => setShowDeploy(false)} />}
       </AnimatePresence>
 
       {/* ── Build Together floating badge ── */}
