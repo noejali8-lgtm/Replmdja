@@ -24,3 +24,4 @@ export * from "./swarms";
 export * from "./memory";
 export * from "./workers";
 export * from "./plugins";
+export * from "./godmode";

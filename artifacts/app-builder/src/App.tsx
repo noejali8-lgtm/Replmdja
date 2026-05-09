@@ -33,6 +33,7 @@ import GoalPlannerPage from "@/pages/goap";
 import McpPage from "@/pages/mcp";
 import RufloInstallPage from "@/pages/ruflo-install";
 import GodmodeReadmePage from "@/pages/godmode-readme";
+import GodmodeLeaderboardPage from "@/pages/godmode-leaderboard";
 import JarvisPage from "@/pages/jarvis";
 import OpenClawPage from "@/pages/openclaw";
 
@@ -41,7 +42,7 @@ const queryClient = new QueryClient();
 const RUFLO_PAGES = [
   "/agents", "/agent-chat", "/swarm", "/memory", "/workers",
   "/plugins", "/providers", "/security",
-  "/federation", "/goap", "/mcp", "/ruflo-install", "/g0dm0d3", "/jarvis", "/openclaw",
+  "/federation", "/goap", "/mcp", "/ruflo-install", "/g0dm0d3", "/godmode-leaderboard", "/jarvis", "/openclaw",
 ];
 
 function Router() {
@@ -74,6 +75,7 @@ function Router() {
         <Route path="/mcp" component={McpPage} />
         <Route path="/ruflo-install" component={RufloInstallPage} />
         <Route path="/g0dm0d3" component={GodmodeReadmePage} />
+        <Route path="/godmode-leaderboard" component={GodmodeLeaderboardPage} />
         <Route path="/jarvis" component={JarvisPage} />
         <Route path="/openclaw" component={OpenClawPage} />
 

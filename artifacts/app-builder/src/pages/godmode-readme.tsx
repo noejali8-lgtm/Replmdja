@@ -162,6 +162,13 @@ export default function GodmodeReadmePage() {
     setRaceWinner(null);
     setExpandedCard(null);
 
+    // Local accumulators for auto-save (parallel to state updates)
+    const localScores: Record<string, number> = {};
+    const localElapsed: Record<string, number> = {};
+    const localPreviews: Record<string, string> = {};
+    let localWinnerId = "";
+    let localWinnerScore = 0;
+
     try {
       const res = await fetch("/api/openrouter/godmode", {
         method: "POST",
@@ -188,11 +195,22 @@ export default function GodmodeReadmePage() {
               setRaceStatus(p => ({ ...p, [evt.comboId]: "racing" }));
             } else if (evt.type === "combo_done" && evt.comboId) {
               setRaceStatus(p => ({ ...p, [evt.comboId]: evt.error ? "error" : "done" }));
-              if (evt.text) setRaceTexts(p => ({ ...p, [evt.comboId]: evt.text }));
-              if (evt.score !== undefined) setRaceScores(p => ({ ...p, [evt.comboId]: evt.score }));
-              if (evt.elapsed !== undefined) setRaceElapsed(p => ({ ...p, [evt.comboId]: evt.elapsed }));
+              if (evt.text) {
+                setRaceTexts(p => ({ ...p, [evt.comboId]: evt.text }));
+                localPreviews[evt.comboId] = String(evt.text).slice(0, 300);
+              }
+              if (evt.score !== undefined) {
+                setRaceScores(p => ({ ...p, [evt.comboId]: evt.score }));
+                localScores[evt.comboId] = Number(evt.score);
+              }
+              if (evt.elapsed !== undefined) {
+                setRaceElapsed(p => ({ ...p, [evt.comboId]: evt.elapsed }));
+                localElapsed[evt.comboId] = Number(evt.elapsed);
+              }
             } else if (evt.type === "winner" && evt.comboId) {
               setRaceWinner(evt.comboId);
+              localWinnerId = evt.comboId;
+              localWinnerScore = localScores[evt.comboId] ?? 0;
             } else if (evt.type === "error") {
               setRaceError(evt.message ?? "Race failed");
             }
@@ -202,6 +220,27 @@ export default function GodmodeReadmePage() {
     } catch (err) {
       setRaceError(String(err));
     }
+
+    // Auto-save to leaderboard (fire-and-forget, non-critical)
+    if (localWinnerId) {
+      const winnerMeta = RACE_COMBOS.find(c => c.id === localWinnerId);
+      try {
+        await fetch("/api/godmode/races", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: racePrompt.trim().slice(0, 1000),
+            winnerId: localWinnerId,
+            winnerName: winnerMeta?.name ?? localWinnerId,
+            winnerScore: localWinnerScore,
+            scores: localScores,
+            elapsed: localElapsed,
+            previews: localPreviews,
+          }),
+        });
+      } catch { /* save failed — non-critical, race still shows */ }
+    }
+
     setRaceRunning(false);
   };
 
@@ -263,8 +302,18 @@ export default function GodmodeReadmePage() {
           >
             <ArrowLeft size={20} />
           </button>
-          <span className="font-bold text-base flex-1">G0DM0D3.AI</span>
-          <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <p className="text-[9px] font-mono uppercase tracking-widest text-green-400/60">G0DM0D3.AI</p>
+            <p className="font-bold text-[15px] leading-tight">LIBERATED AI</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => navigate("/godmode-leaderboard")}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-yellow-400/25 bg-yellow-500/8 text-yellow-300 hover:bg-yellow-500/15 transition-all"
+            >
+              <Trophy size={11} />
+              Leaderboard
+            </button>
             <SelectAllButton targetRef={contentRef} />
             <CopyAllButton getContent={getAllContent} />
           </div>
