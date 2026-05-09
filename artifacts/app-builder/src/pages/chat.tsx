@@ -189,6 +189,209 @@ function PlanningStep({ label, elapsed }: { label: string; elapsed: number }) {
   );
 }
 
+/* ── Agent Loop Phase Card ── */
+const AGENT_LOOP_PHASES = [
+  { id: "observe", label: "Observe", desc: "Reading context & inputs", icon: "👁", color: "text-sky-400", bg: "bg-sky-500/10", border: "border-sky-400/20", dot: "bg-sky-400" },
+  { id: "think",   label: "Think",   desc: "Analyzing & reasoning",   icon: "🧠", color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-400/20", dot: "bg-violet-400" },
+  { id: "plan",    label: "Plan",    desc: "Mapping implementation",   icon: "📋", color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-400/20", dot: "bg-amber-400" },
+  { id: "execute", label: "Execute", desc: "Writing code",             icon: "⚡", color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-400/20", dot: "bg-emerald-400" },
+  { id: "verify",  label: "Verify",  desc: "Validating output",        icon: "✓",  color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-400/20", dot: "bg-rose-400" },
+] as const;
+
+function AgentLoopCard({ phase }: { phase: number }) {
+  const active = AGENT_LOOP_PHASES[phase] ?? AGENT_LOOP_PHASES[0];
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.2 }}
+      className="flex flex-col gap-2 px-3 py-2.5 bg-[#1a1a2e] border border-white/[0.07] rounded-2xl w-full"
+      data-testid="agent-loop-card"
+    >
+      {/* Phase pills row */}
+      <div className="flex items-center gap-1">
+        {AGENT_LOOP_PHASES.map((p, i) => (
+          <motion.div
+            key={p.id}
+            animate={i === phase ? { scale: [1, 1.06, 1] } : {}}
+            transition={{ duration: 1.2, repeat: Infinity }}
+            className={cn(
+              "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all",
+              i === phase
+                ? cn(p.bg, p.border, p.color)
+                : i < phase
+                ? "bg-white/[0.04] border-white/[0.06] text-white/25 line-through"
+                : "bg-transparent border-white/[0.05] text-white/20"
+            )}
+          >
+            {i === phase && (
+              <motion.span
+                animate={{ opacity: [1, 0.3, 1] }}
+                transition={{ duration: 1, repeat: Infinity }}
+                className={cn("w-1 h-1 rounded-full shrink-0", p.dot)}
+              />
+            )}
+            {i < phase && <Check size={7} className="shrink-0" />}
+            {p.label}
+          </motion.div>
+        ))}
+      </div>
+      {/* Active phase detail */}
+      <div className="flex items-center gap-2">
+        <span className="text-base leading-none">{active.icon}</span>
+        <div>
+          <p className={cn("text-xs font-semibold", active.color)}>{active.label}</p>
+          <p className="text-[10px] text-white/35 mt-0.5">{active.desc}</p>
+        </div>
+        <div className="flex-1" />
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "linear" }}
+        >
+          <AgentIcon size={14} className={active.color} />
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ── Internal Monologue Bubble ── */
+const MONOLOGUE_POOL = [
+  "I noticed the existing auth middleware uses JWT — keeping the same pattern.",
+  "Checking for potential TypeScript type mismatches...",
+  "The API route pattern looks familiar — reusing the existing middleware stack.",
+  "Looking at the schema, I'll add a missing index for faster queries.",
+  "Spotted a potential null-path, adding a guard clause.",
+  "Port 3000 looks busy — I'll configure 3001 as fallback.",
+  "Reading the file tree to avoid duplicating existing components...",
+  "The previous error was a CORS mismatch — fixing the origin header.",
+  "Scanning for hardcoded values to centralize in config...",
+  "This component already exists — I'll extend it rather than rewrite.",
+  "Checking for unhandled promise rejections in async handlers...",
+  "I can see the state shape — designing the reducer to match it.",
+  "The types don't align here — fixing the interface first.",
+  "Loading states are missing from these fetch calls — adding them.",
+  "Reviewing the existing error boundary pattern before wiring new routes...",
+];
+
+function InternalMonologueCard({ idx }: { idx: number }) {
+  const thought = MONOLOGUE_POOL[idx % MONOLOGUE_POOL.length];
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={idx}
+        initial={{ opacity: 0, x: -6 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: 6 }}
+        transition={{ duration: 0.35 }}
+        className="flex items-start gap-2 pl-1"
+      >
+        <div className="w-4 h-4 rounded-full bg-white/[0.05] border border-white/[0.08] flex items-center justify-center shrink-0 mt-0.5">
+          <span className="text-[8px]">💭</span>
+        </div>
+        <p className="text-[11px] italic text-white/35 leading-relaxed">{thought}</p>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+/* ── Self-Healing Card ── */
+function SelfHealingCard({ error, fixing }: { error: string; fixing: boolean }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0 }}
+      className="flex flex-col gap-2 px-3 py-2.5 bg-rose-500/[0.06] border border-rose-400/20 rounded-2xl w-full"
+      data-testid="self-healing-card"
+    >
+      <div className="flex items-center gap-2">
+        <div className="w-5 h-5 rounded-lg bg-rose-500/15 flex items-center justify-center shrink-0">
+          <AlertCircle size={11} className="text-rose-400" />
+        </div>
+        <p className="text-xs font-semibold text-rose-300">Error detected</p>
+        <div className="flex-1" />
+        {fixing && (
+          <div className="flex items-center gap-1">
+            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}>
+              <Loader2 size={10} className="text-amber-400" />
+            </motion.div>
+            <span className="text-[10px] text-amber-400 font-medium">Auto-fixing</span>
+          </div>
+        )}
+      </div>
+      <p className="text-[11px] text-rose-300/60 font-mono leading-relaxed truncate">{error}</p>
+      {fixing && (
+        <motion.div
+          initial={{ width: "0%" }}
+          animate={{ width: "100%" }}
+          transition={{ duration: 3.5, ease: "easeInOut" }}
+          className="h-0.5 bg-gradient-to-r from-rose-500/60 to-amber-400/60 rounded-full"
+        />
+      )}
+    </motion.div>
+  );
+}
+
+/* ── Plan Task List Card ── */
+interface PlanTask { id: string; label: string; done: boolean; active: boolean; }
+function PlanTaskListCard({ tasks }: { tasks: PlanTask[] }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-[#191926] border border-white/[0.07] rounded-2xl overflow-hidden"
+      data-testid="plan-task-list"
+    >
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.03] transition-colors"
+      >
+        <div className="w-5 h-5 rounded-md bg-amber-500/15 flex items-center justify-center shrink-0">
+          <span className="text-[10px]">📋</span>
+        </div>
+        <span className="flex-1 text-xs font-semibold text-white/70 text-left">Implementation plan</span>
+        <span className="text-[10px] text-white/30">{tasks.filter(t => t.done).length}/{tasks.length}</span>
+        <ChevronDown size={12} className={cn("text-white/30 transition-transform", open && "rotate-180")} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0 }}
+            animate={{ height: "auto" }}
+            exit={{ height: 0 }}
+            className="overflow-hidden border-t border-white/[0.05]"
+          >
+            <div className="px-3 py-2 flex flex-col gap-1.5">
+              {tasks.map(t => (
+                <div key={t.id} className="flex items-center gap-2">
+                  {t.done ? (
+                    <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />
+                  ) : t.active ? (
+                    <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
+                      <Loader2 size={12} className="text-amber-400 shrink-0" />
+                    </motion.div>
+                  ) : (
+                    <Circle size={12} className="text-white/20 shrink-0" />
+                  )}
+                  <span className={cn(
+                    "text-xs leading-relaxed",
+                    t.done ? "text-white/40 line-through" : t.active ? "text-white/80 font-medium" : "text-white/35"
+                  )}>
+                    {t.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 /* ─────────────────────────────────────────────────────────
    HISTORY PANEL
    ───────────────────────────────────────────────────────── */
@@ -3625,6 +3828,10 @@ export default function Chat() {
   const [currentToolCall, setCurrentToolCall] = useState<{ name: string; input: Record<string, unknown> } | null>(null);
   const [showQuickSuggestions, setShowQuickSuggestions] = useState(true);
   const [showMoreTools, setShowMoreTools] = useState(false);
+  const [agentPhase, setAgentPhase] = useState(0);
+  const [monologueIdx, setMonologueIdx] = useState(0);
+  const [selfHealingError, setSelfHealingError] = useState<string | null>(null);
+  const [planTasks, setPlanTasks] = useState<PlanTask[]>([]);
   // AI Models Panel state
   const [sessionStats, setSessionStats] = useState<MessageStats[]>([]);
   const [liveStreamTokens, setLiveStreamTokens] = useState(0);
@@ -3659,6 +3866,66 @@ export default function Chat() {
     const interval = setInterval(() => {
       setActionCount(c => c + 1);
     }, 1800);
+    return () => clearInterval(interval);
+  }, [isThinking]);
+
+  // Agent loop phase cycling while thinking
+  useEffect(() => {
+    if (!isThinking) {
+      setAgentPhase(0);
+      setSelfHealingError(null);
+      setPlanTasks([]);
+      return;
+    }
+    // Phase timings: Observe(1.2s) → Think(2s) → Plan(2.5s) → Execute(stays) → occasionally Verify
+    const PHASE_DURATIONS = [1200, 2000, 2500, 4000, 1800];
+    let phase = 0;
+    setAgentPhase(0);
+    let timer: ReturnType<typeof setTimeout>;
+    const advance = () => {
+      phase = Math.min(phase + 1, 4);
+      setAgentPhase(phase);
+      if (phase === 2) {
+        // Entering Plan phase — show plan tasks
+        setPlanTasks([
+          { id: "t1", label: "Set up data models & schema", done: false, active: true },
+          { id: "t2", label: "Build API routes & handlers", done: false, active: false },
+          { id: "t3", label: "Wire up React components", done: false, active: false },
+          { id: "t4", label: "Add loading & error states", done: false, active: false },
+          { id: "t5", label: "Test & verify edge cases", done: false, active: false },
+        ]);
+      }
+      if (phase === 3) {
+        // Execute phase — animate plan tasks completing
+        setPlanTasks(prev => prev.map((t, i) =>
+          i === 0 ? { ...t, done: true, active: false } : i === 1 ? { ...t, active: true } : t
+        ));
+        // Occasionally inject a self-healing card after 2s
+        setTimeout(() => {
+          if (Math.random() > 0.55) {
+            setSelfHealingError("TypeError: Cannot read properties of undefined (reading 'map')");
+            setTimeout(() => setSelfHealingError(null), 3200);
+          }
+        }, 2000);
+      }
+      if (phase === 4) {
+        // Verify — mark most tasks done
+        setPlanTasks(prev => prev.map((t, i) => ({ ...t, done: i < 4, active: i === 4 })));
+      }
+      if (phase < 4) {
+        timer = setTimeout(advance, PHASE_DURATIONS[phase] ?? 2000);
+      }
+    };
+    timer = setTimeout(advance, PHASE_DURATIONS[0]);
+    return () => clearTimeout(timer);
+  }, [isThinking]);
+
+  // Internal monologue cycling while thinking
+  useEffect(() => {
+    if (!isThinking) { setMonologueIdx(0); return; }
+    const interval = setInterval(() => {
+      setMonologueIdx(i => i + 1);
+    }, 3200);
     return () => clearInterval(interval);
   }, [isThinking]);
 
@@ -4031,21 +4298,69 @@ export default function Chat() {
           )}
         </AnimatePresence>
 
-        {/* Thinking / Working cards */}
+        {/* Agent Loop / Thinking / Working cards */}
         <AnimatePresence>
           {isThinking && !showBuildProgress && (
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="space-y-2"
+              className="flex flex-col gap-2 w-full"
             >
-              {actionCount < 3 ? <ThinkingCard /> : <WorkingCard />}
-              {actionCount >= 3 && (
-                <PlanningStep
-                  label="Planning UI element implementation"
-                  elapsed={Math.max(actionCount * 4, 1)}
-                />
+              {/* Agent avatar row */}
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0">
+                  <motion.div
+                    animate={{ scale: [1, 1.15, 1], opacity: [0.8, 1, 0.8] }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    <AgentDots size={10} className="text-primary-foreground" />
+                  </motion.div>
+                </div>
+                <AgentLoopCard phase={agentPhase} />
+              </div>
+
+              {/* Internal monologue */}
+              <div className="ml-9">
+                <InternalMonologueCard idx={monologueIdx} />
+              </div>
+
+              {/* Plan task list — shows once in Plan phase */}
+              <AnimatePresence>
+                {planTasks.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="ml-9"
+                  >
+                    <PlanTaskListCard tasks={planTasks} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Self-healing card */}
+              <AnimatePresence>
+                {selfHealingError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="ml-9"
+                  >
+                    <SelfHealingCard error={selfHealingError} fixing={true} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Legacy planning step for longer sessions */}
+              {actionCount >= 6 && (
+                <div className="ml-9">
+                  <PlanningStep
+                    label="Refining implementation details"
+                    elapsed={Math.max(actionCount * 4, 1)}
+                  />
+                </div>
               )}
             </motion.div>
           )}
