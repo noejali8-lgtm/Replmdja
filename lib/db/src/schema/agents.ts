@@ -36,10 +36,22 @@ export const agentTasks = pgTable("agent_tasks", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const agentLogs = pgTable("agent_logs", {
+  id: serial("id").primaryKey(),
+  agentId: integer("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  taskId: integer("task_id").references(() => agentTasks.id, { onDelete: "set null" }),
+  level: text("level").notNull().default("INFO"),
+  message: text("message").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const insertAgentSchema = createInsertSchema(agents).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAgentTaskSchema = createInsertSchema(agentTasks).omit({ id: true, createdAt: true });
+export const insertAgentLogSchema = createInsertSchema(agentLogs).omit({ id: true, createdAt: true });
 
 export type Agent = typeof agents.$inferSelect;
 export type InsertAgent = z.infer<typeof insertAgentSchema>;
 export type AgentTask = typeof agentTasks.$inferSelect;
 export type InsertAgentTask = z.infer<typeof insertAgentTaskSchema>;
+export type AgentLog = typeof agentLogs.$inferSelect;
+export type InsertAgentLog = z.infer<typeof insertAgentLogSchema>;

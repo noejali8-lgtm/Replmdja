@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ArrowLeft, Search, Play, Square, Zap, Bot, Code2, Shield,
+  ArrowLeft, Search, Play, Bot, Code2, Shield,
   BookOpen, Cpu, TestTube2, Settings, BarChart3, Brain, GitBranch,
   Network, Database, Layers, Sparkles, ChevronRight, Plus, X,
-  Activity, Clock, CheckCircle2, AlertCircle, Loader2, Filter,
-  Star, TrendingUp, Users, RefreshCw, Trash2, Terminal
+  Activity, Clock, CheckCircle2, Loader2, Filter,
+  Star, TrendingUp, Users, RefreshCw, Trash2, Terminal,
+  Wifi, WifiOff, ChevronDown, Zap, AlertTriangle, Info, Radio
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -45,8 +46,220 @@ interface LiveAgent {
   capabilities: string[]; metrics: { tasksCompleted: number; successRate: number; avgResponseMs: number; tokensUsed: number; lastActive: string | null };
   createdAt: string;
 }
+interface LogEntry {
+  id?: number;
+  agentId: number;
+  taskId?: number | null;
+  level: "INFO" | "EXEC" | "CHUNK" | "DONE" | "WARN" | "ERROR" | string;
+  message: string;
+  createdAt: string;
+  type?: string;
+}
 
 type Tab = "dashboard" | "catalog" | "active";
+type AgentTab = "run" | "logs";
+
+const LEVEL_STYLES: Record<string, { color: string; bg: string; label: string }> = {
+  INFO:  { color: "text-sky-400",     bg: "bg-sky-400/10",     label: "INFO " },
+  EXEC:  { color: "text-green-400",   bg: "bg-green-400/10",   label: "EXEC " },
+  CHUNK: { color: "text-white/80",    bg: "bg-white/5",        label: "OUT  " },
+  DONE:  { color: "text-emerald-400", bg: "bg-emerald-400/10", label: "DONE " },
+  WARN:  { color: "text-yellow-400",  bg: "bg-yellow-400/10",  label: "WARN " },
+  ERROR: { color: "text-red-400",     bg: "bg-red-400/10",     label: "ERR  " },
+};
+
+function LogLine({ entry, index }: { entry: LogEntry; index: number }) {
+  const style = LEVEL_STYLES[entry.level] ?? LEVEL_STYLES.INFO;
+  const ts = new Date(entry.createdAt).toLocaleTimeString("en", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -4 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.15, delay: Math.min(index * 0.01, 0.3) }}
+      className="flex items-start gap-1.5 font-mono text-[10.5px] leading-relaxed group"
+    >
+      <span className="text-white/20 shrink-0 mt-0.5 select-none">{ts}</span>
+      <span className={cn("shrink-0 px-1 py-0.5 rounded text-[9px] font-bold tracking-wide mt-0.5", style.color, style.bg)}>
+        {style.label.trim()}
+      </span>
+      <span className={cn("flex-1 break-words", style.color === "text-white/80" ? "text-white/70" : style.color)}>
+        {entry.message}
+      </span>
+    </motion.div>
+  );
+}
+
+function TerminalPanel({ agent, onClose }: { agent: LiveAgent; onClose: () => void }) {
+  const [agentTab, setAgentTab] = useState<AgentTab>("logs");
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [connected, setConnected] = useState(false);
+  const [taskInput, setTaskInput] = useState("");
+  const [running, setRunning] = useState(false);
+  const [runOutput, setRunOutput] = useState("");
+  const logsEndRef = useRef<HTMLDivElement>(null);
+  const runOutputRef = useRef<HTMLDivElement>(null);
+  const esRef = useRef<EventSource | null>(null);
+
+  /* Auto-scroll logs */
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
+  useEffect(() => {
+    if (runOutputRef.current) runOutputRef.current.scrollTop = runOutputRef.current.scrollHeight;
+  }, [runOutput]);
+
+  /* Connect SSE */
+  useEffect(() => {
+    if (agentTab !== "logs") return;
+    const es = new EventSource(`${BASE_URL}/api/agents/${agent.id}/logs/stream`);
+    esRef.current = es;
+
+    es.onopen = () => setConnected(true);
+    es.onerror = () => setConnected(false);
+    es.onmessage = (e) => {
+      try {
+        const entry = JSON.parse(e.data) as LogEntry;
+        if (entry.type === "connected") { setConnected(true); return; }
+        if (!entry.level) return;
+        setLogs(prev => [...prev.slice(-499), entry]);
+      } catch { /* ignore */ }
+    };
+
+    return () => { es.close(); setConnected(false); esRef.current = null; };
+  }, [agent.id, agentTab]);
+
+  async function runTask() {
+    if (!taskInput.trim() || running) return;
+    setRunning(true);
+    setRunOutput("");
+    try {
+      const r = await fetch(`${BASE_URL}/api/agents/${agent.id}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: taskInput }),
+      });
+      const reader = r.body?.getReader();
+      if (!reader) return;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = new TextDecoder().decode(value);
+        for (const line of text.split("\n")) {
+          if (!line.startsWith("data:")) continue;
+          try {
+            const ev = JSON.parse(line.slice(5)) as { type: string; content?: string };
+            if (ev.type === "chunk" && ev.content) setRunOutput(p => p + ev.content);
+          } catch { /* ignore */ }
+        }
+      }
+    } catch { /* ignore */ }
+    setRunning(false);
+  }
+
+  function clearLogs() { setLogs([]); }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      className="mt-3 rounded-xl border border-white/10 overflow-hidden bg-[#0a0e14]"
+    >
+      {/* Terminal header */}
+      <div className="flex items-center gap-2 px-3 py-2 bg-[#0d1117] border-b border-white/[0.07]">
+        <div className="flex gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+          <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
+          <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
+        </div>
+        <span className="text-[10px] text-white/30 font-mono flex-1 text-center">
+          {agent.name} — agent terminal
+        </span>
+        {/* Sub-tabs */}
+        <div className="flex gap-0.5 mr-1">
+          {(["logs", "run"] as AgentTab[]).map(t => (
+            <button
+              key={t}
+              onClick={() => setAgentTab(t)}
+              className={cn(
+                "px-2 py-0.5 rounded text-[10px] font-medium transition-colors capitalize",
+                agentTab === t ? "bg-white/10 text-white" : "text-white/30 hover:text-white/60"
+              )}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        {agentTab === "logs" && (
+          <div className="flex items-center gap-1">
+            <span className={cn("flex items-center gap-1 text-[9px] font-medium", connected ? "text-green-400" : "text-white/30")}>
+              {connected ? <Wifi size={9} /> : <WifiOff size={9} />}
+              {connected ? "live" : "off"}
+            </span>
+            <button onClick={clearLogs} className="p-0.5 rounded hover:bg-white/10 text-white/30 hover:text-white/60 transition-colors" title="Clear">
+              <X size={10} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Logs tab */}
+      {agentTab === "logs" && (
+        <div className="h-64 overflow-y-auto p-3 space-y-0.5 scrollbar-thin">
+          {logs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-2 text-white/20">
+              <Radio size={18} className={connected ? "animate-pulse text-green-400/40" : ""} />
+              <span className="text-[10px] font-mono">
+                {connected ? "waiting for agent activity…" : "connecting…"}
+              </span>
+            </div>
+          ) : (
+            logs.map((entry, i) => (
+              <LogLine key={entry.id ?? `${entry.createdAt}-${i}`} entry={entry} index={i} />
+            ))
+          )}
+          <div ref={logsEndRef} />
+        </div>
+      )}
+
+      {/* Run tab */}
+      {agentTab === "run" && (
+        <div className="p-3 space-y-2">
+          <div className="flex gap-2">
+            <input
+              value={taskInput}
+              onChange={e => setTaskInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && runTask()}
+              placeholder="Enter task for agent…"
+              className="flex-1 bg-[#0d1117] border border-white/10 rounded-lg px-3 py-2 text-[12px] font-mono placeholder:text-white/20 focus:outline-none focus:border-purple-500/50 text-white/80"
+            />
+            <button
+              onClick={runTask}
+              disabled={running || !taskInput.trim()}
+              className="px-3 py-2 bg-purple-600/30 border border-purple-400/40 rounded-lg text-purple-300 text-[11px] flex items-center gap-1.5 disabled:opacity-40 hover:bg-purple-600/40 transition-colors"
+            >
+              {running ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
+              {running ? "Running" : "Run"}
+            </button>
+          </div>
+          {runOutput && (
+            <div
+              ref={runOutputRef}
+              className="bg-[#0d1117] border border-white/[0.06] rounded-lg p-3 max-h-48 overflow-y-auto text-[11px] font-mono text-white/70 whitespace-pre-wrap leading-relaxed"
+            >
+              {runOutput}
+            </div>
+          )}
+          {!runOutput && !running && (
+            <div className="text-center py-4 text-white/20 text-[10px] font-mono">
+              output will appear here
+            </div>
+          )}
+        </div>
+      )}
+    </motion.div>
+  );
+}
 
 export default function AgentsPage() {
   const [, navigate] = useLocation();
@@ -56,21 +269,13 @@ export default function AgentsPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [spawning, setSpawning] = useState<string | null>(null);
-  const [running, setRunning] = useState<number | null>(null);
-  const [taskInput, setTaskInput] = useState("");
   const [selectedAgent, setSelectedAgent] = useState<LiveAgent | null>(null);
-  const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
-  const outputRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchCatalog();
     fetchLiveAgents();
   }, []);
-
-  useEffect(() => {
-    if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
-  }, [output]);
 
   async function fetchCatalog() {
     try {
@@ -102,36 +307,6 @@ export default function AgentsPage() {
       setTab("active");
     } catch { /* ignore */ }
     setSpawning(null);
-  }
-
-  async function runAgent(agent: LiveAgent) {
-    if (!taskInput.trim()) return;
-    setRunning(agent.id);
-    setOutput("");
-    setSelectedAgent(agent);
-    try {
-      const r = await fetch(`${BASE_URL}/api/agents/${agent.id}/run`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: taskInput }),
-      });
-      const reader = r.body?.getReader();
-      if (!reader) return;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = new TextDecoder().decode(value);
-        for (const line of text.split("\n")) {
-          if (!line.startsWith("data:")) continue;
-          try {
-            const ev = JSON.parse(line.slice(5)) as { type: string; content?: string };
-            if (ev.type === "chunk" && ev.content) setOutput(p => p + ev.content);
-          } catch { /* ignore */ }
-        }
-      }
-      await fetchLiveAgents();
-    } catch { /* ignore */ }
-    setRunning(null);
   }
 
   async function deleteAgent(id: number) {
@@ -178,6 +353,8 @@ export default function AgentsPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto pb-24 px-4">
+
+        {/* ── Dashboard ────────────────────────────────────────────────── */}
         {tab === "dashboard" && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-4 space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -195,6 +372,23 @@ export default function AgentsPage() {
                   <div className="text-[11px] text-white/40 mt-0.5">{label}</div>
                 </div>
               ))}
+            </div>
+
+            {/* Legend */}
+            <div className="bg-[#161b22] border border-white/[0.06] rounded-xl p-4">
+              <h3 className="text-[12px] font-semibold mb-2 flex items-center gap-1.5 text-white/60">
+                <Terminal size={12} className="text-green-400" /> Log Level Reference
+              </h3>
+              <div className="grid grid-cols-2 gap-1.5">
+                {Object.entries(LEVEL_STYLES).map(([lvl, s]) => (
+                  <div key={lvl} className="flex items-center gap-2">
+                    <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded font-mono", s.color, s.bg)}>{lvl}</span>
+                    <span className="text-[10px] text-white/40">
+                      {lvl === "INFO" ? "System info" : lvl === "EXEC" ? "Task start" : lvl === "CHUNK" ? "AI output" : lvl === "DONE" ? "Completed" : lvl === "WARN" ? "Warning" : "Error"}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="bg-[#161b22] border border-white/[0.06] rounded-xl p-4">
@@ -226,6 +420,7 @@ export default function AgentsPage() {
           </motion.div>
         )}
 
+        {/* ── Catalog ───────────────────────────────────────────────────── */}
         {tab === "catalog" && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-4 space-y-3">
             <div className="relative">
@@ -242,7 +437,6 @@ export default function AgentsPage() {
             <div className="text-[11px] text-white/30">{filteredCatalog.length} agents</div>
             <div className="space-y-2">
               {filteredCatalog.map(agent => {
-                const Icon = TYPE_ICONS[agent.type] ?? Bot;
                 const colorClass = TYPE_COLORS[agent.type] ?? "text-white/60 bg-white/5";
                 const isSpawning = spawning === agent.name;
                 return (
@@ -276,6 +470,7 @@ export default function AgentsPage() {
           </motion.div>
         )}
 
+        {/* ── Active Agents ─────────────────────────────────────────────── */}
         {tab === "active" && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -297,9 +492,9 @@ export default function AgentsPage() {
               <div className="space-y-2">
                 {filteredLive.map(agent => {
                   const colorClass = TYPE_COLORS[agent.type] ?? "text-white/60 bg-white/5";
-                  const isRunning = running === agent.id;
+                  const isSelected = selectedAgent?.id === agent.id;
                   return (
-                    <div key={agent.id} className={cn("bg-[#161b22] border rounded-xl p-3 transition-all", selectedAgent?.id === agent.id ? "border-purple-400/40" : "border-white/[0.06]")}>
+                    <div key={agent.id} className={cn("bg-[#161b22] border rounded-xl p-3 transition-all", isSelected ? "border-purple-400/40" : "border-white/[0.06]")}>
                       <div className="flex items-start gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
@@ -309,13 +504,18 @@ export default function AgentsPage() {
                           </div>
                           <div className="flex gap-3 mt-1.5">
                             <span className="text-[10px] text-white/40">✓ {agent.metrics?.tasksCompleted ?? 0} tasks</span>
-                            {agent.metrics?.lastActive && <span className="text-[10px] text-white/30">Last: {new Date(agent.metrics.lastActive).toLocaleTimeString()}</span>}
+                            {agent.metrics?.lastActive && (
+                              <span className="text-[10px] text-white/30">Last: {new Date(agent.metrics.lastActive).toLocaleTimeString()}</span>
+                            )}
                           </div>
                         </div>
                         <div className="flex gap-1.5 shrink-0">
-                          <button onClick={() => { setSelectedAgent(selectedAgent?.id === agent.id ? null : agent); setOutput(""); }}
-                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-                            <Terminal size={12} className="text-white/60" />
+                          <button
+                            onClick={() => setSelectedAgent(isSelected ? null : agent)}
+                            className={cn("p-1.5 rounded-lg transition-colors", isSelected ? "bg-purple-500/20 text-purple-400" : "bg-white/5 hover:bg-white/10 text-white/60")}
+                            title="Open terminal"
+                          >
+                            <Terminal size={12} />
                           </button>
                           <button onClick={() => deleteAgent(agent.id)} className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 transition-colors">
                             <Trash2 size={12} className="text-red-400" />
@@ -324,22 +524,8 @@ export default function AgentsPage() {
                       </div>
 
                       <AnimatePresence>
-                        {selectedAgent?.id === agent.id && (
-                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-3 space-y-2">
-                            <div className="flex gap-2">
-                              <input value={taskInput} onChange={e => setTaskInput(e.target.value)} placeholder="Enter task for agent..." className="flex-1 bg-[#0d1117] border border-white/10 rounded-lg px-3 py-2 text-[12px] placeholder:text-white/30 focus:outline-none focus:border-purple-500/50" />
-                              <button onClick={() => runAgent(agent)} disabled={isRunning || !taskInput.trim()}
-                                className="px-3 py-2 bg-purple-600/30 border border-purple-400/40 rounded-lg text-purple-300 text-[11px] flex items-center gap-1 disabled:opacity-50 hover:bg-purple-600/40 transition-colors">
-                                {isRunning ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-                                Run
-                              </button>
-                            </div>
-                            {output && (
-                              <div ref={outputRef} className="bg-[#0d1117] border border-white/[0.06] rounded-lg p-3 max-h-48 overflow-y-auto text-[11px] font-mono text-white/70 whitespace-pre-wrap">
-                                {output}
-                              </div>
-                            )}
-                          </motion.div>
+                        {isSelected && (
+                          <TerminalPanel agent={agent} onClose={() => setSelectedAgent(null)} />
                         )}
                       </AnimatePresence>
                     </div>

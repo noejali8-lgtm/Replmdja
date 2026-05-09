@@ -1,10 +1,49 @@
 import { Router, type Request, type Response } from "express";
 import { eq, desc, and } from "drizzle-orm";
+import { EventEmitter } from "events";
 import { db } from "@workspace/db";
-import { agents, agentTasks } from "@workspace/db";
+import { agents, agentTasks, agentLogs } from "@workspace/db";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 
 const router = Router();
+
+/* ── Live log bus (in-memory SSE fan-out) ────────────────────────────────── */
+const logBus = new EventEmitter();
+logBus.setMaxListeners(500);
+
+interface LogEntry {
+  id?: number;
+  agentId: number;
+  taskId?: number | null;
+  level: "INFO" | "EXEC" | "CHUNK" | "DONE" | "WARN" | "ERROR";
+  message: string;
+  createdAt: string;
+}
+
+async function writeLog(
+  agentId: number,
+  level: LogEntry["level"],
+  message: string,
+  taskId?: number | null,
+): Promise<void> {
+  try {
+    const [row] = await db
+      .insert(agentLogs)
+      .values({ agentId, taskId: taskId ?? null, level, message })
+      .returning();
+    const entry: LogEntry = {
+      id: row.id,
+      agentId,
+      taskId: row.taskId,
+      level,
+      message,
+      createdAt: row.createdAt.toISOString(),
+    };
+    logBus.emit(`agent:${agentId}`, entry);
+  } catch {
+    /* non-fatal */
+  }
+}
 
 const AGENT_CATALOG = [
   { name: "code-analyzer", type: "code-quality", description: "Analyzes code quality, complexity, and maintainability", capabilities: ["code-analysis", "metrics", "suggestions"], icon: "🔍" },
@@ -64,7 +103,6 @@ const AGENT_CATALOG = [
   { name: "agentic-payments", type: "payments", description: "Manages agentic payment flows and billing", capabilities: ["payments", "billing", "stripe"], icon: "💳" },
   { name: "app-store", type: "distribution", description: "Manages app store submissions and metadata", capabilities: ["app-store", "submissions", "aso"], icon: "🏪" },
   { name: "spec-mobile-react-native", type: "mobile", description: "Specifies React Native mobile applications", capabilities: ["react-native", "mobile", "specifications"], icon: "📱" },
-  { name: "benchmark-suite", type: "testing", description: "Runs comprehensive benchmark suites", capabilities: ["benchmarking", "metrics", "reporting"], icon: "🏆" },
   { name: "performance-monitor", type: "monitoring", description: "Monitors real-time performance metrics", capabilities: ["monitoring", "metrics", "alerts"], icon: "📡" },
   { name: "adaptive-coordinator", type: "coordination", description: "Adapts coordination strategy based on context", capabilities: ["adaptive", "context-aware", "routing"], icon: "🦋" },
   { name: "automation-smart-agent", type: "automation", description: "Smart automation with context understanding", capabilities: ["smart-automation", "nlp", "execution"], icon: "🤖" },
@@ -178,6 +216,70 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
   }
 });
 
+/* ── GET /api/agents/:id/logs — history (last 200) ──────────────────────── */
+router.get("/:id/logs", async (req: Request, res: Response) => {
+  try {
+    const agentId = parseInt(req.params.id);
+    const logs = await db
+      .select()
+      .from(agentLogs)
+      .where(eq(agentLogs.agentId, agentId))
+      .orderBy(desc(agentLogs.createdAt))
+      .limit(200);
+    res.json({ logs: logs.reverse() });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/* ── GET /api/agents/:id/logs/stream — live SSE ──────────────────────────── */
+router.get("/:id/logs/stream", async (req: Request, res: Response) => {
+  const agentId = parseInt(req.params.id);
+
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (entry: LogEntry) =>
+    res.write(`data: ${JSON.stringify(entry)}\n\n`);
+
+  /* Send last 50 historical logs first */
+  try {
+    const history = await db
+      .select()
+      .from(agentLogs)
+      .where(eq(agentLogs.agentId, agentId))
+      .orderBy(desc(agentLogs.createdAt))
+      .limit(50);
+    history.reverse().forEach(row =>
+      send({
+        id: row.id,
+        agentId: row.agentId,
+        taskId: row.taskId,
+        level: row.level as LogEntry["level"],
+        message: row.message,
+        createdAt: row.createdAt.toISOString(),
+      }),
+    );
+  } catch { /* ignore */ }
+
+  res.write(`data: ${JSON.stringify({ type: "connected", agentId })}\n\n`);
+
+  const listener = (entry: LogEntry) => send(entry);
+  logBus.on(`agent:${agentId}`, listener);
+
+  const heartbeat = setInterval(() => {
+    try { res.write(": heartbeat\n\n"); } catch { /* ignore */ }
+  }, 20000);
+
+  req.on("close", () => {
+    logBus.off(`agent:${agentId}`, listener);
+    clearInterval(heartbeat);
+  });
+});
+
+/* ── POST /api/agents/:id/run ─────────────────────────────────────────────── */
 router.post("/:id/run", async (req: Request, res: Response) => {
   try {
     const agentId = parseInt(req.params.id);
@@ -201,12 +303,16 @@ router.post("/:id/run", async (req: Request, res: Response) => {
     const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
     send({ type: "agent_start", agentId, agentName: agent.name, taskId: taskRow.id });
+    await writeLog(agentId, "EXEC", `Task started: ${task}`, taskRow.id);
+    await writeLog(agentId, "INFO", `Agent: ${agent.name} | Capabilities: ${agent.capabilities.join(", ")}`, taskRow.id);
 
     const systemPrompt = `You are the "${agent.name}" agent — ${agent.description}.
 Your capabilities: ${agent.capabilities.join(", ")}.
 Execute the task with precision and return structured results.`;
 
     let fullOutput = "";
+    await writeLog(agentId, "INFO", `Connecting to AI model (claude-haiku-4-5)…`, taskRow.id);
+
     const stream = anthropic.messages.stream({
       model: "claude-haiku-4-5",
       max_tokens: 4096,
@@ -214,11 +320,34 @@ Execute the task with precision and return structured results.`;
       messages: [{ role: "user", content: `Task: ${task}\n\nInput: ${JSON.stringify(input ?? {})}` }],
     });
 
+    let chunkBuffer = "";
+    let chunkCount = 0;
+
     for await (const event of stream) {
       if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        fullOutput += event.delta.text;
-        send({ type: "chunk", content: event.delta.text });
+        const text = event.delta.text;
+        fullOutput += text;
+        chunkBuffer += text;
+        send({ type: "chunk", content: text });
+
+        /* Flush buffer as a log line every ~80 chars or on newline */
+        if (chunkBuffer.includes("\n") || chunkBuffer.length >= 80) {
+          const lines = chunkBuffer.split("\n");
+          for (let i = 0; i < lines.length - 1; i++) {
+            const line = lines[i].trim();
+            if (line) {
+              chunkCount++;
+              await writeLog(agentId, "CHUNK", line, taskRow.id);
+            }
+          }
+          chunkBuffer = lines[lines.length - 1];
+        }
       }
+    }
+
+    /* Flush remaining buffer */
+    if (chunkBuffer.trim()) {
+      await writeLog(agentId, "CHUNK", chunkBuffer.trim(), taskRow.id);
     }
 
     const metrics = agent.metrics as { tasksCompleted: number; successRate: number; avgResponseMs: number; tokensUsed: number; lastActive: string | null };
@@ -231,6 +360,8 @@ Execute the task with precision and return structured results.`;
       status: "completed", output: { result: fullOutput },
       completedAt: new Date(),
     }).where(eq(agentTasks.id, taskRow.id));
+
+    await writeLog(agentId, "DONE", `Task completed successfully. Output: ${fullOutput.length} chars, ${chunkCount} log lines`, taskRow.id);
 
     send({ type: "agent_done", taskId: taskRow.id, output: fullOutput });
     res.end();
