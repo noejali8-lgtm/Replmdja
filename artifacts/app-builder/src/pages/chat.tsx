@@ -20,6 +20,16 @@ import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import { AIModelsPanel, ALL_MODELS } from "@/components/AIModelsPanel";
 
+interface MessageStats {
+  inputTokens: number;
+  outputTokens: number;
+  responseTimeMs: number;
+  ttftMs: number;
+  cost: number;
+  tokensPerSec: number;
+  model: string;
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -27,6 +37,7 @@ interface Message {
   isStreaming?: boolean;
   timestamp?: Date;
   actionCount?: number;
+  stats?: MessageStats;
 }
 
 interface BuildStep {
@@ -2104,30 +2115,55 @@ function CheckpointPanel({ onClose }: { onClose: () => void }) {
 /* ─────────────────────────────────────────────────────────
    AGENT INSIGHTS PANEL
    ───────────────────────────────────────────────────────── */
-function InsightsPanel({ onClose }: { onClose: () => void }) {
-  const [tokens] = useState(48320);
-  const [cost] = useState(0.38);
-  const [speed] = useState("1×");
-  const [linesWritten] = useState(2847);
-  const [filesModified] = useState(14);
-  const [sessionTime] = useState(47);
+function InsightsPanel({ onClose, sessionStats }: { onClose: () => void; sessionStats: MessageStats[] }) {
+  const totalInputTokens = sessionStats.reduce((s, m) => s + m.inputTokens, 0);
+  const totalOutputTokens = sessionStats.reduce((s, m) => s + m.outputTokens, 0);
+  const totalTokens = totalInputTokens + totalOutputTokens;
+  const totalCost = sessionStats.reduce((s, m) => s + m.cost, 0);
+  const avgResponseTime = sessionStats.length > 0
+    ? sessionStats.reduce((s, m) => s + m.responseTimeMs, 0) / sessionStats.length : 0;
+  const avgToksPerSec = sessionStats.length > 0
+    ? sessionStats.reduce((s, m) => s + m.tokensPerSec, 0) / sessionStats.length : 0;
 
-  const stats = [
-    { label: "Tokens Used", value: tokens.toLocaleString(), sub: "input + output", icon: <Zap size={14} />, color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-400/20" },
-    { label: "Session Cost", value: `$${cost.toFixed(2)}`, sub: "Claude Opus 4.7", icon: <BarChart3 size={14} />, color: "text-green-400", bg: "bg-green-500/10 border-green-400/20" },
-    { label: "Lines Written", value: linesWritten.toLocaleString(), sub: "by the agent", icon: <Code2 size={14} />, color: "text-blue-400", bg: "bg-blue-500/10 border-blue-400/20" },
-    { label: "Files Modified", value: String(filesModified), sub: "this session", icon: <FileText size={14} />, color: "text-purple-400", bg: "bg-purple-500/10 border-purple-400/20" },
-    { label: "Session Time", value: `${sessionTime}m`, sub: "active building", icon: <Clock size={14} />, color: "text-cyan-400", bg: "bg-cyan-500/10 border-cyan-400/20" },
-    { label: "Actions Taken", value: "63", sub: "read/write/run", icon: <Activity size={14} />, color: "text-orange-400", bg: "bg-orange-500/10 border-orange-400/20" },
-  ];
+  const [displayTokens, setDisplayTokens] = useState(0);
+  const [displayCost, setDisplayCost] = useState(0);
+
+  useEffect(() => {
+    if (totalTokens === 0) return;
+    const steps = 36; const dur = 900;
+    let step = 0;
+    const t = setInterval(() => {
+      step++;
+      const ease = 1 - Math.pow(1 - step / steps, 3);
+      setDisplayTokens(Math.round(totalTokens * ease));
+      setDisplayCost(totalCost * ease);
+      if (step >= steps) clearInterval(t);
+    }, dur / steps);
+    return () => clearInterval(t);
+  }, [totalTokens, totalCost]);
+
+  const maxTok = Math.max(...sessionStats.map(m => m.inputTokens + m.outputTokens), 1);
+  const chartH = 64;
+  const barW = Math.min(22, sessionStats.length > 0 ? Math.floor(260 / sessionStats.length / 2.4) : 22);
+  const barGap = 3;
+  const chartW = Math.max(sessionStats.length * (barW * 2 + barGap + 5), 260);
+
+  const times = sessionStats.map(m => m.responseTimeMs);
+  const maxTime = Math.max(...times, 1000);
+  const linePoints = times.length > 1
+    ? times.map((t, i) => `${(i / (times.length - 1)) * 200},${chartH - (t / maxTime) * chartH}`).join(" ")
+    : "";
 
   return (
     <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
       transition={{ type: "spring", stiffness: 340, damping: 36 }}
       className="absolute inset-0 z-50 flex flex-col bg-background">
+
       <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
         <div className="flex-1" />
+        <motion.div animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 2.2, repeat: Infinity }}
+          className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
         <BarChart3 size={17} className="text-orange-400" />
         <span className="text-base font-semibold text-foreground">Agent Insights</span>
         <div className="flex-1" />
@@ -2135,55 +2171,161 @@ function InsightsPanel({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 no-scrollbar">
-        {/* Stats grid */}
-        <div className="grid grid-cols-2 gap-3">
-          {stats.map(s => (
-            <div key={s.label} className={cn("rounded-2xl border p-3 space-y-1", s.bg)}>
-              <div className={cn("flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider", s.color)}>
-                {s.icon} {s.label}
-              </div>
-              <p className={cn("text-2xl font-bold", s.color)}>{s.value}</p>
-              <p className="text-[10px] text-muted-foreground/50">{s.sub}</p>
+        {sessionStats.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-52 gap-3 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-orange-500/10 border border-orange-400/20 flex items-center justify-center">
+              <BarChart3 size={22} className="text-orange-400/50" />
             </div>
-          ))}
-        </div>
+            <p className="text-sm font-semibold text-foreground">No data yet</p>
+            <p className="text-xs text-muted-foreground/50 max-w-[220px] leading-relaxed">
+              Send your first message to start tracking real token usage, costs, and speed
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Overview cards */}
+            <div className="grid grid-cols-2 gap-2.5">
+              {[
+                { label: "Total Tokens", value: displayTokens.toLocaleString(), sub: `across ${sessionStats.length} ${sessionStats.length === 1 ? "reply" : "replies"}`, icon: <Zap size={13} />, color: "text-yellow-400", bg: "bg-yellow-500/8 border-yellow-400/15" },
+                { label: "Session Cost", value: `$${displayCost.toFixed(5)}`, sub: "estimated USD", icon: <TrendingUp size={13} />, color: "text-green-400", bg: "bg-green-500/8 border-green-400/15" },
+                { label: "Avg Speed", value: `${avgToksPerSec.toFixed(0)} t/s`, sub: "tokens per sec", icon: <Activity size={13} />, color: "text-blue-400", bg: "bg-blue-500/8 border-blue-400/15" },
+                { label: "Avg Latency", value: `${(avgResponseTime / 1000).toFixed(1)}s`, sub: "per response", icon: <Clock size={13} />, color: "text-purple-400", bg: "bg-purple-500/8 border-purple-400/15" },
+              ].map((s, i) => (
+                <motion.div key={s.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}
+                  className={cn("rounded-2xl border p-3.5", s.bg)}>
+                  <div className={cn("flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider mb-2", s.color)}>
+                    {s.icon} {s.label}
+                  </div>
+                  <p className={cn("text-2xl font-bold font-mono tabular-nums leading-none", s.color)}>{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground/40 mt-1">{s.sub}</p>
+                </motion.div>
+              ))}
+            </div>
 
-        {/* Token breakdown */}
-        <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
-          <p className="text-xs font-semibold text-foreground">Token Breakdown</p>
-          {[
-            { label: "Prompt tokens", val: 32140, total: tokens, color: "bg-blue-400" },
-            { label: "Completion tokens", val: 16180, total: tokens, color: "bg-purple-400" },
-          ].map(t => (
-            <div key={t.label} className="space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground/70">{t.label}</span>
-                <span className="text-foreground font-medium">{t.val.toLocaleString()}</span>
+            {/* Token bar chart */}
+            <div className="bg-card border border-border rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-semibold text-foreground">Tokens per Reply</p>
+                <div className="flex items-center gap-2 text-[9px] text-muted-foreground/50">
+                  <span><span className="text-blue-400">■</span> Input</span>
+                  <span><span className="text-purple-400">■</span> Output</span>
+                </div>
               </div>
-              <div className="h-2 bg-secondary/50 rounded-full overflow-hidden">
-                <motion.div initial={{ width: 0 }} animate={{ width: `${(t.val / t.total) * 100}%` }}
-                  transition={{ duration: 0.8, delay: 0.2 }}
-                  className={cn("h-full rounded-full", t.color)} />
+              <div className="overflow-x-auto no-scrollbar mt-3">
+                <svg width={chartW} height={chartH + 18} className="overflow-visible">
+                  {[0.25, 0.5, 0.75, 1].map(pct => (
+                    <line key={pct} x1={0} y1={chartH * (1 - pct)} x2={chartW} y2={chartH * (1 - pct)}
+                      stroke="rgba(255,255,255,0.05)" strokeWidth={1} strokeDasharray="3,3" />
+                  ))}
+                  {sessionStats.map((m, i) => {
+                    const inH = (m.inputTokens / maxTok) * chartH;
+                    const outH = (m.outputTokens / maxTok) * chartH;
+                    const x = i * (barW * 2 + barGap + 5);
+                    return (
+                      <g key={i}>
+                        <motion.rect x={x} width={barW} rx={3}
+                          initial={{ height: 0, y: chartH }} animate={{ height: inH, y: chartH - inH }}
+                          transition={{ duration: 0.55, delay: i * 0.07, ease: "easeOut" }}
+                          fill="rgba(96,165,250,0.65)" />
+                        <motion.rect x={x + barW + 2} width={barW} rx={3}
+                          initial={{ height: 0, y: chartH }} animate={{ height: outH, y: chartH - outH }}
+                          transition={{ duration: 0.55, delay: i * 0.07 + 0.05, ease: "easeOut" }}
+                          fill="rgba(167,139,250,0.65)" />
+                        <text x={x + barW} y={chartH + 13} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.22)">{i + 1}</text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+              <div className="flex items-center justify-between mt-2 text-[10px] text-muted-foreground/40">
+                <span>{totalInputTokens.toLocaleString()} input</span>
+                <span>{totalOutputTokens.toLocaleString()} output</span>
               </div>
             </div>
-          ))}
-        </div>
 
-        {/* Speed breakdown */}
-        <div className="bg-card border border-border rounded-2xl p-4 space-y-2.5">
-          <p className="text-xs font-semibold text-foreground">Performance</p>
-          {[
-            { label: "Avg response time", val: "3.2s" },
-            { label: "Tokens/second", val: "~95 tok/s" },
-            { label: "Context window used", val: "24%" },
-            { label: "Model", val: "claude-opus-4-7" },
-          ].map(p => (
-            <div key={p.label} className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground/60">{p.label}</span>
-              <span className="text-foreground font-medium font-mono">{p.val}</span>
+            {/* Response time line chart */}
+            {sessionStats.length >= 2 && (
+              <div className="bg-card border border-border rounded-2xl p-4">
+                <p className="text-xs font-semibold text-foreground mb-3">Response Time</p>
+                <svg width="100%" height={chartH + 10} viewBox={`0 0 200 ${chartH + 10}`} preserveAspectRatio="none" className="overflow-visible">
+                  {[0.25, 0.5, 0.75, 1].map(pct => (
+                    <line key={pct} x1={0} y1={chartH * pct} x2={200} y2={chartH * pct}
+                      stroke="rgba(255,255,255,0.05)" strokeWidth={1} />
+                  ))}
+                  <defs>
+                    <linearGradient id="timeFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="rgba(96,165,250,0.3)" />
+                      <stop offset="100%" stopColor="rgba(96,165,250,0)" />
+                    </linearGradient>
+                  </defs>
+                  <motion.polyline points={linePoints} fill="none" stroke="rgba(96,165,250,0.7)"
+                    strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                    initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
+                    transition={{ duration: 1.1, ease: "easeInOut" }} />
+                  {times.map((t, i) => {
+                    const x = (i / Math.max(times.length - 1, 1)) * 200;
+                    const y = chartH - (t / maxTime) * chartH;
+                    return (
+                      <motion.circle key={i} cx={x} cy={y} r={3}
+                        fill="rgba(96,165,250,1)" stroke="rgba(0,0,0,0.5)" strokeWidth={1}
+                        initial={{ scale: 0 }} animate={{ scale: 1 }}
+                        transition={{ delay: 0.8 + i * 0.08 }} />
+                    );
+                  })}
+                </svg>
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground/40 mt-1">
+                  <span>Reply 1</span>
+                  <span className="text-blue-400 font-mono">avg {(avgResponseTime / 1000).toFixed(1)}s</span>
+                  <span>Reply {sessionStats.length}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Cost per reply */}
+            <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+              <p className="text-xs font-semibold text-foreground">Cost per Reply</p>
+              {sessionStats.map((m, i) => {
+                const maxCost = Math.max(...sessionStats.map(x => x.cost), 0.000001);
+                return (
+                  <div key={i} className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-muted-foreground/60">Reply {i + 1}</span>
+                      <span className="text-green-400 font-mono">${m.cost.toFixed(5)}</span>
+                    </div>
+                    <div className="h-1.5 bg-secondary/40 rounded-full overflow-hidden">
+                      <motion.div initial={{ width: 0 }}
+                        animate={{ width: `${(m.cost / maxCost) * 100}%` }}
+                        transition={{ duration: 0.55, delay: i * 0.06 }}
+                        className="h-full rounded-full bg-gradient-to-r from-green-500/70 to-emerald-400/70" />
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
+                <span className="text-muted-foreground/60 font-medium">Session Total</span>
+                <span className="text-green-400 font-bold font-mono">${totalCost.toFixed(5)}</span>
+              </div>
             </div>
-          ))}
-        </div>
+
+            {/* Performance table */}
+            <div className="bg-card border border-border rounded-2xl p-4 space-y-2.5">
+              <p className="text-xs font-semibold text-foreground">Performance Summary</p>
+              {[
+                { label: "Avg tokens / sec", val: `${avgToksPerSec.toFixed(0)} t/s` },
+                { label: "Total replies", val: String(sessionStats.length) },
+                { label: "Input tokens", val: totalInputTokens.toLocaleString() },
+                { label: "Output tokens", val: totalOutputTokens.toLocaleString() },
+                { label: "I/O ratio", val: `${((totalInputTokens / Math.max(totalOutputTokens, 1))).toFixed(1)}:1` },
+                { label: "Model", val: sessionStats[0]?.model?.replace("claude-", "cl-") ?? "claude" },
+              ].map(p => (
+                <div key={p.label} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground/60">{p.label}</span>
+                  <span className="text-foreground font-medium font-mono">{p.val}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </motion.div>
   );
@@ -2972,6 +3114,88 @@ function BuildProgress({ steps }: { steps: BuildStep[] }) {
   );
 }
 
+function MessageInsightsBadge({ stats }: { stats: MessageStats }) {
+  const [expanded, setExpanded] = useState(false);
+  const totalTokens = stats.inputTokens + stats.outputTokens;
+  const inputPct = Math.round((stats.inputTokens / Math.max(totalTokens, 1)) * 100);
+  const modelShort = stats.model.split("/").pop()?.replace("claude-", "").replace("-latest", "") ?? "claude";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay: 0.4, duration: 0.25 }}
+    >
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="flex items-center gap-1.5 px-2.5 py-1 bg-white/[0.04] border border-white/[0.07] rounded-full text-[10px] text-white/40 hover:text-white/60 hover:bg-white/[0.07] transition-all"
+      >
+        <Zap size={8} className="text-yellow-400/70 shrink-0" />
+        <span className="font-mono">{totalTokens.toLocaleString()} tok</span>
+        <span className="text-white/20">·</span>
+        <span className="text-green-400/80 font-mono">${stats.cost.toFixed(4)}</span>
+        <span className="text-white/20">·</span>
+        <Clock size={8} className="text-blue-400/70 shrink-0" />
+        <span className="font-mono">{(stats.responseTimeMs / 1000).toFixed(1)}s</span>
+        <motion.div animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
+          <ChevronDown size={8} className="text-white/30" />
+        </motion.div>
+      </button>
+
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-1.5 bg-[#13131f] border border-white/[0.08] rounded-2xl p-3 space-y-3">
+              {/* Token split bar */}
+              <div className="space-y-1.5">
+                <p className="text-[9px] text-white/30 font-semibold uppercase tracking-wider">Token Split</p>
+                <div className="flex h-2.5 rounded-full overflow-hidden bg-white/[0.06]">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${inputPct}%` }}
+                    transition={{ duration: 0.7, ease: "easeOut" }}
+                    className="bg-blue-500/70 rounded-l-full"
+                  />
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${100 - inputPct}%` }}
+                    transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }}
+                    className="bg-purple-500/70 flex-1 rounded-r-full"
+                  />
+                </div>
+                <div className="flex justify-between text-[9px] text-white/30">
+                  <span><span className="text-blue-400">■</span> {stats.inputTokens.toLocaleString()} input</span>
+                  <span><span className="text-purple-400">■</span> {stats.outputTokens.toLocaleString()} output</span>
+                </div>
+              </div>
+
+              {/* 3-stat grid */}
+              <div className="grid grid-cols-3 gap-1.5">
+                {[
+                  { label: "Speed", value: `${stats.tokensPerSec.toFixed(0)}t/s`, color: "text-green-400" },
+                  { label: "TTFT", value: `${(stats.ttftMs / 1000).toFixed(2)}s`, color: "text-yellow-400" },
+                  { label: "Model", value: modelShort, color: "text-orange-400" },
+                ].map(s => (
+                  <div key={s.label} className="bg-white/[0.04] rounded-xl p-2 text-center">
+                    <p className={cn("text-[10px] font-bold font-mono truncate", s.color)}>{s.value}</p>
+                    <p className="text-[9px] text-white/25 mt-0.5">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === "user";
   return (
@@ -3014,6 +3238,11 @@ function MessageBubble({ msg }: { msg: Message }) {
       {msg.actionCount !== undefined && msg.actionCount > 0 && (
         <div className={cn("mt-2 w-full max-w-[85%]", isUser ? "self-end" : "self-start ml-9")}>
           <ActionsBadge count={msg.actionCount} />
+        </div>
+      )}
+      {!isUser && !msg.isStreaming && msg.stats && (
+        <div className="mt-1.5 ml-9">
+          <MessageInsightsBadge stats={msg.stats} />
         </div>
       )}
       <TimeStamp date={msg.timestamp} />
@@ -3242,6 +3471,7 @@ export default function Chat() {
   const [showQuickSuggestions, setShowQuickSuggestions] = useState(true);
   const [showMoreTools, setShowMoreTools] = useState(false);
   // AI Models Panel state
+  const [sessionStats, setSessionStats] = useState<MessageStats[]>([]);
   const [showAIModels, setShowAIModels] = useState(false);
   const [selectedModelId, setSelectedModelId] = useState("claude-sonnet-4-6");
   const [aiActiveTab, setAiActiveTab] = useState<"models"|"ensemble"|"arena"|"godmode"|"ultraplinian"|"parseltongue"|"autotune"|"stm">("models");
@@ -3299,6 +3529,10 @@ export default function Chat() {
     let isFirst = true;
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    const sendTime = Date.now();
+    let ttftMs = 0;
+    let totalOutputText = "";
+    const estimatedInputTokens = Math.round(content.length / 4);
     try {
       const response = await fetch(
         `${BASE_URL}/api/anthropic/conversations/${convId}/messages`,
@@ -3324,6 +3558,7 @@ export default function Chat() {
             if (data.content) {
               setCurrentToolCall(null);
               if (isFirst) {
+                ttftMs = Date.now() - sendTime;
                 setIsThinking(false);
                 setMessages((prev) => [...prev, {
                   id: assistantMsgId, role: "assistant", content: data.content,
@@ -3336,12 +3571,27 @@ export default function Chat() {
                   m.id === assistantMsgId ? { ...m, content: m.content + data.content } : m
                 ));
               }
+              totalOutputText += data.content;
             }
             if (data.done) {
+              const responseTimeMs = Date.now() - sendTime;
+              const outputTokens = Math.round(totalOutputText.length / 4);
+              const inputTokens = estimatedInputTokens;
+              const model = turboMode ? "claude-haiku-4-5" : "claude-opus-4-7";
+              const pricing: Record<string, { input: number; output: number }> = {
+                "claude-opus-4-7": { input: 15, output: 75 },
+                "claude-haiku-4-5": { input: 0.8, output: 4 },
+                "claude-sonnet-4-6": { input: 3, output: 15 },
+              };
+              const p = pricing[model] ?? pricing["claude-opus-4-7"];
+              const cost = (inputTokens / 1_000_000) * p.input + (outputTokens / 1_000_000) * p.output;
+              const tokensPerSec = responseTimeMs > 0 ? (outputTokens / responseTimeMs) * 1000 : 0;
+              const stats: MessageStats = { inputTokens, outputTokens, responseTimeMs, ttftMs, cost, tokensPerSec, model };
               setCurrentToolCall(null);
               setMessages((prev) => prev.map((m) =>
-                m.id === assistantMsgId ? { ...m, isStreaming: false } : m
+                m.id === assistantMsgId ? { ...m, isStreaming: false, stats } : m
               ));
+              setSessionStats(prev => [...prev, stats]);
             }
           } catch { /* ignore */ }
         }
@@ -4055,7 +4305,7 @@ export default function Chat() {
 
       {/* ── Agent Insights Panel ── */}
       <AnimatePresence>
-        {showInsights && <InsightsPanel onClose={() => setShowInsights(false)} />}
+        {showInsights && <InsightsPanel onClose={() => setShowInsights(false)} sessionStats={sessionStats} />}
       </AnimatePresence>
 
       {/* ── AI Models Panel (Core+ full-screen) ── */}
