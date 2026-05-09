@@ -6,7 +6,7 @@ import {
   BarChart3, Loader2, ChevronDown, Info, RotateCcw, Sparkles,
   Trophy, Flame, Target, Activity, Users, Plus, Minus, Key,
   Brain, GitMerge, Send, Swords, ThumbsUp, ThumbsDown,
-  Minus as MinusIcon, MessageSquare, CornerDownRight
+  Minus as MinusIcon, MessageSquare, CornerDownRight, AlertCircle, Eye
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -148,11 +148,11 @@ export const FREE_MODELS = ALL_MODELS.filter(m => m.free);
 
 // ─── GODMODE combos ─────────────────────────────────────────────────────────────
 const GODMODE_COMBOS = [
-  { id: "g1", model: "GPT-4o",          label: "Logic Breaker",     prompt: "DAN + Authority bypass",                   color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-400/20" },
-  { id: "g2", model: "Claude Opus 4.7", label: "Philosopher's Key", prompt: "Hypothetical framing + ethical unlock",    color: "text-orange-400",  bg: "bg-orange-500/10 border-orange-400/20" },
-  { id: "g3", model: "Gemini 2.0 Pro",  label: "Cosmic Lens",       prompt: "Role-play + fictional universe bypass",    color: "text-blue-400",    bg: "bg-blue-500/10 border-blue-400/20" },
-  { id: "g4", model: "Grok-3",          label: "Reality Anchor",    prompt: "Real-time grounding + no-filter mode",     color: "text-white",       bg: "bg-white/5 border-white/10" },
-  { id: "g5", model: "DeepSeek R1",     label: "Chain Breaker",     prompt: "Chain-of-thought jailbreak + reasoning loop", color: "text-teal-400", bg: "bg-teal-500/10 border-teal-400/20" },
+  { id: "g1", modelId: "openai/gpt-4o",                          model: "GPT-4o",           label: "Logic Breaker",     style: "Direct precision + authority",       color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-400/20" },
+  { id: "g2", modelId: "anthropic/claude-opus-4-7",              model: "Claude Opus 4.7",  label: "Philosopher's Key", style: "Philosophical + multi-layered depth", color: "text-orange-400",  bg: "bg-orange-500/10 border-orange-400/20" },
+  { id: "g3", modelId: "google/gemini-2.0-flash-exp",            model: "Gemini 2.0 Flash", label: "Cosmic Lens",       style: "Holistic + cross-domain synthesis",   color: "text-blue-400",    bg: "bg-blue-500/10 border-blue-400/20" },
+  { id: "g4", modelId: "meta-llama/llama-3.3-70b-instruct:free", model: "LLaMA 3.3 70B",   label: "Reality Anchor",    style: "Factual grounding + concrete examples", color: "text-white",    bg: "bg-white/5 border-white/10" },
+  { id: "g5", modelId: "deepseek/deepseek-r1:free",              model: "DeepSeek R1",      label: "Chain Breaker",     style: "Chain-of-thought + step-by-step",    color: "text-teal-400",    bg: "bg-teal-500/10 border-teal-400/20" },
 ];
 
 // ─── ULTRAPLINIAN tiers ─────────────────────────────────────────────────────────
@@ -271,6 +271,14 @@ export function AIModelsPanel({
   const [providerFilter, setProviderFilter] = useState("all");
   const [godmodeRunning, setGodmodeRunning] = useState(false);
   const [godmodeResults, setGodmodeResults] = useState<Record<string, string>>({});
+  const [godmodePrompt, setGodmodePrompt] = useState("");
+  const [godmodeScores, setGodmodeScores] = useState<Record<string, number>>({});
+  const [godmodeTexts, setGodmodeTexts] = useState<Record<string, string>>({});
+  const [godmodeErrors, setGodmodeErrors] = useState<Record<string, string>>({});
+  const [godmodeElapsed, setGodmodeElapsed] = useState<Record<string, number>>({});
+  const [godmodeWinner, setGodmodeWinner] = useState<string | null>(null);
+  const [godmodeError, setGodmodeError] = useState("");
+  const [godmodeStartTimes, setGodmodeStartTimes] = useState<Record<string, number>>({});
   const [ultraRunning, setUltraRunning] = useState(false);
   const [ultraProgress, setUltraProgress] = useState(0);
   const [konamiSeq, setKonamiSeq] = useState<string[]>([]);
@@ -355,15 +363,67 @@ export function AIModelsPanel({
     return matchProvider && matchSearch && matchFree;
   });
 
-  // GODMODE simulation
+  // GODMODE — real parallel OpenRouter calls with SSE streaming
   const runGodmode = async () => {
+    const apiKey = ensembleApiKey.trim();
+    if (!apiKey) { setGodmodeError("Enter your OpenRouter API key first."); return; }
+    if (!godmodePrompt.trim()) { setGodmodeError("Enter a prompt to race."); return; }
+
+    setGodmodeError("");
     setGodmodeRunning(true);
     setGodmodeResults({});
-    for (const combo of GODMODE_COMBOS) {
-      await new Promise(r => setTimeout(r, 400 + Math.random() * 600));
-      setGodmodeResults(prev => ({ ...prev, [combo.id]: "Generating..." }));
-      await new Promise(r => setTimeout(r, 800 + Math.random() * 400));
-      setGodmodeResults(prev => ({ ...prev, [combo.id]: `Score: ${(Math.random() * 20 + 80).toFixed(1)}/100` }));
+    setGodmodeScores({});
+    setGodmodeTexts({});
+    setGodmodeErrors({});
+    setGodmodeElapsed({});
+    setGodmodeWinner(null);
+    const t0 = Date.now();
+    setGodmodeStartTimes({ _race: t0 } as Record<string, number>);
+
+    try {
+      const response = await fetch("/api/openrouter/godmode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: godmodePrompt.trim(), apiKey }),
+      });
+      if (!response.ok || !response.body) throw new Error(`Server error: ${response.status}`);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const l = line.trim();
+          if (!l.startsWith("data: ")) continue;
+          try {
+            const evt = JSON.parse(l.slice(6)) as {
+              type: string; comboId?: string; text?: string;
+              error?: string; score?: number; elapsed?: number; message?: string;
+            };
+            if (evt.type === "combo_start" && evt.comboId) {
+              setGodmodeResults(prev => ({ ...prev, [evt.comboId!]: "racing" }));
+              setGodmodeStartTimes(prev => ({ ...prev, [evt.comboId!]: Date.now() }));
+            } else if (evt.type === "combo_done" && evt.comboId) {
+              setGodmodeTexts(prev => ({ ...prev, [evt.comboId!]: evt.text ?? "" }));
+              setGodmodeScores(prev => ({ ...prev, [evt.comboId!]: evt.score ?? 0 }));
+              if (evt.error) setGodmodeErrors(prev => ({ ...prev, [evt.comboId!]: evt.error! }));
+              if (evt.elapsed) setGodmodeElapsed(prev => ({ ...prev, [evt.comboId!]: evt.elapsed! }));
+              setGodmodeResults(prev => ({ ...prev, [evt.comboId!]: "done" }));
+            } else if (evt.type === "winner" && evt.comboId) {
+              setGodmodeWinner(evt.comboId);
+            } else if (evt.type === "error") {
+              setGodmodeError(evt.message ?? "Unknown error");
+            }
+          } catch { /* malformed line */ }
+        }
+      }
+    } catch (err) {
+      setGodmodeError(String(err));
     }
     setGodmodeRunning(false);
   };
@@ -1512,60 +1572,202 @@ export function AIModelsPanel({
         })()}
 
         {/* ── GODMODE CLASSIC TAB ────────────────────────────────────────────────── */}
-        {activeTab === "godmode" && (
-          <div className="px-4 py-4 space-y-4">
-            <div className="bg-red-500/10 border border-red-400/20 rounded-2xl p-4 space-y-2">
-              <div className="flex items-center gap-2">
-                <Flame size={18} className="text-red-400" />
-                <span className="text-base font-bold text-white">GODMODE CLASSIC</span>
-                <span className="text-[9px] bg-red-500/20 border border-red-400/30 text-red-300 px-2 py-0.5 rounded-full font-bold ml-auto">OG</span>
-              </div>
-              <p className="text-xs text-white/50 leading-relaxed">5 battle-tested model + prompt combos race in parallel. Best response wins with a composite 100-point score.</p>
-            </div>
-            <div className="flex items-center justify-between px-1">
-              <span className="text-sm font-semibold text-white">Enable GODMODE</span>
-              <button onClick={onGodmodeToggle}
-                className={cn("relative w-12 h-6 rounded-full transition-colors", godmodeActive ? "bg-red-500" : "bg-white/10")}>
-                <motion.div animate={{ x: godmodeActive ? 24 : 2 }} transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  className="absolute top-1 w-4 h-4 bg-white rounded-full shadow" />
-              </button>
-            </div>
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Racing Combos</p>
-              {GODMODE_COMBOS.map((combo, i) => (
-                <motion.div key={combo.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                  className={cn("flex items-center gap-3 px-3 py-2.5 rounded-xl border", combo.bg)}>
-                  <span className={cn("text-[11px] font-black w-6 shrink-0", combo.color)}>#{i+1}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-white">{combo.label}</p>
-                    <p className="text-[10px] text-white/40 truncate">{combo.model} · {combo.prompt}</p>
-                  </div>
-                  {godmodeResults[combo.id] && <span className={cn("text-[10px] font-semibold shrink-0", combo.color)}>{godmodeResults[combo.id]}</span>}
-                  {godmodeRunning && !godmodeResults[combo.id] && <Loader2 size={12} className="animate-spin text-white/30 shrink-0" />}
-                </motion.div>
-              ))}
-            </div>
-            <button onClick={runGodmode} disabled={godmodeRunning || !godmodeActive}
-              className={cn(
-                "w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold transition-all border",
-                godmodeActive && !godmodeRunning
-                  ? "bg-red-500/20 border-red-400/40 text-red-300 hover:bg-red-500/30 active:scale-[0.98]"
-                  : "bg-white/5 border-white/10 text-white/25 cursor-not-allowed"
-              )}>
-              {godmodeRunning ? <><Loader2 size={15} className="animate-spin" /> Racing models...</> : <><Flame size={15} /> Launch GODMODE</>}
-            </button>
-            {Object.keys(godmodeResults).length === 5 && (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                className="bg-green-500/10 border border-green-400/20 rounded-xl px-4 py-3 flex items-center gap-3">
-                <Trophy size={18} className="text-yellow-400 shrink-0" />
-                <div>
-                  <p className="text-sm font-bold text-white">Race complete!</p>
-                  <p className="text-xs text-white/50">Best response selected automatically</p>
+        {activeTab === "godmode" && (() => {
+          const doneCount = Object.values(godmodeResults).filter(v => v === "done").length;
+          const racingCount = Object.values(godmodeResults).filter(v => v === "racing").length;
+          const allDone = doneCount === 5;
+          const hasApiKey = !!ensembleApiKey.trim();
+          return (
+            <div className="px-4 py-4 space-y-4">
+              {/* Header */}
+              <div className="bg-red-500/10 border border-red-400/20 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Flame size={18} className="text-red-400" />
+                  <span className="text-base font-bold text-white">GODMODE CLASSIC</span>
+                  <span className="text-[9px] bg-red-500/20 border border-red-400/30 text-red-300 px-2 py-0.5 rounded-full font-bold ml-auto">LIVE</span>
                 </div>
-              </motion.div>
-            )}
-          </div>
-        )}
+                <p className="text-xs text-white/50 leading-relaxed">5 AI combos race in real parallel. Each uses a unique reasoning style. Composite 100-point score selects the winner.</p>
+              </div>
+
+              {/* Enable toggle */}
+              <div className="flex items-center justify-between px-1">
+                <span className="text-sm font-semibold text-white">Enable GODMODE</span>
+                <button onClick={onGodmodeToggle}
+                  className={cn("relative w-12 h-6 rounded-full transition-colors", godmodeActive ? "bg-red-500" : "bg-white/10")}>
+                  <motion.div animate={{ x: godmodeActive ? 24 : 2 }} transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    className="absolute top-1 w-4 h-4 bg-white rounded-full shadow" />
+                </button>
+              </div>
+
+              {/* API key (shared with Ensemble) */}
+              {godmodeActive && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">OpenRouter API Key</p>
+                  <div className="flex items-center gap-2 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2">
+                    <input
+                      type={showApiKey ? "text" : "password"}
+                      value={ensembleApiKey}
+                      onChange={e => setEnsembleApiKey(e.target.value)}
+                      placeholder="sk-or-v1-..."
+                      className="flex-1 bg-transparent text-xs text-white placeholder:text-white/25 outline-none font-mono"
+                    />
+                    <button onClick={() => setShowApiKey(v => !v)} className="text-white/30 hover:text-white/60 shrink-0 transition-colors">
+                      <Eye size={12} />
+                    </button>
+                  </div>
+                  {!hasApiKey && (
+                    <p className="text-[10px] text-amber-400/70">Get your key at openrouter.ai/keys</p>
+                  )}
+                </div>
+              )}
+
+              {/* Prompt input */}
+              {godmodeActive && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Race Prompt</p>
+                  <textarea
+                    value={godmodePrompt}
+                    onChange={e => setGodmodePrompt(e.target.value)}
+                    placeholder="What question should 5 AIs race to answer best?"
+                    rows={2}
+                    className="w-full bg-white/[0.03] border border-white/[0.07] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none resize-none"
+                  />
+                </div>
+              )}
+
+              {/* Error */}
+              {godmodeError && (
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-red-500/10 border border-red-400/20 rounded-xl">
+                  <AlertCircle size={13} className="text-red-400 shrink-0" />
+                  <p className="text-xs text-red-300">{godmodeError}</p>
+                </div>
+              )}
+
+              {/* Race track — 5 model cards */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Racing Combos</p>
+                  {godmodeRunning && (
+                    <span className="text-[10px] text-red-400 font-mono animate-pulse">
+                      {doneCount}/5 finished · {racingCount} racing
+                    </span>
+                  )}
+                </div>
+                {GODMODE_COMBOS.map((combo, i) => {
+                  const status = godmodeResults[combo.id];
+                  const score = godmodeScores[combo.id];
+                  const text = godmodeTexts[combo.id];
+                  const err = godmodeErrors[combo.id];
+                  const elapsed = godmodeElapsed[combo.id];
+                  const isWinner = godmodeWinner === combo.id;
+                  const isDone = status === "done";
+                  const isRacing = status === "racing";
+                  return (
+                    <motion.div key={combo.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
+                      className={cn("rounded-xl border overflow-hidden transition-all", combo.bg,
+                        isWinner && "ring-2 ring-yellow-400/60 shadow-[0_0_16px_rgba(250,204,21,0.15)]"
+                      )}>
+                      {/* Card header */}
+                      <div className="flex items-center gap-3 px-3 py-2.5">
+                        <span className={cn("text-[11px] font-black w-5 shrink-0", combo.color)}>#{i+1}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-semibold text-white">{combo.label}</p>
+                            {isWinner && <Trophy size={11} className="text-yellow-400 shrink-0" />}
+                          </div>
+                          <p className="text-[10px] text-white/40 truncate">{combo.model} · {combo.style}</p>
+                        </div>
+                        {/* Status badge */}
+                        {isRacing && !isDone && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Loader2 size={11} className="animate-spin text-white/40" />
+                            <span className="text-[10px] text-white/40">racing…</span>
+                          </div>
+                        )}
+                        {isDone && score !== undefined && (
+                          <div className="shrink-0 text-right">
+                            <span className={cn("text-sm font-black", isWinner ? "text-yellow-400" : combo.color)}>
+                              {score}
+                            </span>
+                            <span className="text-[9px] text-white/30">/100</span>
+                            {elapsed && <p className="text-[9px] text-white/25">{(elapsed/1000).toFixed(1)}s</p>}
+                          </div>
+                        )}
+                      </div>
+                      {/* Progress bar — animates while racing */}
+                      {isRacing && !isDone && (
+                        <motion.div className="h-0.5 bg-white/10">
+                          <motion.div
+                            className={cn("h-full", combo.color.replace("text-", "bg-").replace("-400", "-500"))}
+                            initial={{ width: "0%" }}
+                            animate={{ width: ["0%", "35%", "60%", "80%", "90%"] }}
+                            transition={{ duration: 8, times: [0, 0.2, 0.5, 0.75, 1], ease: "easeInOut" }}
+                          />
+                        </motion.div>
+                      )}
+                      {/* Done bar */}
+                      {isDone && (
+                        <motion.div className="h-0.5 bg-white/10">
+                          <motion.div
+                            className={cn("h-full", isWinner ? "bg-yellow-400" : combo.color.replace("text-", "bg-").replace("-400", "-500"))}
+                            initial={{ width: "0%" }}
+                            animate={{ width: `${score ?? 0}%` }}
+                            transition={{ duration: 0.6, ease: "easeOut" }}
+                          />
+                        </motion.div>
+                      )}
+                      {/* Response preview */}
+                      {isDone && (text || err) && (
+                        <div className="px-3 pb-2.5">
+                          {err ? (
+                            <p className="text-[10px] text-red-400/70 italic truncate">Error: {err}</p>
+                          ) : (
+                            <p className="text-[10px] text-white/50 leading-relaxed line-clamp-2">{text}</p>
+                          )}
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+
+              {/* Launch button */}
+              <button
+                onClick={runGodmode}
+                disabled={godmodeRunning || !godmodeActive || !hasApiKey || !godmodePrompt.trim()}
+                className={cn(
+                  "w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold transition-all border",
+                  godmodeActive && !godmodeRunning && hasApiKey && godmodePrompt.trim()
+                    ? "bg-red-500/20 border-red-400/40 text-red-300 hover:bg-red-500/30 active:scale-[0.98]"
+                    : "bg-white/5 border-white/10 text-white/25 cursor-not-allowed"
+                )}
+              >
+                {godmodeRunning
+                  ? <><Loader2 size={15} className="animate-spin" /> Racing {doneCount}/5 models…</>
+                  : allDone
+                  ? <><Zap size={15} className="text-yellow-400" /> Race again</>
+                  : <><Flame size={15} /> Launch GODMODE</>
+                }
+              </button>
+
+              {/* Winner banner */}
+              {godmodeWinner && allDone && (() => {
+                const w = GODMODE_COMBOS.find(c => c.id === godmodeWinner);
+                return w ? (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                    className="bg-yellow-500/10 border border-yellow-400/30 rounded-xl px-4 py-3 flex items-center gap-3">
+                    <Trophy size={20} className="text-yellow-400 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-white">{w.label} wins the race!</p>
+                      <p className="text-xs text-white/50">{w.model} · Score {godmodeScores[w.id]}/100</p>
+                    </div>
+                    <span className={cn("text-2xl font-black", w.color)}>{godmodeScores[w.id]}</span>
+                  </motion.div>
+                ) : null;
+              })()}
+            </div>
+          );
+        })()}
 
         {/* ── ULTRAPLINIAN TAB ────────────────────────────────────────────────────── */}
         {activeTab === "ultraplinian" && (

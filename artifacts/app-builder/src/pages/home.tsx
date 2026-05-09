@@ -666,6 +666,7 @@ const RUFLO_LINKS = [
   { path: "/federation",icon: Globe,    color: "text-blue-400",   bg: "bg-blue-500/10",   border: "border-blue-400/20",   label: "Federation",   sub: "Zero-trust mesh" },
   { path: "/goap",      icon: Target,   color: "text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-400/20", label: "Goal Planner", sub: "A* path planning" },
   { path: "/mcp",       icon: Plug,     color: "text-teal-400",   bg: "bg-teal-500/10",   border: "border-teal-400/20",   label: "MCP Servers",  sub: "18 native tools" },
+  { path: "/openclaw",  icon: Globe,    color: "text-red-400",    bg: "bg-red-500/10",    border: "border-red-400/20",    label: "OpenClaw",     sub: "AI gateway · All chats", badge: "NEW" },
 ];
 
 function RuFloSection() {
@@ -681,7 +682,7 @@ function RuFloSection() {
           <Sparkles size={12} className="text-purple-400" />
           <span className="text-[11px] font-semibold uppercase tracking-widest text-white/40">RuFlo Agent System</span>
         </div>
-        <span className="text-[10px] text-white/25">12 modules</span>
+        <span className="text-[10px] text-white/25">13 modules</span>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         {RUFLO_LINKS.map((item) => {

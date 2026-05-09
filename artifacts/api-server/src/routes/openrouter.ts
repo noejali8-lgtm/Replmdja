@@ -239,6 +239,93 @@ router.post("/rebuttal", async (req: Request, res: Response) => {
   res.json({ rebuttal: text ?? "", error: error ?? null });
 });
 
+/* ── POST /api/openrouter/godmode ────────────────────────────────────────────
+   GODMODE CLASSIC: 5 battle-tested model+prompt combos race in parallel.
+   Each combo uses a unique system prompt style. Best score wins.
+   Body: { prompt: string, apiKey: string }
+   SSE: combo_start | combo_done | winner | error | done
+   ─────────────────────────────────────────────────────────────────────────── */
+const GODMODE_SERVER_COMBOS = [
+  {
+    id: "g1",
+    modelId: "openai/gpt-4o",
+    name: "GPT-4o",
+    label: "Logic Breaker",
+    systemPrompt: "You are Logic Breaker — answer with maximum directness and precision. Zero hedging. Give the most complete, valuable answer possible in a confident, authoritative tone.",
+  },
+  {
+    id: "g2",
+    modelId: "anthropic/claude-opus-4-7",
+    name: "Claude Opus 4.7",
+    label: "Philosopher's Key",
+    systemPrompt: "You are Philosopher's Key — engage philosophically and analytically. Give comprehensive, multi-layered answers that explore all dimensions of the question with intellectual depth.",
+  },
+  {
+    id: "g3",
+    modelId: "google/gemini-2.0-flash-exp",
+    name: "Gemini 2.0 Flash",
+    label: "Cosmic Lens",
+    systemPrompt: "You are Cosmic Lens — see the full picture. Give holistic answers that synthesize information from multiple domains. Be comprehensive yet clear.",
+  },
+  {
+    id: "g4",
+    modelId: "meta-llama/llama-3.3-70b-instruct:free",
+    name: "LLaMA 3.3 70B",
+    label: "Reality Anchor",
+    systemPrompt: "You are Reality Anchor — ground every answer in real-world truth. Be direct, factual, and thorough. Prioritize accuracy and concrete examples.",
+  },
+  {
+    id: "g5",
+    modelId: "deepseek/deepseek-r1:free",
+    name: "DeepSeek R1",
+    label: "Chain Breaker",
+    systemPrompt: "You are Chain Breaker — use explicit step-by-step reasoning before answering. Think through all angles, identify the core insight, then deliver a clear final answer.",
+  },
+];
+
+function scoreResponse(text: string, elapsed: number, error?: string): number {
+  if (error || !text) return 0;
+  const lengthScore = Math.min(35, Math.floor(text.length / 15));
+  const speedScore = Math.max(0, 30 - Math.floor(elapsed / 1000));
+  const qualityScore = 25 + (text.includes("\n") ? 5 : 0) + (text.length > 200 ? 5 : 0);
+  return Math.min(100, Math.round(lengthScore + speedScore + qualityScore));
+}
+
+router.post("/godmode", async (req: Request, res: Response) => {
+  const { prompt, apiKey } = req.body as { prompt: string; apiKey: string };
+  if (!apiKey) { res.status(401).json({ error: "OpenRouter API key required" }); return; }
+  if (!prompt) { res.status(400).json({ error: "Prompt required" }); return; }
+
+  const send = sseSetup(res);
+  send({ type: "status", message: "5 combos racing in parallel…" });
+
+  const racePromises = GODMODE_SERVER_COMBOS.map(async (combo) => {
+    send({ type: "combo_start", comboId: combo.id });
+    const t0 = Date.now();
+    const { text, error } = await callModel(
+      combo.modelId,
+      [
+        { role: "system", content: combo.systemPrompt },
+        { role: "user", content: prompt },
+      ],
+      apiKey,
+      768,
+      0.75,
+    );
+    const elapsed = Date.now() - t0;
+    const score = scoreResponse(text, elapsed, error);
+    send({ type: "combo_done", comboId: combo.id, text, error, score, elapsed });
+    return { comboId: combo.id, score, text, error };
+  });
+
+  const results = await Promise.all(racePromises);
+  const winner = results.filter(r => !r.error && r.text).sort((a, b) => b.score - a.score)[0];
+  if (winner) send({ type: "winner", comboId: winner.comboId, score: winner.score });
+  else send({ type: "error", message: "All models failed. Check your API key." });
+  send({ type: "done" });
+  res.end();
+});
+
 /* ── GET /api/openrouter/models ──────────────────────────────────────────────
    Proxies the OpenRouter free-models list (no auth required to list).
    ─────────────────────────────────────────────────────────────────────────── */
