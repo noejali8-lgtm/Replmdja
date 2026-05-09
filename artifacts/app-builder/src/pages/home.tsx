@@ -654,6 +654,7 @@ function RecentImportsSection({ onReimport }: { onReimport: (target: ImportTarge
 }
 
 const RUFLO_LINKS = [
+  { path: "/ruflo-install", icon: Terminal, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-400/20", label: "CLI Install", sub: "npm install ruflo · Quick Start", badge: "NEW" },
   { path: "/agents",     icon: Bot,      color: "text-purple-400",  bg: "bg-purple-500/10",  border: "border-purple-400/20",  label: "Agents",       sub: "95+ specialist agents" },
   { path: "/agent-chat", icon: Users,    color: "text-violet-400",  bg: "bg-violet-500/10",  border: "border-violet-400/20",  label: "Agent Chat",   sub: "Real-time collaboration" },
   { path: "/swarm",      icon: Network,  color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-400/20",   label: "Swarm",        sub: "Hierarchical · Mesh" },
@@ -680,7 +681,7 @@ function RuFloSection() {
           <Sparkles size={12} className="text-purple-400" />
           <span className="text-[11px] font-semibold uppercase tracking-widest text-white/40">RuFlo Agent System</span>
         </div>
-        <span className="text-[10px] text-white/25">11 modules</span>
+        <span className="text-[10px] text-white/25">12 modules</span>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         {RUFLO_LINKS.map((item) => {
@@ -688,10 +689,15 @@ function RuFloSection() {
           return (
             <Link key={item.path} href={item.path}>
               <div className={cn(
-                "flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all active:scale-[0.97] cursor-pointer",
+                "relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all active:scale-[0.97] cursor-pointer",
                 item.bg, item.border,
                 "hover:brightness-110"
               )}>
+                {"badge" in item && item.badge && (
+                  <span className="absolute top-1.5 right-1.5 text-[8px] font-bold px-1 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-400 leading-none">
+                    {item.badge}
+                  </span>
+                )}
                 <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0", item.bg, `border ${item.border}`)}>
                   <Icon size={13} className={item.color} />
                 </div>
@@ -896,6 +902,28 @@ export default function Home() {
               </div>
             </Link>
           </div>
+
+          {/* JARVIS AI Assistant */}
+          <Link href="/jarvis">
+            <div className="relative overflow-hidden rounded-2xl border border-sky-400/20 bg-gradient-to-br from-[#030c14] via-[#0d1117] to-[#030f1a] cursor-pointer group hover:border-sky-400/35 transition-all">
+              <div className="absolute inset-0 pointer-events-none select-none overflow-hidden opacity-10">
+                <div className="absolute inset-0" style={{ backgroundImage: "linear-gradient(rgba(56,189,248,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(56,189,248,0.15) 1px, transparent 1px)", backgroundSize: "16px 16px" }} />
+              </div>
+              <div className="relative px-4 py-3.5 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-sky-500/15 border border-sky-400/25 flex items-center justify-center shrink-0 group-hover:bg-sky-500/22 transition-colors">
+                  <Zap size={18} className="text-sky-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[13px] font-bold text-sky-300">J.A.R.V.I.S</p>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-sky-500/15 border border-sky-400/25 text-sky-400">AI ASSISTANT</span>
+                  </div>
+                  <p className="text-[10px] text-white/40 mt-0.5 leading-tight">Voice · Vision · Web · Memory · 14 skills</p>
+                </div>
+                <ChevronRight size={14} className="text-sky-400/40 group-hover:text-sky-400/70 transition-colors shrink-0" />
+              </div>
+            </div>
+          </Link>
 
           {/* G0DM0D3.AI Showcase */}
           <Link href="/g0dm0d3">
