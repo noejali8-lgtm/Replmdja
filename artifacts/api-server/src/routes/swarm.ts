@@ -1,10 +1,28 @@
 import { Router, type Request, type Response } from "express";
 import { eq, desc } from "drizzle-orm";
+import { EventEmitter } from "events";
 import { db } from "@workspace/db";
 import { swarms, swarmMessages, agents } from "@workspace/db";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 
 const router = Router();
+
+/* ── Swarm viz event bus (SSE fan-out) ───────────────────────────────────── */
+const swarmBus = new EventEmitter();
+swarmBus.setMaxListeners(200);
+
+interface VizEvent {
+  type: "viz_phase" | "viz_done" | "viz_init" | "connected";
+  swarmId: number;
+  phase?: string;
+  topology?: string;
+  timestamp: string;
+}
+
+function emitViz(swarmId: number, payload: Omit<VizEvent, "swarmId" | "timestamp">) {
+  const event: VizEvent = { ...payload, swarmId, timestamp: new Date().toISOString() };
+  swarmBus.emit(`swarm:${swarmId}`, event);
+}
 
 router.get("/", async (_req: Request, res: Response) => {
   try {
@@ -51,6 +69,32 @@ router.get("/:id", async (req: Request, res: Response) => {
   }
 });
 
+/* ── GET /api/swarm/:id/events/stream — live viz SSE ─────────────────────── */
+router.get("/:id/events/stream", (req: Request, res: Response) => {
+  const swarmId = parseInt(req.params.id);
+
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (d: object) => res.write(`data: ${JSON.stringify(d)}\n\n`);
+  send({ type: "connected", swarmId });
+
+  const listener = (ev: VizEvent) => { try { send(ev); } catch { /* ignore */ } };
+  swarmBus.on(`swarm:${swarmId}`, listener);
+
+  const heartbeat = setInterval(() => {
+    try { res.write(": heartbeat\n\n"); } catch { /* ignore */ }
+  }, 20000);
+
+  req.on("close", () => {
+    swarmBus.off(`swarm:${swarmId}`, listener);
+    clearInterval(heartbeat);
+  });
+});
+
+/* ── POST /api/swarm/:id/coordinate ──────────────────────────────────────── */
 router.post("/:id/coordinate", async (req: Request, res: Response) => {
   try {
     const swarmId = parseInt(req.params.id);
@@ -70,6 +114,7 @@ router.post("/:id/coordinate", async (req: Request, res: Response) => {
 
     const topo = topology ?? swarm.topology;
     send({ type: "swarm_init", swarmId, topology: topo, task });
+    emitViz(swarmId, { type: "viz_init", topology: topo });
 
     const phases = topo === "hierarchical"
       ? ["analyze", "delegate", "execute", "consolidate", "report"]
@@ -79,6 +124,8 @@ router.post("/:id/coordinate", async (req: Request, res: Response) => {
 
     for (const phase of phases) {
       send({ type: "phase_start", phase });
+      emitViz(swarmId, { type: "viz_phase", phase, topology: topo });
+
       await db.insert(swarmMessages).values({
         swarmId, type: "phase", payload: { phase, task, timestamp: new Date().toISOString() }
       });
@@ -106,6 +153,7 @@ router.post("/:id/coordinate", async (req: Request, res: Response) => {
       metrics: { ...metrics, totalTasks: metrics.totalTasks + 1, successRate: 1 }
     }).where(eq(swarms.id, swarmId));
 
+    emitViz(swarmId, { type: "viz_done" });
     send({ type: "swarm_done", swarmId });
     res.end();
   } catch (err) {
