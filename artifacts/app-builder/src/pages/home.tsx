@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, Zap, Layers, BookOpen, Compass, ChevronRight, Clock, Trash2 } from "lucide-react";
+import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, Zap, Layers, BookOpen, Compass, ChevronRight, Clock, Trash2, WifiOff, ShoppingBag, Video, Brain, Cloud, Bug, Smartphone, Shield, GraduationCap, DollarSign, Settings, Eye, Terminal, Users, Rocket, Mic, Cpu, RefreshCw } from "lucide-react";
 import { SiGithub, SiReplit } from "react-icons/si";
 import { CategoryChips } from "@/components/CategoryChips";
 import { CreateInput } from "@/components/CreateInput";
@@ -307,6 +307,264 @@ function ImportFromGitHubSheet({ onClose, onImport }: { onClose: () => void; onI
   );
 }
 
+/* ─────────────────── Platform Features Showcase ─────────────────── */
+interface FeatureCard {
+  id: string;
+  icon: React.ReactNode;
+  title: string;
+  titleAr: string;
+  badge?: string;
+  badgeColor?: string;
+  desc: string;
+  color: string;
+  bg: string;
+  border: string;
+}
+
+const VISION_FEATURES: FeatureCard[] = [
+  {
+    id: "offline", icon: <WifiOff size={15} />, title: "Hybrid Offline Mode", titleAr: "بيئة العمل الهجينة",
+    badge: "Coming Soon", badgeColor: "bg-sky-500/20 text-sky-300 border-sky-400/20",
+    desc: "Smart Caching: code & test inside a local micro-container when offline, then auto-sync everything when you reconnect. Zero data loss.",
+    color: "text-sky-400", bg: "bg-sky-500/10", border: "border-sky-400/20",
+  },
+  {
+    id: "marketplace", icon: <ShoppingBag size={15} />, title: "Replit Marketplace", titleAr: "متجر الإضافات والمكونات",
+    badge: "Roadmap", badgeColor: "bg-purple-500/20 text-purple-300 border-purple-400/20",
+    desc: "An open marketplace where developers sell complete templates, ready-made API integrations, and custom in-editor tools — powered by Cycles.",
+    color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-400/20",
+  },
+  {
+    id: "voice", icon: <Video size={15} />, title: "Native Voice & Video Collab", titleAr: "التواصل الصوتي والمرئي المدمج",
+    badge: "Roadmap", badgeColor: "bg-rose-500/20 text-rose-300 border-rose-400/20",
+    desc: "Quick Call button inside any Repl — floating video/audio window with screen annotation, cursor sharing, and spatial audio. No Discord needed.",
+    color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-400/20",
+  },
+  {
+    id: "memory", icon: <Brain size={15} />, title: "Cross-Repl Long-term Memory", titleAr: "الذاكرة العابرة للمشاريع",
+    badge: "Coming Soon", badgeColor: "bg-violet-500/20 text-violet-300 border-violet-400/20",
+    desc: "Unified AI Memory: remembers your preferred libraries, naming conventions, recurring bugs, and coding style — across every project you build.",
+    color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-400/20",
+  },
+  {
+    id: "cloud", icon: <Cloud size={15} />, title: "Multi-Cloud Orchestrator", titleAr: "مركز التحكم في البنية التحتية",
+    badge: "Roadmap", badgeColor: "bg-cyan-500/20 text-cyan-300 border-cyan-400/20",
+    desc: "Deploy to AWS, Google Cloud, or Azure in one click — directly from Replit. Unified dashboard for cost, uptime, latency and scaling across all clouds.",
+    color: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-400/20",
+  },
+  {
+    id: "timetravel", icon: <Bug size={15} />, title: "Visual Debug & Time Travel", titleAr: "نظام الاختبار البصري",
+    badge: "Coming Soon", badgeColor: "bg-amber-500/20 text-amber-300 border-amber-400/20",
+    desc: "Data Timeline: graphical waveforms showing every variable change during execution. Rewind to the exact millisecond a bug was introduced.",
+    color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-400/20",
+  },
+  {
+    id: "figma", icon: <Layers size={15} />, title: "Figma → Repl", titleAr: "تحويل التصميم إلى كود",
+    badge: "Coming Soon", badgeColor: "bg-pink-500/20 text-pink-300 border-pink-400/20",
+    desc: "Drag a Figma file or paste a share link — AI converts it to production-ready React or HTML/CSS instantly, preserving spacing, fonts, and components.",
+    color: "text-pink-400", bg: "bg-pink-500/10", border: "border-pink-400/20",
+  },
+  {
+    id: "mobile", icon: <Smartphone size={15} />, title: "Mobile-First Power Tools", titleAr: "ميزات الموبايل الاحترافية",
+    badge: "Coming Soon", badgeColor: "bg-green-500/20 text-green-300 border-green-400/20",
+    desc: "Customizable programming keyboard with code-specific keys, low-code drag-and-drop canvas, gesture navigation, and haptic feedback on syntax errors.",
+    color: "text-green-400", bg: "bg-green-500/10", border: "border-green-400/20",
+  },
+  {
+    id: "security", icon: <Shield size={15} />, title: "Autonomous Security Auditor", titleAr: "نظام الحماية الاستباقي",
+    badge: "Roadmap", badgeColor: "bg-red-500/20 text-red-300 border-red-400/20",
+    desc: "Background security bot that runs real simulated attacks (SQL injection, XSS, CSRF) on your app before deployment, with a prioritized fix report card.",
+    color: "text-red-400", bg: "bg-red-500/10", border: "border-red-400/20",
+  },
+  {
+    id: "learn", icon: <GraduationCap size={15} />, title: "AI Learning Academy", titleAr: "أكاديمية التعلم التفاعلية",
+    badge: "Coming Soon", badgeColor: "bg-yellow-500/20 text-yellow-300 border-yellow-400/20",
+    desc: "AI analyzes your skill level and creates in-editor challenges. Complete them to earn Badges and Cycles. Learning paths: Web, AI, Security, Game Dev, and more.",
+    color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-400/20",
+  },
+];
+
+const PLATFORM_FEATURES: FeatureCard[] = [
+  {
+    id: "bounties", icon: <DollarSign size={15} />, title: "Bounties & Cycles", titleAr: "اقتصاد Replit",
+    desc: "Earn real money: browse tasks posted by other users, submit proposals, complete work, collect payment — all inside the platform. Cycles = digital fuel for compute, memory, and AI.",
+    color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-400/20",
+  },
+  {
+    id: "nix", icon: <Settings size={15} />, title: "Nix & Full Linux Power", titleAr: "الهندسة العميقة لبيئة العمل",
+    desc: "Replit runs on Nix — add any system tool via replit.nix: graphics engines, cryptography libs, old languages, ML frameworks. Full Linux in your browser. Custom Run = magic scripts.",
+    color: "text-orange-400", bg: "bg-orange-500/10", border: "border-orange-400/20",
+  },
+  {
+    id: "vision", icon: <Eye size={15} />, title: "Agent Visual Perception", titleAr: "ذكاء الأجسام — رؤية المتصفح",
+    desc: "The Agent doesn't just read code — it sees screenshots of what it built. Misaligned button? Off-brand color? It self-corrects visually. Plus cross-file ref-tracking when you rename anything.",
+    color: "text-sky-400", bg: "bg-sky-500/10", border: "border-sky-400/20",
+  },
+  {
+    id: "debugger", icon: <Terminal size={15} />, title: "Debugger & Profiler", titleAr: "أدوات التشخيص المتقدمة",
+    desc: "Step-through debugging with Breakpoints — freeze execution and watch data move through RAM line by line. Flame graph profiler for CPU/memory bottlenecks. Full shell access.",
+    color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-400/20",
+  },
+  {
+    id: "social", icon: <Users size={15} />, title: "Social Coding", titleAr: "التواصل الاجتماعي البرمجي",
+    desc: "Fork any community project instantly — full copy, all files, ready to modify. Publish as open source. Followers, activity feed, starred Repls, community leaderboard.",
+    color: "text-pink-400", bg: "bg-pink-500/10", border: "border-pink-400/20",
+  },
+  {
+    id: "hosting", icon: <Rocket size={15} />, title: "Production Grade Hosting", titleAr: "الاستضافة الاحترافية",
+    desc: "Custom domains with free SSL. Zero-downtime deploys: new version spins up in background, traffic switches in milliseconds. Autoscaling, health checks, one-click rollback.",
+    color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-400/20",
+  },
+];
+
+const FUTURE_FEATURES: FeatureCard[] = [
+  {
+    id: "voice-ai", icon: <Mic size={15} />, title: "AI Voice Pair Programming", titleAr: "البرمجة الصوتية بالذكاء الاصطناعي",
+    badge: "Future", badgeColor: "bg-purple-500/20 text-purple-300 border-purple-400/20",
+    desc: "Talk to the AI during coding: \"Why is this function slow?\" — hands-free pair programming while you think out loud. Like Siri, but for serious builders. Under active research.",
+    color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-400/20",
+  },
+  {
+    id: "gpu", icon: <Cpu size={15} />, title: "GPU Support for AI/ML", titleAr: "دعم معالجات GPU",
+    badge: "Limited Beta", badgeColor: "bg-yellow-500/20 text-yellow-300 border-yellow-400/20",
+    desc: "Powerful GPUs for training large AI models directly in Replit. Train transformers, fine-tune LLMs, run CUDA workloads — no cloud ML infrastructure setup needed.",
+    color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-400/20",
+  },
+  {
+    id: "local-sync", icon: <RefreshCw size={15} />, title: "Local Sync", titleAr: "المزامنة المحلية",
+    badge: "Future", badgeColor: "bg-cyan-500/20 text-cyan-300 border-cyan-400/20",
+    desc: "Real-time file sync between your local machine and Replit cloud — no Git required. Edit in VS Code locally, see it appear in Replit instantly. AI-assisted conflict resolution.",
+    color: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-400/20",
+  },
+];
+
+const FEATURE_TABS = [
+  { id: "vision", label: "🚀 Vision", features: VISION_FEATURES },
+  { id: "platform", label: "⚡ Platform", features: PLATFORM_FEATURES },
+  { id: "future", label: "🔮 Future", features: FUTURE_FEATURES },
+] as const;
+
+function FeatureCardItem({ f }: { f: FeatureCard }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <motion.button
+      whileTap={{ scale: 0.97 }}
+      onClick={() => setExpanded(v => !v)}
+      className={cn(
+        "flex-shrink-0 w-[200px] flex flex-col gap-2 p-3 rounded-2xl border text-left transition-all",
+        f.bg, f.border
+      )}
+    >
+      <div className="flex items-start justify-between gap-1">
+        <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0", f.bg, f.border, "border")}>
+          <span className={f.color}>{f.icon}</span>
+        </div>
+        {f.badge && (
+          <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0", f.badgeColor)}>
+            {f.badge}
+          </span>
+        )}
+      </div>
+      <div>
+        <p className={cn("text-xs font-semibold leading-tight", f.color)}>{f.title}</p>
+        <p className="text-[10px] text-white/35 mt-0.5 leading-tight">{f.titleAr}</p>
+      </div>
+      <AnimatePresence>
+        {expanded ? (
+          <motion.p
+            key="desc"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="text-[10px] text-white/55 leading-relaxed overflow-hidden"
+          >
+            {f.desc}
+          </motion.p>
+        ) : (
+          <p className="text-[10px] text-white/40 leading-relaxed line-clamp-2">{f.desc}</p>
+        )}
+      </AnimatePresence>
+      <div className="flex items-center justify-end mt-auto">
+        <span className={cn("text-[9px] font-medium", f.color)}>
+          {expanded ? "Less ▲" : "More ▼"}
+        </span>
+      </div>
+    </motion.button>
+  );
+}
+
+function PlatformFeaturesSection() {
+  const [activeTab, setActiveTab] = useState<"vision" | "platform" | "future">("vision");
+  const [headerOpen, setHeaderOpen] = useState(true);
+  const currentTab = FEATURE_TABS.find(t => t.id === activeTab) ?? FEATURE_TABS[0];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.3 }}
+      className="space-y-2"
+    >
+      {/* Section header */}
+      <button
+        className="w-full flex items-center gap-2 px-0.5"
+        onClick={() => setHeaderOpen(v => !v)}
+      >
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-white/30 flex-1 text-left">Platform Features</span>
+        <ChevronDown size={12} className={cn("text-white/25 transition-transform", !headerOpen && "rotate-180")} />
+      </button>
+
+      <AnimatePresence>
+        {headerOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden space-y-2"
+          >
+            {/* Tabs */}
+            <div className="flex gap-1.5">
+              {FEATURE_TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    "flex-1 py-1.5 rounded-xl text-[11px] font-semibold transition-all border",
+                    activeTab === tab.id
+                      ? "bg-white/10 border-white/20 text-white"
+                      : "bg-transparent border-white/8 text-white/35 hover:text-white/60"
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Feature cards — horizontal scroll */}
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4">
+              {currentTab.features.map((f, i) => (
+                <motion.div
+                  key={f.id}
+                  initial={{ opacity: 0, x: 12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.04 }}
+                >
+                  <FeatureCardItem f={f} />
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Feature count */}
+            <p className="text-[10px] text-white/20 text-center">
+              {currentTab.features.length} features — tap any card to expand
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 function RecentImportsSection({ onReimport }: { onReimport: (target: ImportTarget) => void }) {
   const [history, setHistory] = useState<RecentImport[]>([]);
 
@@ -576,6 +834,9 @@ export default function Home() {
               </div>
             </Link>
           </div>
+
+          {/* Platform Features Showcase */}
+          <PlatformFeaturesSection />
 
           <div className="flex flex-col items-center gap-0.5 text-[13px] pb-2">
             <span className="text-white/40">Start creating for free</span>
