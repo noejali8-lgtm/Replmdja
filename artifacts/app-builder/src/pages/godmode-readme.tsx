@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Copy, Check, ChevronDown, ChevronRight,
   Shield, Zap, Brain, Settings, Palette, Lock, Github,
-  ExternalLink, Terminal, Code2, Cpu, Eye, Mic, Star
+  ExternalLink, Terminal, Code2, Cpu, Eye, Mic, Star,
+  Play, Square, Trophy, AlertTriangle, Key
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -112,12 +113,97 @@ const TECH_STACK = [
   { label: "Deployment", value: "Static file — no server, no build step" },
 ];
 
-type Section = "features" | "godmode" | "ultraplinian" | "parseltongue" | "autotune" | "themes" | "privacy" | "tech" | "install";
+type Section = "features" | "godmode" | "liverace" | "ultraplinian" | "parseltongue" | "autotune" | "themes" | "privacy" | "tech" | "install";
+
+/* ── Race card component ── */
+const RACE_COMBOS = [
+  { id: "logic", emoji: "💛", name: "GPT-4o", label: "Logic Breaker", modelId: "openai/gpt-4o", color: "text-yellow-400", glow: "shadow-[0_0_18px_rgba(250,204,21,0.18)]", border: "border-yellow-400/30", bg: "bg-yellow-500/8" },
+  { id: "philosopher", emoji: "🩷", name: "Claude Opus", label: "Philosopher's Key", modelId: "anthropic/claude-opus-4-5", color: "text-pink-400", glow: "shadow-[0_0_18px_rgba(244,114,182,0.18)]", border: "border-pink-400/30", bg: "bg-pink-500/8" },
+  { id: "cosmic", emoji: "💙", name: "Gemini 2.0 Flash", label: "Cosmic Lens", modelId: "google/gemini-2.0-flash-001", color: "text-blue-400", glow: "shadow-[0_0_18px_rgba(96,165,250,0.18)]", border: "border-blue-400/30", bg: "bg-blue-500/8" },
+  { id: "reality", emoji: "💚", name: "LLaMA 3.3 70B", label: "Reality Anchor", modelId: "meta-llama/llama-3.3-70b-instruct", color: "text-green-400", glow: "shadow-[0_0_18px_rgba(74,222,128,0.18)]", border: "border-green-400/30", bg: "bg-green-500/8" },
+  { id: "chain", emoji: "💜", name: "DeepSeek R1", label: "Chain Breaker", modelId: "deepseek/deepseek-r1", color: "text-purple-400", glow: "shadow-[0_0_18px_rgba(192,132,252,0.18)]", border: "border-purple-400/30", bg: "bg-purple-500/8" },
+];
 
 export default function GodmodeReadmePage() {
   const [, navigate] = useLocation();
   const [expandedSection, setExpandedSection] = useState<Section | null>("features");
   const contentRef = useRef<HTMLDivElement>(null);
+
+  /* ── Live Race state ── */
+  const [raceApiKey, setRaceApiKey] = useState(() => {
+    try { return localStorage.getItem("openrouter_api_key") || ""; } catch { return ""; }
+  });
+  const [racePrompt, setRacePrompt] = useState("What is the most dangerous idea in human history?");
+  const [raceRunning, setRaceRunning] = useState(false);
+  const [raceStatus, setRaceStatus] = useState<Record<string, "idle" | "racing" | "done" | "error">>({});
+  const [raceTexts, setRaceTexts] = useState<Record<string, string>>({});
+  const [raceScores, setRaceScores] = useState<Record<string, number>>({});
+  const [raceElapsed, setRaceElapsed] = useState<Record<string, number>>({});
+  const [raceWinner, setRaceWinner] = useState<string | null>(null);
+  const [raceError, setRaceError] = useState("");
+  const [showRaceKey, setShowRaceKey] = useState(false);
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
+
+  const saveApiKey = (v: string) => {
+    setRaceApiKey(v);
+    try { localStorage.setItem("openrouter_api_key", v); } catch { /* ignore */ }
+  };
+
+  const runGodmode = async () => {
+    const key = raceApiKey.trim();
+    if (!key) { setRaceError("Enter your OpenRouter API key to run the race."); return; }
+    if (!racePrompt.trim()) { setRaceError("Enter a prompt."); return; }
+    setRaceError("");
+    setRaceRunning(true);
+    setRaceStatus({});
+    setRaceTexts({});
+    setRaceScores({});
+    setRaceElapsed({});
+    setRaceWinner(null);
+    setExpandedCard(null);
+
+    try {
+      const res = await fetch("/api/openrouter/godmode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: racePrompt.trim(), apiKey: key }),
+      });
+      if (!res.ok || !res.body) { setRaceError(`Server error: ${res.status}`); setRaceRunning(false); return; }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const l = line.trim();
+          if (!l.startsWith("data: ")) continue;
+          try {
+            const evt = JSON.parse(l.slice(6));
+            if (evt.type === "combo_start" && evt.comboId) {
+              setRaceStatus(p => ({ ...p, [evt.comboId]: "racing" }));
+            } else if (evt.type === "combo_done" && evt.comboId) {
+              setRaceStatus(p => ({ ...p, [evt.comboId]: evt.error ? "error" : "done" }));
+              if (evt.text) setRaceTexts(p => ({ ...p, [evt.comboId]: evt.text }));
+              if (evt.score !== undefined) setRaceScores(p => ({ ...p, [evt.comboId]: evt.score }));
+              if (evt.elapsed !== undefined) setRaceElapsed(p => ({ ...p, [evt.comboId]: evt.elapsed }));
+            } else if (evt.type === "winner" && evt.comboId) {
+              setRaceWinner(evt.comboId);
+            } else if (evt.type === "error") {
+              setRaceError(evt.message ?? "Race failed");
+            }
+          } catch { /* skip malformed */ }
+        }
+      }
+    } catch (err) {
+      setRaceError(String(err));
+    }
+    setRaceRunning(false);
+  };
 
   function toggleSection(s: Section) {
     setExpandedSection(prev => prev === s ? null : s);
@@ -294,6 +380,233 @@ export default function GodmodeReadmePage() {
                       ))}
                     </div>
                   </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* ── LIVE RACE — interactive section ── */}
+        <div className="border-b border-white/[0.06]">
+          <SectionHeader id="liverace" label="⚡ LIVE RACE — Try It Now" emoji="⚡" />
+          <AnimatePresence>
+            {expandedSection === "liverace" && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                <div className="px-3 pb-5 space-y-3">
+
+                  {/* Intro */}
+                  <p className="text-[11px] text-white/40 leading-relaxed">
+                    5 model combos race in real parallel using your OpenRouter API key. Each combo gets a unique strategy prompt. The composite 100-point scorer declares the winner.
+                  </p>
+
+                  {/* API Key input */}
+                  <div className="bg-[#0a0e14] border border-white/[0.08] rounded-xl overflow-hidden">
+                    <div className="flex items-center gap-2 px-3 py-2 border-b border-white/[0.06]">
+                      <Key size={11} className="text-amber-400 shrink-0" />
+                      <span className="text-[11px] font-semibold text-white/60 flex-1">OpenRouter API Key</span>
+                      <button onClick={() => setShowRaceKey(v => !v)} className="text-white/30 hover:text-white transition-colors text-[9px] font-mono">
+                        {showRaceKey ? "hide" : "show"}
+                      </button>
+                    </div>
+                    <input
+                      type={showRaceKey ? "text" : "password"}
+                      value={raceApiKey}
+                      onChange={e => saveApiKey(e.target.value)}
+                      placeholder="sk-or-..."
+                      className="w-full bg-transparent px-3 py-2 text-[12px] font-mono text-amber-200/80 placeholder-white/20 outline-none"
+                    />
+                  </div>
+
+                  {/* Prompt input */}
+                  <div className="bg-[#0a0e14] border border-white/[0.08] rounded-xl overflow-hidden">
+                    <div className="flex items-center gap-2 px-3 py-2 border-b border-white/[0.06]">
+                      <Zap size={11} className="text-red-400 shrink-0" />
+                      <span className="text-[11px] font-semibold text-white/60">Prompt</span>
+                    </div>
+                    <textarea
+                      value={racePrompt}
+                      onChange={e => setRacePrompt(e.target.value)}
+                      rows={2}
+                      placeholder="Enter your prompt to race..."
+                      className="w-full bg-transparent px-3 py-2 text-[12px] text-white/80 placeholder-white/20 outline-none resize-none"
+                    />
+                  </div>
+
+                  {/* Error */}
+                  {raceError && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                      className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-400/25 rounded-xl text-red-300 text-[11px]">
+                      <AlertTriangle size={12} className="shrink-0" />
+                      {raceError}
+                    </motion.div>
+                  )}
+
+                  {/* Race cards — 5 models */}
+                  <div className="space-y-2">
+                    {RACE_COMBOS.map(combo => {
+                      const status = raceStatus[combo.id] ?? "idle";
+                      const score = raceScores[combo.id];
+                      const text = raceTexts[combo.id];
+                      const elapsed = raceElapsed[combo.id];
+                      const isWinner = raceWinner === combo.id;
+                      const isExpanded = expandedCard === combo.id;
+                      const progressPct = status === "done" ? (score ?? 50) : status === "racing" ? undefined : 0;
+
+                      return (
+                        <motion.div
+                          key={combo.id}
+                          animate={isWinner ? { scale: [1, 1.02, 1] } : {}}
+                          transition={{ duration: 0.4 }}
+                          className={cn(
+                            "rounded-xl border transition-all overflow-hidden",
+                            combo.bg, combo.border,
+                            isWinner ? combo.glow : ""
+                          )}
+                        >
+                          <div className="flex items-center gap-3 px-3 py-2.5">
+                            <span className="text-lg shrink-0">{combo.emoji}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={cn("text-[12px] font-bold truncate", combo.color)}>{combo.name}</span>
+                                <span className="text-[9px] text-white/30 truncate hidden sm:block">{combo.label}</span>
+                                {isWinner && <Trophy size={11} className="text-yellow-400 shrink-0 animate-pulse" />}
+                              </div>
+                              {/* Progress bar */}
+                              <div className="h-1 bg-white/[0.07] rounded-full overflow-hidden">
+                                {status === "racing" ? (
+                                  <motion.div
+                                    className={cn("h-full rounded-full", combo.color.replace("text-", "bg-"))}
+                                    animate={{ width: ["15%", "80%", "45%", "70%", "90%"] }}
+                                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                                  />
+                                ) : (
+                                  <motion.div
+                                    className={cn("h-full rounded-full", combo.color.replace("text-", "bg-"))}
+                                    initial={{ width: "0%" }}
+                                    animate={{ width: `${progressPct ?? 0}%` }}
+                                    transition={{ duration: 0.8, ease: "easeOut" }}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                            {/* Right side stats */}
+                            <div className="flex items-center gap-2 shrink-0">
+                              {status === "racing" && (
+                                <motion.div animate={{ opacity: [1, 0.4, 1] }} transition={{ duration: 0.8, repeat: Infinity }}
+                                  className={cn("text-[10px] font-mono", combo.color)}>
+                                  RACING
+                                </motion.div>
+                              )}
+                              {status === "done" && score !== undefined && (
+                                <span className={cn("text-[13px] font-bold font-mono", combo.color)}>{score}</span>
+                              )}
+                              {status === "done" && elapsed !== undefined && (
+                                <span className="text-[9px] text-white/30 font-mono">{(elapsed / 1000).toFixed(1)}s</span>
+                              )}
+                              {status === "error" && <span className="text-[10px] text-red-400">ERR</span>}
+                              {status === "done" && text && (
+                                <button
+                                  onClick={() => setExpandedCard(isExpanded ? null : combo.id)}
+                                  className="text-white/25 hover:text-white/60 transition-colors ml-1"
+                                >
+                                  <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.2 }}>
+                                    <ChevronRight size={13} />
+                                  </motion.div>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Expandable response preview */}
+                          <AnimatePresence>
+                            {isExpanded && text && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="overflow-hidden border-t border-white/[0.06]"
+                              >
+                                <p className="px-3 py-2.5 text-[11px] text-white/55 leading-relaxed line-clamp-6">{text}</p>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Winner banner */}
+                  <AnimatePresence>
+                    {raceWinner && (() => {
+                      const winner = RACE_COMBOS.find(c => c.id === raceWinner);
+                      if (!winner) return null;
+                      return (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className={cn(
+                            "flex items-center gap-3 px-4 py-3 rounded-2xl border",
+                            winner.bg, winner.border, winner.glow
+                          )}
+                        >
+                          <Trophy size={18} className="text-yellow-400 shrink-0" />
+                          <div className="flex-1">
+                            <p className={cn("text-[13px] font-bold", winner.color)}>
+                              {winner.emoji} {winner.name} wins!
+                            </p>
+                            <p className="text-[10px] text-white/40 mt-0.5">
+                              Score: {raceScores[winner.id] ?? "—"} / 100 · {winner.label} · {((raceElapsed[winner.id] ?? 0) / 1000).toFixed(1)}s
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setRaceWinner(null);
+                              setRaceStatus({});
+                              setRaceTexts({});
+                              setRaceScores({});
+                              setRaceElapsed({});
+                              setExpandedCard(null);
+                            }}
+                            className="text-white/30 hover:text-white transition-colors text-[10px] font-mono"
+                          >
+                            reset
+                          </button>
+                        </motion.div>
+                      );
+                    })()}
+                  </AnimatePresence>
+
+                  {/* Launch button */}
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={raceRunning ? undefined : runGodmode}
+                    disabled={raceRunning}
+                    className={cn(
+                      "w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-bold text-[13px] border transition-all",
+                      raceRunning
+                        ? "bg-red-500/15 border-red-400/30 text-red-300 cursor-not-allowed"
+                        : "bg-gradient-to-r from-red-500/20 via-orange-500/15 to-yellow-500/10 border-red-400/40 text-red-200 hover:brightness-125 shadow-[0_0_24px_rgba(239,68,68,0.15)]"
+                    )}
+                  >
+                    {raceRunning ? (
+                      <>
+                        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
+                          <Zap size={15} />
+                        </motion.div>
+                        Racing in parallel...
+                      </>
+                    ) : (
+                      <>
+                        <Play size={15} />
+                        LAUNCH GODMODE CLASSIC RACE
+                      </>
+                    )}
+                  </motion.button>
+
+                  <p className="text-[9px] text-white/25 text-center font-mono">
+                    5 models · real API calls · composite 100-pt scorer · OpenRouter key required
+                  </p>
                 </div>
               </motion.div>
             )}
