@@ -14,7 +14,8 @@ import {
   Table, Wifi, WifiOff, Mail, Chrome, AlertCircle,
   Cpu, Activity, Layers, Zap, Users, Network, Sparkles,
   GitMerge, Code2, Palette, BarChart3, TrendingUp,
-  Github, Download, Settings, Globe2
+  Github, Download, Settings, Globe2,
+  ThumbsUp, ThumbsDown, Pin, Copy, Check, ChevronsDown, Gauge
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -2113,6 +2114,88 @@ function CheckpointPanel({ onClose }: { onClose: () => void }) {
 }
 
 /* ─────────────────────────────────────────────────────────
+   TOKEN BUDGET BAR
+   ───────────────────────────────────────────────────────── */
+const CONTEXT_LIMIT = 200_000;
+
+function TokenBudgetBar({ usedTokens }: { usedTokens: number }) {
+  const pct = Math.min((usedTokens / CONTEXT_LIMIT) * 100, 100);
+  const color = pct >= 85 ? "from-red-500 to-red-400" : pct >= 60 ? "from-amber-500 to-yellow-400" : "from-blue-500 to-violet-400";
+  if (usedTokens === 0) return null;
+  return (
+    <div className="shrink-0 h-[3px] bg-white/[0.05] relative overflow-hidden">
+      <motion.div
+        className={cn("absolute inset-y-0 left-0 bg-gradient-to-r", color)}
+        initial={{ width: 0 }}
+        animate={{ width: `${pct}%` }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
+      />
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   CONTEXT WARNING BANNER
+   ───────────────────────────────────────────────────────── */
+function ContextWarningBanner({ usedTokens, onDismiss }: { usedTokens: number; onDismiss: () => void }) {
+  const pct = (usedTokens / CONTEXT_LIMIT) * 100;
+  const isNear = pct >= 85;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -6, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -6 }}
+      className={cn("mx-0 mb-1 border rounded-2xl px-4 py-3 flex items-center gap-3",
+        isNear ? "bg-red-500/10 border-red-400/25" : "bg-amber-500/10 border-amber-400/20"
+      )}
+    >
+      <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center shrink-0",
+        isNear ? "bg-red-500/15 border border-red-400/25" : "bg-amber-500/15 border border-amber-400/25"
+      )}>
+        <AlertCircle size={15} className={isNear ? "text-red-400" : "text-amber-400"} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={cn("text-xs font-semibold", isNear ? "text-red-300" : "text-amber-300")}>
+          {isNear ? "Context window almost full" : "Context window filling up"}
+        </p>
+        <p className={cn("text-[11px] leading-tight mt-0.5", isNear ? "text-red-300/55" : "text-amber-300/55")}>
+          {Math.round(pct)}% used · {usedTokens.toLocaleString()} / {CONTEXT_LIMIT.toLocaleString()} tokens
+        </p>
+      </div>
+      <button onClick={onDismiss} className={cn("transition-colors shrink-0",
+        isNear ? "text-red-400/40 hover:text-red-400" : "text-amber-400/40 hover:text-amber-400"
+      )}>
+        <X size={14} />
+      </button>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   STREAMING SPEED BADGE
+   ───────────────────────────────────────────────────────── */
+function StreamingSpeedBadge({ tokenCount, tokensPerSec }: { tokenCount: number; tokensPerSec: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.04] border border-white/[0.07] rounded-full text-[10px] text-white/40 font-mono"
+    >
+      <motion.div
+        animate={{ opacity: [1, 0.3, 1] }}
+        transition={{ duration: 0.9, repeat: Infinity }}
+        className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0"
+      />
+      <span className="text-blue-300/80">{tokenCount.toLocaleString()} tok</span>
+      <span className="text-white/20">·</span>
+      <Gauge size={9} className="text-green-400/70" />
+      <span className="text-green-300/80">{tokensPerSec.toFixed(0)} t/s</span>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
    AGENT INSIGHTS PANEL
    ───────────────────────────────────────────────────────── */
 function InsightsPanel({ onClose, sessionStats }: { onClose: () => void; sessionStats: MessageStats[] }) {
@@ -3198,6 +3281,17 @@ function MessageInsightsBadge({ stats }: { stats: MessageStats }) {
 
 function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === "user";
+  const [copied, setCopied] = useState(false);
+  const [reaction, setReaction] = useState<"up" | "down" | null>(null);
+  const [pinned, setPinned] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(msg.content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
   return (
     <div className={cn("flex w-full flex-col", isUser ? "items-end" : "items-start")}>
       <motion.div
@@ -3212,13 +3306,20 @@ function MessageBubble({ msg }: { msg: Message }) {
         )}
         <div
           className={cn(
-            "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
+            "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed transition-colors",
             isUser
               ? "bg-primary text-primary-foreground rounded-br-sm"
-              : "bg-card border border-card-border text-foreground rounded-bl-sm"
+              : cn("bg-card text-foreground rounded-bl-sm border",
+                  pinned ? "border-yellow-400/50 shadow-[0_0_12px_rgba(250,204,21,0.08)]" : "border-card-border"
+                )
           )}
           data-testid={`message-${msg.role}-${msg.id}`}
         >
+          {pinned && !isUser && (
+            <div className="flex items-center gap-1 text-[9px] text-yellow-400/70 font-semibold mb-1.5">
+              <Pin size={8} /> Pinned
+            </div>
+          )}
           {isUser ? (
             <p className="whitespace-pre-wrap">{msg.content}</p>
           ) : (
@@ -3235,6 +3336,60 @@ function MessageBubble({ msg }: { msg: Message }) {
           )}
         </div>
       </motion.div>
+
+      {/* Action bar */}
+      {!msg.isStreaming && (
+        <motion.div
+          initial={{ opacity: 0, y: 3 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className={cn("flex items-center gap-0.5 mt-1", isUser ? "self-end" : "self-start ml-9")}
+        >
+          <button onClick={handleCopy}
+            className={cn("flex items-center gap-1 px-2 py-1 rounded-full text-[10px] transition-all",
+              copied ? "text-green-400 bg-green-500/10" : "text-white/25 hover:text-white/60 hover:bg-white/[0.06]"
+            )}
+            title="Copy message"
+          >
+            <AnimatePresence mode="wait">
+              {copied
+                ? <motion.span key="check" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}><Check size={11} /></motion.span>
+                : <motion.span key="copy" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}><Copy size={11} /></motion.span>
+              }
+            </AnimatePresence>
+          </button>
+
+          {!isUser && (
+            <>
+              <button onClick={() => setReaction(r => r === "up" ? null : "up")}
+                className={cn("px-2 py-1 rounded-full transition-all text-[10px]",
+                  reaction === "up" ? "text-green-400 bg-green-500/10" : "text-white/25 hover:text-white/60 hover:bg-white/[0.06]"
+                )}
+                title="Helpful"
+              >
+                <ThumbsUp size={11} />
+              </button>
+              <button onClick={() => setReaction(r => r === "down" ? null : "down")}
+                className={cn("px-2 py-1 rounded-full transition-all text-[10px]",
+                  reaction === "down" ? "text-red-400 bg-red-500/10" : "text-white/25 hover:text-white/60 hover:bg-white/[0.06]"
+                )}
+                title="Not helpful"
+              >
+                <ThumbsDown size={11} />
+              </button>
+              <button onClick={() => setPinned(v => !v)}
+                className={cn("px-2 py-1 rounded-full transition-all text-[10px]",
+                  pinned ? "text-yellow-400 bg-yellow-500/10" : "text-white/25 hover:text-white/60 hover:bg-white/[0.06]"
+                )}
+                title={pinned ? "Unpin" : "Pin message"}
+              >
+                <Pin size={11} />
+              </button>
+            </>
+          )}
+        </motion.div>
+      )}
+
       {msg.actionCount !== undefined && msg.actionCount > 0 && (
         <div className={cn("mt-2 w-full max-w-[85%]", isUser ? "self-end" : "self-start ml-9")}>
           <ActionsBadge count={msg.actionCount} />
@@ -3472,6 +3627,12 @@ export default function Chat() {
   const [showMoreTools, setShowMoreTools] = useState(false);
   // AI Models Panel state
   const [sessionStats, setSessionStats] = useState<MessageStats[]>([]);
+  const [liveStreamTokens, setLiveStreamTokens] = useState(0);
+  const [liveStreamSpeed, setLiveStreamSpeed] = useState(0);
+  const [sessionElapsed, setSessionElapsed] = useState(0);
+  const [contextWarningDismissed, setContextWarningDismissed] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [showAIModels, setShowAIModels] = useState(false);
   const [selectedModelId, setSelectedModelId] = useState("claude-sonnet-4-6");
   const [aiActiveTab, setAiActiveTab] = useState<"models"|"ensemble"|"arena"|"godmode"|"ultraplinian"|"parseltongue"|"autotune"|"stm">("models");
@@ -3500,6 +3661,27 @@ export default function Chat() {
     }, 1800);
     return () => clearInterval(interval);
   }, [isThinking]);
+
+  // Session elapsed timer
+  useEffect(() => {
+    if (!startTime) { setSessionElapsed(0); return; }
+    const interval = setInterval(() => {
+      setSessionElapsed(Math.floor((Date.now() - startTime.getTime()) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  // Scroll-to-bottom detection
+  useEffect(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      setShowScrollToBottom(distFromBottom > 200);
+    };
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const runBuildAnimation = useCallback((): Promise<void> => {
     return new Promise((resolve) => {
@@ -3572,6 +3754,10 @@ export default function Chat() {
                 ));
               }
               totalOutputText += data.content;
+              const liveTokens = Math.round(totalOutputText.length / 4);
+              const elapsed = (Date.now() - sendTime) / 1000;
+              setLiveStreamTokens(liveTokens);
+              setLiveStreamSpeed(elapsed > 0 ? Math.round(liveTokens / elapsed) : 0);
             }
             if (data.done) {
               const responseTimeMs = Date.now() - sendTime;
@@ -3588,6 +3774,8 @@ export default function Chat() {
               const tokensPerSec = responseTimeMs > 0 ? (outputTokens / responseTimeMs) * 1000 : 0;
               const stats: MessageStats = { inputTokens, outputTokens, responseTimeMs, ttftMs, cost, tokensPerSec, model };
               setCurrentToolCall(null);
+              setLiveStreamTokens(0);
+              setLiveStreamSpeed(0);
               setMessages((prev) => prev.map((m) =>
                 m.id === assistantMsgId ? { ...m, isStreaming: false, stats } : m
               ));
@@ -3704,13 +3892,22 @@ export default function Chat() {
               </motion.span>
             )}
           </div>
-          {buildTogether && (
-            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
-              <span className="text-[10px] text-green-400 font-medium">2 collaborating</span>
-            </motion.div>
-          )}
+          <div className="flex items-center gap-2">
+            {buildTogether && (
+              <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                <span className="text-[10px] text-green-400 font-medium">2 collaborating</span>
+              </motion.div>
+            )}
+            {sessionElapsed > 0 && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="flex items-center gap-1 text-[10px] text-white/30 font-mono">
+                <Clock size={8} className="shrink-0" />
+                {String(Math.floor(sessionElapsed / 60)).padStart(2, "0")}:{String(sessionElapsed % 60).padStart(2, "0")}
+              </motion.div>
+            )}
+          </div>
         </div>
 
         {/* Build Together + Share */}
@@ -3733,10 +3930,26 @@ export default function Chat() {
         </button>
       </div>
 
+      {/* ── Token Budget Bar ── */}
+      {(() => {
+        const total = sessionStats.reduce((s, m) => s + m.inputTokens + m.outputTokens, 0);
+        return <TokenBudgetBar usedTokens={total} />;
+      })()}
+
       {/* ── Messages area ── */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 no-scrollbar">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2 no-scrollbar relative">
         {/* Activity summary card */}
         <ActivityCard msgCount={msgCount} actionCount={actionCount} startTime={startTime} />
+
+        {/* Context warning */}
+        <AnimatePresence>
+          {!contextWarningDismissed && (() => {
+            const total = sessionStats.reduce((s, m) => s + m.inputTokens + m.outputTokens, 0);
+            return total >= CONTEXT_LIMIT * 0.75 ? (
+              <ContextWarningBanner usedTokens={total} onDismiss={() => setContextWarningDismissed(true)} />
+            ) : null;
+          })()}
+        </AnimatePresence>
 
         {/* Credits banner */}
         <AnimatePresence>
@@ -3835,7 +4048,37 @@ export default function Chat() {
           )}
         </AnimatePresence>
 
+        {/* Live streaming speed badge */}
+        <AnimatePresence>
+          {liveStreamTokens > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              className="flex justify-start ml-9"
+            >
+              <StreamingSpeedBadge tokenCount={liveStreamTokens} tokensPerSec={liveStreamSpeed} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div ref={messagesEndRef} />
+
+        {/* Scroll-to-bottom FAB */}
+        <AnimatePresence>
+          {showScrollToBottom && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: 8 }}
+              onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })}
+              className="sticky bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 bg-[#1e1e2e] border border-white/[0.12] rounded-full text-[11px] text-white/60 hover:text-white hover:bg-[#252535] shadow-lg transition-all z-10"
+            >
+              <ChevronsDown size={13} className="text-blue-400" />
+              Scroll to bottom
+            </motion.button>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* ── Quick Suggestions ── */}
@@ -4020,6 +4263,16 @@ export default function Chat() {
             data-testid="input-chat"
             rows={1}
           />
+          {/* Character counter */}
+          {input.length > 0 && (
+            <div className="flex items-center justify-end px-4 pb-0.5">
+              <span className={cn("text-[10px] font-mono transition-colors",
+                input.length > 3000 ? "text-red-400" : input.length > 1500 ? "text-amber-400/70" : "text-white/20"
+              )}>
+                {input.length.toLocaleString()}
+              </span>
+            </div>
+          )}
           <div className="flex items-center gap-2 px-3 pb-3">
             {/* + attach */}
             <motion.button
