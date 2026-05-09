@@ -506,13 +506,20 @@ function PlatformFeaturesSection() {
       className="space-y-2"
     >
       {/* Section header */}
-      <button
-        className="w-full flex items-center gap-2 px-0.5"
-        onClick={() => setHeaderOpen(v => !v)}
-      >
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-white/30 flex-1 text-left">Platform Features</span>
-        <ChevronDown size={12} className={cn("text-white/25 transition-transform", !headerOpen && "rotate-180")} />
-      </button>
+      <div className="flex items-center gap-2 px-0.5">
+        <button
+          className="flex-1 flex items-center gap-2 text-left"
+          onClick={() => setHeaderOpen(v => !v)}
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-white/30 flex-1">Platform Features</span>
+          <ChevronDown size={12} className={cn("text-white/25 transition-transform shrink-0", !headerOpen && "rotate-180")} />
+        </button>
+        <Link href="/features">
+          <span className="text-[10px] text-white/30 hover:text-white/60 transition-colors flex items-center gap-0.5 shrink-0">
+            View all <ChevronRight size={9} />
+          </span>
+        </Link>
+      </div>
 
       <AnimatePresence>
         {headerOpen && (

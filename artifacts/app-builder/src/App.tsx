@@ -16,6 +16,7 @@ import WorkspaceGuide from "@/pages/workspace-guide";
 import ReplitAgent from "@/pages/replit-agent";
 import AdvancedFeatures from "@/pages/advanced-features";
 import ProFeatures from "@/pages/pro-features";
+import FeaturesPage from "@/pages/features";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -33,6 +34,7 @@ function Router() {
         <Route path="/replit-agent" component={ReplitAgent} />
         <Route path="/advanced-features" component={AdvancedFeatures} />
         <Route path="/pro-features" component={ProFeatures} />
+        <Route path="/features" component={FeaturesPage} />
         <Route path="/account" component={Account} />
         <Route component={NotFound} />
       </Switch>
