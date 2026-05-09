@@ -2774,129 +2774,452 @@ function ParallelAgentsPanel({ onClose }: { onClose: () => void }) {
 }
 
 /* ─────────────────────────────────────────────────────────
-   APP MONITORING PANEL
+   APP MONITORING PANEL — Live Metrics Dashboard
    ───────────────────────────────────────────────────────── */
-const MOCK_ERROR_LOGS = [
+
+const SPARKLINE_LEN = 36;
+
+function genSeries(len: number, base: number, variance: number): number[] {
+  const arr: number[] = [];
+  let v = base;
+  for (let i = 0; i < len; i++) {
+    v = Math.max(0, v + (Math.random() - 0.48) * variance);
+    arr.push(Math.round(v * 10) / 10);
+  }
+  return arr;
+}
+
+function Sparkline({
+  data, color, height = 36, fill = false,
+}: { data: number[]; color: string; height?: number; fill?: boolean }) {
+  if (data.length < 2) return null;
+  const max = Math.max(...data, 1);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+  const w = 100;
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * w;
+    const y = height - ((v - min) / range) * (height - 4) - 2;
+    return `${x},${y}`;
+  });
+  const polyline = pts.join(" ");
+  const fillPath = `M${pts[0]} L${pts.join(" L")} L${w},${height} L0,${height} Z`;
+  return (
+    <svg viewBox={`0 0 ${w} ${height}`} className="w-full" preserveAspectRatio="none" style={{ height }}>
+      {fill && (
+        <path d={fillPath} fill={color} fillOpacity={0.12} />
+      )}
+      <polyline points={polyline} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function AnimatedNumber({ value, decimals = 0 }: { value: number; decimals?: number }) {
+  const [display, setDisplay] = useState(value);
+  useEffect(() => {
+    const diff = value - display;
+    if (Math.abs(diff) < 0.01) return;
+    const steps = 12;
+    let i = 0;
+    const timer = setInterval(() => {
+      i++;
+      setDisplay(prev => {
+        const next = prev + diff / steps;
+        return Math.round(next * Math.pow(10, decimals)) / Math.pow(10, decimals);
+      });
+      if (i >= steps) clearInterval(timer);
+    }, 30);
+    return () => clearInterval(timer);
+  }, [value]);
+  return <>{decimals > 0 ? display.toFixed(decimals) : Math.round(display).toLocaleString()}</>;
+}
+
+const INITIAL_LOGS = [
   { time: "09:41:23", level: "INFO", msg: "Server started on port 8080", color: "text-green-400" },
-  { time: "09:41:25", level: "INFO", msg: "Database connected (PostgreSQL)", color: "text-green-400" },
-  { time: "09:43:11", level: "WARN", msg: "High memory usage detected: 78%", color: "text-yellow-400" },
-  { time: "09:44:02", level: "INFO", msg: "GET /api/conversations 200 (12ms)", color: "text-muted-foreground" },
-  { time: "09:44:15", level: "INFO", msg: "POST /api/anthropic/conversations 201 (45ms)", color: "text-muted-foreground" },
-  { time: "09:45:01", level: "ERROR", msg: "Unhandled promise rejection: timeout", color: "text-red-400" },
-  { time: "09:45:03", level: "INFO", msg: "Auto-retry succeeded on request", color: "text-green-400" },
-  { time: "09:46:30", level: "INFO", msg: "GET /api/anthropic/conversations/1/messages 200 (3219ms)", color: "text-muted-foreground" },
+  { time: "09:41:25", level: "INFO", msg: "Database connected (PostgreSQL 16)", color: "text-green-400" },
+  { time: "09:43:11", level: "WARN", msg: "Memory usage spike: 78% → GC triggered", color: "text-yellow-400" },
+  { time: "09:44:02", level: "INFO", msg: "GET /api/conversations 200 (12ms)", color: "text-white/40" },
+  { time: "09:44:15", level: "INFO", msg: "POST /api/anthropic/conversations 201 (45ms)", color: "text-white/40" },
+  { time: "09:45:01", level: "ERROR", msg: "Unhandled rejection: upstream timeout after 30s", color: "text-red-400" },
+  { time: "09:45:03", level: "INFO", msg: "Auto-retry #1 succeeded (fallback route)", color: "text-green-400" },
+  { time: "09:46:30", level: "INFO", msg: "GET /api/messages 200 (3219ms) — stream complete", color: "text-white/40" },
 ];
+
+const LIVE_LOG_POOL = [
+  { level: "INFO", msg: "GET /api/conversations 200 ({ms}ms)", color: "text-white/40" },
+  { level: "INFO", msg: "POST /api/messages 201 ({ms}ms)", color: "text-white/40" },
+  { level: "INFO", msg: "WebSocket connected: client #{id}", color: "text-blue-400/70" },
+  { level: "WARN", msg: "Rate limit approaching: 82% of quota used", color: "text-yellow-400" },
+  { level: "INFO", msg: "Cache hit ratio: 94.2% (last 5m)", color: "text-white/40" },
+  { level: "INFO", msg: "Health check passed (db + redis)", color: "text-green-400" },
+  { level: "INFO", msg: "Static assets served from CDN edge (12ms)", color: "text-white/40" },
+  { level: "ERROR", msg: "Connection pool exhausted — queuing request", color: "text-red-400" },
+  { level: "INFO", msg: "Autoscale: spinning up replica #2", color: "text-cyan-400" },
+];
+
+function timeStr() {
+  const d = new Date();
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, "0")).join(":");
+}
 
 function MonitoringPanel({ onClose }: { onClose: () => void }) {
   const [liveMode, setLiveMode] = useState(true);
-  const [requests, setRequests] = useState(247);
-  const [errors, setErrors] = useState(3);
-  const [uptime] = useState("99.8%");
-  const [p99] = useState("1.2s");
+  const [activeTab, setActiveTab] = useState<"overview" | "latency" | "logs">("overview");
+
+  const [reqSeries, setReqSeries] = useState(() => genSeries(SPARKLINE_LEN, 18, 5));
+  const [latSeries, setLatSeries] = useState(() => genSeries(SPARKLINE_LEN, 220, 60));
+  const [errSeries, setErrSeries] = useState(() => genSeries(SPARKLINE_LEN, 1.2, 1.5));
+  const [memSeries, setMemSeries] = useState(() => genSeries(SPARKLINE_LEN, 58, 8));
+
+  const [totalReqs, setTotalReqs] = useState(24_831);
+  const [p50, setP50] = useState(112);
+  const [p95, setP95] = useState(287);
+  const [p99, setP99] = useState(1240);
+  const [errRate, setErrRate] = useState(0.41);
+  const [memMB, setMemMB] = useState(468);
+  const [rps, setRps] = useState(18.4);
+  const [cpuPct, setCpuPct] = useState(34);
+
+  const [logs, setLogs] = useState(INITIAL_LOGS);
+  const logsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!liveMode) return;
-    const interval = setInterval(() => {
-      setRequests(r => r + Math.floor(Math.random() * 3));
-    }, 2000);
-    return () => clearInterval(interval);
+    const tick = setInterval(() => {
+      const newRps = Math.max(2, rps + (Math.random() - 0.48) * 3);
+      const newLat = Math.max(40, p50 + (Math.random() - 0.48) * 20);
+      const newMem = Math.min(900, Math.max(200, memMB + (Math.random() - 0.48) * 15));
+      const newCpu = Math.min(98, Math.max(5, cpuPct + (Math.random() - 0.48) * 8));
+      const newErr = Math.max(0, errRate + (Math.random() - 0.52) * 0.3);
+
+      setRps(Math.round(newRps * 10) / 10);
+      setP50(Math.round(newLat));
+      setP95(Math.round(newLat * 2.4));
+      setP99(Math.round(newLat * 8.5));
+      setMemMB(Math.round(newMem));
+      setCpuPct(Math.round(newCpu));
+      setErrRate(Math.round(newErr * 100) / 100);
+      setTotalReqs(r => r + Math.floor(newRps));
+
+      setReqSeries(s => [...s.slice(1), Math.round(newRps * 10) / 10]);
+      setLatSeries(s => [...s.slice(1), Math.round(newLat)]);
+      setErrSeries(s => [...s.slice(1), Math.round(newErr * 100) / 100]);
+      setMemSeries(s => [...s.slice(1), Math.round(newMem)]);
+    }, 1400);
+    return () => clearInterval(tick);
+  }, [liveMode, rps, p50, memMB, cpuPct, errRate]);
+
+  useEffect(() => {
+    if (!liveMode) return;
+    const logTick = setInterval(() => {
+      const pool = LIVE_LOG_POOL[Math.floor(Math.random() * LIVE_LOG_POOL.length)];
+      const ms = Math.floor(Math.random() * 300 + 8);
+      const id = Math.floor(Math.random() * 9000 + 1000);
+      setLogs(prev => [
+        ...prev.slice(-40),
+        { time: timeStr(), level: pool.level, color: pool.color,
+          msg: pool.msg.replace("{ms}", String(ms)).replace("{id}", String(id)) }
+      ]);
+      setTimeout(() => logsEndRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
+    }, 2200);
+    return () => clearInterval(logTick);
   }, [liveMode]);
+
+  const memPct = Math.round((memMB / 1024) * 100);
+
+  const HIST_BUCKETS = [
+    { label: "<50ms", pct: 22, color: "bg-green-400" },
+    { label: "50–100", pct: 31, color: "bg-green-400" },
+    { label: "100–250", pct: 28, color: "bg-blue-400" },
+    { label: "250–500", pct: 11, color: "bg-yellow-400" },
+    { label: "500ms+", pct: 8, color: "bg-red-400" },
+  ];
 
   return (
     <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
       transition={{ type: "spring", stiffness: 340, damping: 36 }}
-      className="absolute inset-0 z-50 flex flex-col bg-background">
-      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
-        <div className="flex-1" />
-        <Activity size={17} className="text-green-400" />
-        <span className="text-base font-semibold text-foreground">App Monitoring</span>
-        <div className="flex-1" />
-        <button onClick={() => setLiveMode(v => !v)}
-          className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors",
-            liveMode ? "bg-green-500/15 border-green-400/30 text-green-400" : "bg-secondary/40 border-border/40 text-muted-foreground"
-          )}>
-          <motion.div animate={liveMode ? { scale: [1, 1.3, 1] } : {}} transition={{ duration: 1.5, repeat: Infinity }}
-            className={cn("w-1.5 h-1.5 rounded-full", liveMode ? "bg-green-400" : "bg-muted-foreground/40")} />
+      className="absolute inset-0 z-50 flex flex-col bg-[#0d1117]">
+
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 pt-10 pb-3 border-b border-white/[0.07] shrink-0">
+        <button onClick={onClose} className="w-9 h-9 flex items-center justify-center text-white/50 hover:text-white rounded-xl hover:bg-white/8 transition-colors">
+          <ArrowLeft size={20} />
+        </button>
+        <div className="flex-1 flex items-center justify-center gap-2">
+          <Activity size={15} className="text-green-400" />
+          <span className="text-base font-semibold text-white">App Monitoring</span>
+          {liveMode && (
+            <motion.span
+              animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.8, repeat: Infinity }}
+              className="text-[9px] font-bold text-green-400 bg-green-500/15 border border-green-400/25 px-1.5 py-0.5 rounded-full"
+            >LIVE</motion.span>
+          )}
+        </div>
+        <button
+          onClick={() => setLiveMode(v => !v)}
+          className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold border transition-all",
+            liveMode ? "bg-green-500/15 border-green-400/30 text-green-400" : "bg-white/[0.06] border-white/[0.12] text-white/50"
+          )}
+        >
+          <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", liveMode ? "bg-green-400 animate-pulse" : "bg-white/30")} />
           {liveMode ? "Live" : "Paused"}
         </button>
-        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
       </div>
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 no-scrollbar">
-        {/* Metrics grid */}
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { label: "Uptime", value: uptime, icon: <TrendingUp size={14} />, color: "text-green-400", bg: "bg-green-500/10 border-green-400/20" },
-            { label: "Requests", value: requests.toLocaleString(), icon: <BarChart3 size={14} />, color: "text-blue-400", bg: "bg-blue-500/10 border-blue-400/20" },
-            { label: "Errors (24h)", value: String(errors), icon: <AlertCircle size={14} />, color: "text-red-400", bg: "bg-red-500/10 border-red-400/20" },
-            { label: "p99 Latency", value: p99, icon: <Clock size={14} />, color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-400/20" },
-          ].map(m => (
-            <div key={m.label} className={cn("rounded-xl border px-3 py-3 space-y-1", m.bg)}>
-              <div className={cn("flex items-center gap-1.5", m.color)}>
-                {m.icon}
-                <span className="text-[10px] font-semibold uppercase tracking-wider">{m.label}</span>
-              </div>
-              <p className={cn("text-xl font-bold", m.color)}>
-                {liveMode && m.label === "Requests" ? (
-                  <motion.span key={m.value}>{m.value}</motion.span>
-                ) : m.value}
-              </p>
-            </div>
-          ))}
-        </div>
 
-        {/* Request rate sparkline (fake) */}
-        <div className="bg-card border border-border rounded-2xl p-3.5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-foreground">Request Rate</span>
-            <span className="text-[10px] text-muted-foreground/50">Last 60 min</span>
-          </div>
-          <div className="flex items-end gap-1 h-10">
-            {[3,5,4,7,6,9,8,11,10,14,12,13,15,12,16,14,18,17,20,19,22,21,24,18,20,22,19,23,21,25].map((v, i) => (
-              <motion.div key={i} initial={{ height: 0 }} animate={{ height: `${(v / 25) * 100}%` }}
-                transition={{ delay: i * 0.02, duration: 0.4 }}
-                className="flex-1 bg-blue-400/50 rounded-sm min-h-[2px]" />
-            ))}
-          </div>
-        </div>
-
-        {/* Live logs */}
-        <div className="bg-card border border-border rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/40">
-            <span className="text-xs font-semibold text-foreground">Server Logs</span>
-            <span className="text-[10px] text-muted-foreground/50">{MOCK_ERROR_LOGS.length} entries</span>
-          </div>
-          <div className="bg-[#0d1117] overflow-y-auto max-h-52 no-scrollbar">
-            {MOCK_ERROR_LOGS.map((log, i) => (
-              <div key={i} className="flex items-start gap-2 px-3 py-1.5 border-b border-white/[0.04] font-mono">
-                <span className="text-[10px] text-muted-foreground/40 shrink-0 mt-0.5">{log.time}</span>
-                <span className={cn("text-[10px] font-bold w-10 shrink-0 mt-0.5", log.color)}>{log.level}</span>
-                <span className="text-[11px] text-muted-foreground/80 leading-tight">{log.msg}</span>
-              </div>
-            ))}
-            {liveMode && (
-              <div className="flex items-center gap-2 px-3 py-1.5">
-                <motion.div animate={{ opacity: [0, 1, 0] }} transition={{ duration: 1.2, repeat: Infinity }}
-                  className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
-                <span className="text-[11px] text-muted-foreground/40 font-mono">Waiting for new events...</span>
-              </div>
+      {/* Tabs */}
+      <div className="shrink-0 flex border-b border-white/[0.06]">
+        {(["overview", "latency", "logs"] as const).map(tab => (
+          <button key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={cn(
+              "flex-1 py-2.5 text-[11px] font-semibold capitalize transition-colors border-b-2",
+              activeTab === tab ? "text-white border-white/60" : "text-white/35 border-transparent hover:text-white/60"
             )}
-          </div>
-        </div>
+          >{tab}</button>
+        ))}
+      </div>
 
-        {/* Alert if errors */}
-        {errors > 0 && (
-          <div className="bg-orange-500/10 border border-orange-400/20 rounded-xl px-4 py-3 space-y-1.5">
-            <div className="flex items-center gap-2">
-              <AlertCircle size={14} className="text-orange-400" />
-              <span className="text-xs font-semibold text-orange-300">Agent Alert</span>
+      <div className="flex-1 overflow-y-auto no-scrollbar">
+
+        {/* ── OVERVIEW TAB ── */}
+        {activeTab === "overview" && (
+          <div className="px-3 py-3 space-y-3">
+
+            {/* Top KPI row */}
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: "Req/s", value: rps, decimals: 1, suffix: "", color: "text-blue-400", spark: reqSeries, sparkColor: "#60a5fa" },
+                { label: "Error Rate", value: errRate, decimals: 2, suffix: "%", color: errRate > 1 ? "text-red-400" : "text-green-400", spark: errSeries, sparkColor: errRate > 1 ? "#f87171" : "#4ade80" },
+              ].map(m => (
+                <div key={m.label} className="bg-white/[0.04] border border-white/[0.07] rounded-2xl p-3 space-y-1 overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">{m.label}</span>
+                    {liveMode && <div className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />}
+                  </div>
+                  <p className={cn("text-2xl font-bold font-mono leading-none", m.color)}>
+                    <AnimatedNumber value={m.value} decimals={m.decimals} />{m.suffix}
+                  </p>
+                  <div className="pt-1">
+                    <Sparkline data={m.spark} color={m.sparkColor} height={28} fill />
+                  </div>
+                </div>
+              ))}
             </div>
-            <p className="text-[11px] text-orange-300/70 leading-relaxed">
-              Detected {errors} errors in the last 24 hours. Agent has diagnosed the root cause and prepared a fix.
-            </p>
-            <button className="text-[11px] text-orange-400 underline">View Agent Diagnosis →</button>
+
+            {/* Memory + CPU */}
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: "Memory", value: memMB, suffix: " MB", pct: memPct, color: memPct > 80 ? "text-red-400" : "text-purple-400", bar: memPct > 80 ? "bg-red-400" : "bg-purple-400", spark: memSeries, sparkColor: memPct > 80 ? "#f87171" : "#a78bfa" },
+                { label: "CPU", value: cpuPct, suffix: "%", pct: cpuPct, color: cpuPct > 85 ? "text-red-400" : "text-cyan-400", bar: cpuPct > 85 ? "bg-red-400" : "bg-cyan-400", spark: null, sparkColor: "#22d3ee" },
+              ].map(m => (
+                <div key={m.label} className="bg-white/[0.04] border border-white/[0.07] rounded-2xl p-3 space-y-2 overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">{m.label}</span>
+                  </div>
+                  <p className={cn("text-xl font-bold font-mono", m.color)}>
+                    <AnimatedNumber value={m.value} />{m.suffix}
+                  </p>
+                  <div className="h-1.5 bg-white/[0.07] rounded-full overflow-hidden">
+                    <motion.div
+                      className={cn("h-full rounded-full", m.bar)}
+                      animate={{ width: `${m.pct}%` }}
+                      transition={{ duration: 0.6 }}
+                    />
+                  </div>
+                  {m.spark && (
+                    <div className="pt-0.5">
+                      <Sparkline data={m.spark} color={m.sparkColor} height={24} fill />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Total requests + uptime strip */}
+            <div className="bg-white/[0.04] border border-white/[0.07] rounded-2xl px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] text-white/35 font-semibold uppercase tracking-wider">Total Requests</p>
+                <p className="text-xl font-bold text-white font-mono mt-0.5">
+                  <AnimatedNumber value={totalReqs} />
+                </p>
+              </div>
+              <div className="h-8 w-px bg-white/[0.08]" />
+              <div className="text-right">
+                <p className="text-[10px] text-white/35 font-semibold uppercase tracking-wider">Uptime</p>
+                <p className="text-xl font-bold text-green-400 font-mono mt-0.5">99.8%</p>
+              </div>
+              <div className="h-8 w-px bg-white/[0.08]" />
+              <div className="text-right">
+                <p className="text-[10px] text-white/35 font-semibold uppercase tracking-wider">Region</p>
+                <p className="text-sm font-bold text-white/70 mt-0.5">us-east-1</p>
+              </div>
+            </div>
+
+            {/* Request rate chart */}
+            <div className="bg-white/[0.04] border border-white/[0.07] rounded-2xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-white">Request Rate</span>
+                <span className="text-[10px] text-white/30">Last ~50 sec</span>
+              </div>
+              <div className="flex items-end gap-[2px] h-12">
+                {reqSeries.map((v, i) => {
+                  const max = Math.max(...reqSeries, 1);
+                  const pct = v / max;
+                  const isNew = i === reqSeries.length - 1;
+                  return (
+                    <motion.div
+                      key={i}
+                      animate={{ height: `${Math.max(pct * 100, 4)}%` }}
+                      transition={{ duration: isNew ? 0.3 : 0 }}
+                      className={cn("flex-1 rounded-sm", isNew && liveMode ? "bg-blue-400" : "bg-blue-400/40")}
+                      style={{ minHeight: 2 }}
+                    />
+                  );
+                })}
+              </div>
+              <div className="flex justify-between text-[9px] text-white/20 font-mono">
+                <span>-{SPARKLINE_LEN * 1.4 | 0}s</span>
+                <span>now</span>
+              </div>
+            </div>
+
           </div>
         )}
+
+        {/* ── LATENCY TAB ── */}
+        {activeTab === "latency" && (
+          <div className="px-3 py-3 space-y-3">
+
+            {/* p50 / p95 / p99 cards */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: "p50", value: p50, color: "text-green-400", bg: "bg-green-500/10 border-green-400/20" },
+                { label: "p95", value: p95, color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-400/20" },
+                { label: "p99", value: p99, color: "text-red-400", bg: "bg-red-500/10 border-red-400/20" },
+              ].map(m => (
+                <div key={m.label} className={cn("rounded-2xl border px-3 py-3 text-center", m.bg)}>
+                  <p className="text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1">{m.label}</p>
+                  <p className={cn("text-lg font-bold font-mono", m.color)}>
+                    <AnimatedNumber value={m.value} />ms
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Latency sparkline */}
+            <div className="bg-white/[0.04] border border-white/[0.07] rounded-2xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-white">Response Time (p50)</span>
+                <span className={cn("text-[10px] font-mono font-bold", p50 > 300 ? "text-red-400" : "text-green-400")}>
+                  {p50}ms
+                </span>
+              </div>
+              <Sparkline data={latSeries} color="#facc15" height={52} fill />
+              <div className="flex justify-between text-[9px] text-white/20 font-mono">
+                <span>-{SPARKLINE_LEN * 1.4 | 0}s</span>
+                <span>now</span>
+              </div>
+            </div>
+
+            {/* Response time histogram */}
+            <div className="bg-white/[0.04] border border-white/[0.07] rounded-2xl p-3.5 space-y-3">
+              <span className="text-xs font-semibold text-white">Response Time Distribution</span>
+              {HIST_BUCKETS.map(b => (
+                <div key={b.label} className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-white/50 font-mono">{b.label}</span>
+                    <span className="text-white/50 font-mono">{b.pct}%</span>
+                  </div>
+                  <div className="h-2 bg-white/[0.06] rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${b.pct}%` }}
+                      transition={{ duration: 0.7, ease: "easeOut" }}
+                      className={cn("h-full rounded-full", b.color)}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Slowest endpoints */}
+            <div className="bg-white/[0.04] border border-white/[0.07] rounded-2xl overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-white/[0.06]">
+                <span className="text-xs font-semibold text-white">Slowest Endpoints</span>
+              </div>
+              {[
+                { path: "POST /api/anthropic/…/messages", p99ms: 3219, calls: 48 },
+                { path: "GET /api/conversations", p99ms: 287, calls: 1204 },
+                { path: "POST /api/openrouter/ensemble", p99ms: 8440, calls: 12 },
+                { path: "GET /api/projects", p99ms: 94, calls: 3871 },
+              ].map(e => (
+                <div key={e.path} className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.04] last:border-0">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-mono text-white/70 truncate">{e.path}</p>
+                    <p className="text-[9px] text-white/30 mt-0.5">{e.calls.toLocaleString()} calls</p>
+                  </div>
+                  <span className={cn("text-[11px] font-bold font-mono shrink-0", e.p99ms > 1000 ? "text-red-400" : e.p99ms > 300 ? "text-yellow-400" : "text-green-400")}>
+                    {e.p99ms}ms
+                  </span>
+                </div>
+              ))}
+            </div>
+
+          </div>
+        )}
+
+        {/* ── LOGS TAB ── */}
+        {activeTab === "logs" && (
+          <div className="px-3 py-3 space-y-3">
+
+            {/* Error alert */}
+            <div className="bg-orange-500/10 border border-orange-400/20 rounded-2xl px-4 py-3 flex items-start gap-3">
+              <AlertCircle size={15} className="text-orange-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-orange-300">Agent Alert — 3 errors in 24h</p>
+                <p className="text-[11px] text-orange-300/60 leading-relaxed mt-0.5">Root cause diagnosed: upstream timeout on Anthropic API. Auto-retry is active.</p>
+                <button className="text-[10px] text-orange-400 underline mt-1">View Agent Diagnosis →</button>
+              </div>
+            </div>
+
+            {/* Log stream */}
+            <div className="bg-[#0a0a12] border border-white/[0.07] rounded-2xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
+                <span className="text-xs font-semibold text-white">Server Logs</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-white/25 font-mono">{logs.length} entries</span>
+                  {liveMode && (
+                    <motion.span animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
+                      className="text-[9px] text-green-400 font-bold">● STREAMING</motion.span>
+                  )}
+                </div>
+              </div>
+              <div className="overflow-y-auto max-h-[380px] no-scrollbar">
+                {logs.map((log, i) => (
+                  <motion.div
+                    key={i}
+                    initial={i === logs.length - 1 ? { opacity: 0, x: -8 } : false}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="flex items-start gap-2 px-3 py-1.5 border-b border-white/[0.03] font-mono hover:bg-white/[0.02] transition-colors"
+                  >
+                    <span className="text-[9px] text-white/20 shrink-0 mt-0.5 w-[52px]">{log.time}</span>
+                    <span className={cn("text-[9px] font-bold shrink-0 mt-0.5 w-9", log.color)}>{log.level}</span>
+                    <span className="text-[10px] text-white/55 leading-snug break-all">{log.msg}</span>
+                  </motion.div>
+                ))}
+                {liveMode && (
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <motion.div animate={{ opacity: [0, 1, 0] }} transition={{ duration: 1, repeat: Infinity }}
+                      className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                    <span className="text-[10px] text-white/25 font-mono">Streaming new events...</span>
+                  </div>
+                )}
+                <div ref={logsEndRef} />
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </motion.div>
   );
