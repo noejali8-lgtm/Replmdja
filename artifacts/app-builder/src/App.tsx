@@ -42,7 +42,7 @@ const queryClient = new QueryClient();
 const RUFLO_PAGES = [
   "/agents", "/agent-chat", "/swarm", "/memory", "/workers",
   "/plugins", "/providers", "/security",
-  "/federation", "/goap", "/mcp", "/ruflo-install", "/g0dm0d3", "/godmode-leaderboard", "/jarvis", "/openclaw",
+  "/federation", "/goap", "/mcp", "/ruflo-install", "/g0dm0d3", "/godmode-leaderboard", "/jarvis",
 ];
 
 function Router() {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
 import {
@@ -263,6 +263,42 @@ export default function JarvisPage() {
   const [voiceSupported, setVoiceSupported] = useState(false);
   const recognitionRef = useRef<any>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const mutedRef = useRef(muted);
+
+  /* Keep mutedRef in sync */
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
+
+  /* Cancel speech when muted */
+  useEffect(() => {
+    if (muted && window.speechSynthesis) window.speechSynthesis.cancel();
+  }, [muted]);
+
+  /* ── Text-to-Speech ── */
+  const speakText = useCallback((text: string) => {
+    if (mutedRef.current || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    const trySpeak = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find(v =>
+        v.name.includes("Google UK English Male") ||
+        v.name.includes("Daniel") ||
+        v.name.includes("Alex") ||
+        v.name.includes("Fred") ||
+        (v.lang.startsWith("en") && v.name.toLowerCase().includes("male"))
+      ) ?? voices.find(v => v.lang.startsWith("en"));
+      if (preferred) utter.voice = preferred;
+      utter.pitch = 0.72;
+      utter.rate = 0.91;
+      utter.volume = 1;
+      window.speechSynthesis.speak(utter);
+    };
+    if (window.speechSynthesis.getVoices().length) {
+      trySpeak();
+    } else {
+      window.speechSynthesis.onvoiceschanged = trySpeak;
+    }
+  }, []);
 
   /* Check Web Speech API support */
   useEffect(() => {
@@ -364,7 +400,9 @@ export default function JarvisPage() {
           setMessages(prev => [...prev, { role: "user", text: finalText }]);
           setVoiceTranscript("");
           setTimeout(() => {
-            setMessages(prev => [...prev, { role: "jarvis", text: generateResponse(finalText) }]);
+            const response = generateResponse(finalText);
+            setMessages(prev => [...prev, { role: "jarvis", text: response }]);
+            speakText(response);
           }, 600);
         }
       }
@@ -386,7 +424,9 @@ export default function JarvisPage() {
     setMessages(prev => [...prev, { role: "user", text }]);
     setInput("");
     setTimeout(() => {
-      setMessages(prev => [...prev, { role: "jarvis", text: generateResponse(text) }]);
+      const response = generateResponse(text);
+      setMessages(prev => [...prev, { role: "jarvis", text: response }]);
+      speakText(response);
     }, 500);
   };
 

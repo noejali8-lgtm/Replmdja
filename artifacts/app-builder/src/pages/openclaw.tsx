@@ -126,7 +126,7 @@ export default function OpenClawPage() {
   const [showDocker, setShowDocker] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-white">
+    <div className="min-h-screen bg-[#0d1117] text-white pb-[74px]">
       {/* Header */}
       <div className="sticky top-0 z-20 bg-[#0d1117]/95 backdrop-blur-sm border-b border-white/[0.06]">
         <div className="flex items-center gap-3 px-4 py-3">

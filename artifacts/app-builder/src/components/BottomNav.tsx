@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { FolderOpen, Plus, User, BookOpen, Compass } from "lucide-react";
+import { FolderOpen, Plus, User, BookOpen, Compass, Grip } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function BottomNav() {
@@ -21,6 +21,7 @@ export function BottomNav() {
     { id: "create", path: "/", icon: Plus, label: "Create" },
     { id: "templates", path: "/templates", icon: BookOpen, label: "Templates" },
     { id: "projects", path: "/projects", icon: FolderOpen, label: "Projects" },
+    { id: "openclaw", path: "/openclaw", icon: Grip, label: "OpenClaw" },
   ];
 
   const isExploreActive = location === "/explore"
