@@ -2094,84 +2094,292 @@ function ToolsSearchPanel({ onClose, onOpenSecrets, onOpenDatabase, onOpenAuth, 
 }
 
 /* ─────────────────────────────────────────────────────────
-   FILES PANEL
+   FILES PANEL — real file tree from API
    ───────────────────────────────────────────────────────── */
-const MOCK_FILES = [
-  { name: "src", type: "folder", children: [
-    { name: "components", type: "folder", children: [
-      { name: "Button.tsx", type: "file" },
-      { name: "Input.tsx", type: "file" },
-    ]},
-    { name: "pages", type: "folder", children: [
-      { name: "index.tsx", type: "file" },
-      { name: "about.tsx", type: "file" },
-    ]},
-    { name: "App.tsx", type: "file" },
-    { name: "main.tsx", type: "file" },
-  ]},
-  { name: "public", type: "folder", children: [{ name: "index.html", type: "file" }] },
-  { name: "package.json", type: "file" },
-  { name: "vite.config.ts", type: "file" },
-  { name: "tsconfig.json", type: "file" },
+
+type FsNode = {
+  name: string; path: string; type: "file" | "dir";
+  ext?: string; size?: number; children?: FsNode[];
+};
+
+const ROOTS = [
+  { id: "app-builder", label: "app-builder", color: "text-blue-400" },
+  { id: "api-server",  label: "api-server",  color: "text-green-400" },
+  { id: "replit-ide",  label: "replit-ide",  color: "text-purple-400" },
+  { id: "lib-db",      label: "lib/db",      color: "text-orange-400" },
 ];
 
-type FileNode = { name: string; type: string; children?: FileNode[] };
+const EXT_COLOR: Record<string, string> = {
+  tsx: "text-blue-400", ts: "text-blue-300", jsx: "text-cyan-400",
+  js: "text-yellow-300", json: "text-yellow-400", css: "text-pink-400",
+  html: "text-orange-400", md: "text-green-400", sql: "text-teal-400",
+  env: "text-red-400", sh: "text-lime-400", py: "text-yellow-300",
+  toml: "text-amber-400", yaml: "text-amber-300", yml: "text-amber-300",
+};
 
-function FileTree({ nodes, depth = 0 }: { nodes: FileNode[]; depth?: number }) {
-  const [open, setOpen] = useState<Record<string, boolean>>({ src: true });
+function extColor(ext?: string) {
+  return EXT_COLOR[ext ?? ""] ?? "text-muted-foreground/70";
+}
+
+function fmtSize(bytes?: number) {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}M`;
+}
+
+function flatFiles(nodes: FsNode[], acc: FsNode[] = []): FsNode[] {
+  for (const n of nodes) {
+    if (n.type === "file") acc.push(n);
+    if (n.children) flatFiles(n.children, acc);
+  }
+  return acc;
+}
+
+function RealFileTree({
+  nodes, depth = 0, onSelect, selectedPath, openDirs, toggleDir, search,
+}: {
+  nodes: FsNode[]; depth?: number; onSelect: (n: FsNode) => void;
+  selectedPath: string; openDirs: Set<string>;
+  toggleDir: (p: string) => void; search: string;
+}) {
   return (
     <div>
-      {nodes.map(node => (
-        <div key={node.name}>
-          <button
-            onClick={() => node.type === "folder" && setOpen(v => ({ ...v, [node.name]: !v[node.name] }))}
-            className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-secondary/30 rounded-lg transition-colors text-left"
-            style={{ paddingLeft: `${12 + depth * 16}px` }}
-          >
-            {node.type === "folder" ? (
-              <ChevronRight size={13} className={cn("text-muted-foreground/60 transition-transform shrink-0", open[node.name] && "rotate-90")} />
-            ) : (
-              <div className="w-3.5 shrink-0" />
+      {nodes.map(node => {
+        const isOpen = openDirs.has(node.path);
+        const isSelected = node.path === selectedPath;
+        const matchesSearch = search
+          ? node.name.toLowerCase().includes(search.toLowerCase())
+          : true;
+        const hasMatchingDescendant = search && node.type === "dir"
+          ? flatFiles(node.children ?? []).some(f => f.name.toLowerCase().includes(search.toLowerCase()))
+          : true;
+
+        if (search && !matchesSearch && !hasMatchingDescendant) return null;
+
+        return (
+          <div key={node.path}>
+            <button
+              onClick={() => node.type === "dir" ? toggleDir(node.path) : onSelect(node)}
+              className={cn(
+                "w-full flex items-center gap-1.5 py-[5px] pr-3 rounded transition-colors text-left group",
+                isSelected ? "bg-blue-500/15 text-blue-300" : "hover:bg-white/[0.04] text-foreground"
+              )}
+              style={{ paddingLeft: `${8 + depth * 14}px` }}
+            >
+              {node.type === "dir" ? (
+                <ChevronRight size={12} className={cn("text-white/30 transition-transform shrink-0", isOpen && "rotate-90")} />
+              ) : (
+                <span className="w-3 shrink-0" />
+              )}
+              {node.type === "dir" ? (
+                <Folder size={13} className={cn("shrink-0", isOpen ? "text-yellow-300" : "text-yellow-400/70")} />
+              ) : (
+                <FileText size={12} className={cn("shrink-0", extColor(node.ext))} />
+              )}
+              <span className={cn("text-[11.5px] truncate flex-1", isSelected ? "text-blue-300 font-medium" : "")}>{node.name}</span>
+              {node.type === "file" && node.size !== undefined && (
+                <span className="text-[10px] text-white/20 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">{fmtSize(node.size)}</span>
+              )}
+            </button>
+            {node.type === "dir" && (isOpen || (!!search && hasMatchingDescendant)) && node.children && (
+              <RealFileTree
+                nodes={node.children} depth={depth + 1}
+                onSelect={onSelect} selectedPath={selectedPath}
+                openDirs={openDirs} toggleDir={toggleDir} search={search}
+              />
             )}
-            {node.type === "folder" ? (
-              <Folder size={13} className="text-yellow-400/80 shrink-0" />
-            ) : (
-              <FileText size={13} className="text-blue-400/80 shrink-0" />
-            )}
-            <span className="text-xs text-foreground truncate">{node.name}</span>
-          </button>
-          {node.type === "folder" && open[node.name] && node.children && (
-            <FileTree nodes={node.children} depth={depth + 1} />
-          )}
-        </div>
-      ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function FilesPanel({ onClose }: { onClose: () => void }) {
-  const [search, setSearch] = useState("");
+  const [activeRoot, setActiveRoot] = useState("app-builder");
+  const [tree, setTree]           = useState<FsNode[]>([]);
+  const [loading, setLoading]     = useState(false);
+  const [search, setSearch]       = useState("");
+  const [openDirs, setOpenDirs]   = useState<Set<string>>(new Set());
+  const [selectedFile, setSelectedFile] = useState<FsNode | null>(null);
+  const [fileContent, setFileContent]   = useState<{ content: string; lines: number; size: number; ext?: string } | null>(null);
+  const [fileLoading, setFileLoading]   = useState(false);
+  const [copied, setCopied]       = useState(false);
+
+  /* load tree whenever root changes */
+  useEffect(() => {
+    setLoading(true);
+    setTree([]);
+    setSelectedFile(null);
+    setFileContent(null);
+    setOpenDirs(new Set());
+    fetch(`${BASE_URL}/api/files/tree?root=${activeRoot}`)
+      .then(r => r.json())
+      .then(d => {
+        setTree(d.tree ?? []);
+        /* auto-open first dir */
+        const first = (d.tree ?? []).find((n: FsNode) => n.type === "dir");
+        if (first) setOpenDirs(new Set([first.path]));
+      })
+      .catch(() => setTree([]))
+      .finally(() => setLoading(false));
+  }, [activeRoot]);
+
+  /* load file content when a file is selected */
+  useEffect(() => {
+    if (!selectedFile) return;
+    setFileLoading(true);
+    setFileContent(null);
+    fetch(`${BASE_URL}/api/files/content?path=${encodeURIComponent(selectedFile.path)}`)
+      .then(r => r.json())
+      .then(d => setFileContent(d))
+      .catch(() => setFileContent({ content: "// Error loading file", lines: 1, size: 0 }))
+      .finally(() => setFileLoading(false));
+  }, [selectedFile]);
+
+  const toggleDir = (p: string) =>
+    setOpenDirs(prev => { const n = new Set(prev); n.has(p) ? n.delete(p) : n.add(p); return n; });
+
+  const handleCopy = () => {
+    if (!fileContent) return;
+    navigator.clipboard.writeText(fileContent.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
+
+  /* search: gather all matching files flat */
+  const allFiles = search ? flatFiles(tree) : [];
+  const searchResults = allFiles.filter(f => f.name.toLowerCase().includes(search.toLowerCase()));
+
   return (
     <motion.div initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }}
       transition={{ type: "spring", stiffness: 340, damping: 36 }}
-      className="absolute inset-0 z-50 flex flex-col bg-background">
-      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
-        <div className="flex-1" />
-        <Folder size={17} className="text-yellow-400" />
-        <span className="text-base font-semibold text-foreground">Files</span>
-        <div className="flex-1" />
-        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
-      </div>
-      <div className="px-4 py-2 border-b border-border/40 shrink-0">
-        <div className="flex items-center gap-2 bg-secondary/30 rounded-lg px-3 h-8 border border-border/30">
-          <Search size={13} className="text-muted-foreground/60 shrink-0" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search files..." className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none" />
+      className="absolute inset-0 z-50 flex flex-col bg-[#0d1117]">
+
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 pt-10 pb-2.5 border-b border-white/[0.07] shrink-0">
+        <button onClick={selectedFile ? () => { setSelectedFile(null); setFileContent(null); } : onClose}
+          className="w-8 h-8 flex items-center justify-center text-white/50 hover:text-white rounded-lg hover:bg-white/6 transition-colors">
+          <ArrowLeft size={17} />
+        </button>
+        <div className="flex-1 flex items-center gap-1.5 min-w-0">
+          <Folder size={15} className="text-yellow-400 shrink-0" />
+          {selectedFile ? (
+            <div className="flex items-center gap-1 min-w-0">
+              <span className="text-white/40 text-xs truncate">{activeRoot} /</span>
+              <span className={cn("text-xs font-medium truncate", extColor(selectedFile.ext))}>{selectedFile.name}</span>
+            </div>
+          ) : (
+            <span className="text-sm font-semibold text-white">Files</span>
+          )}
         </div>
+        {selectedFile && fileContent && (
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[10px] text-white/25 font-mono">{fileContent.lines}L · {fmtSize(fileContent.size)}</span>
+            <button onClick={handleCopy}
+              className="w-7 h-7 flex items-center justify-center text-white/40 hover:text-white rounded-lg hover:bg-white/6 transition-colors">
+              {copied ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
+            </button>
+          </div>
+        )}
+        <button onClick={onClose}
+          className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white rounded-lg hover:bg-white/6 transition-colors">
+          <X size={16} />
+        </button>
       </div>
-      <div className="flex-1 overflow-y-auto py-2 no-scrollbar">
-        <FileTree nodes={MOCK_FILES} />
-      </div>
+
+      {!selectedFile && (
+        <>
+          {/* Root tabs */}
+          <div className="flex items-center gap-1 px-3 py-2 border-b border-white/[0.05] shrink-0 overflow-x-auto no-scrollbar">
+            {ROOTS.map(r => (
+              <button key={r.id} onClick={() => setActiveRoot(r.id)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 transition-colors",
+                  activeRoot === r.id
+                    ? "bg-white/10 text-white"
+                    : "text-white/40 hover:text-white/70 hover:bg-white/5"
+                )}>
+                {r.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Search */}
+          <div className="px-3 py-2 border-b border-white/[0.05] shrink-0">
+            <div className="flex items-center gap-2 bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 h-8 focus-within:border-white/20 transition-colors">
+              <Search size={12} className="text-white/30 shrink-0" />
+              <input
+                value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search files..."
+                className="flex-1 bg-transparent text-[12px] text-white/80 placeholder:text-white/25 outline-none"
+              />
+              {search && (
+                <button onClick={() => setSearch("")} className="text-white/30 hover:text-white/60 transition-colors">
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Tree or search results */}
+          <div className="flex-1 overflow-y-auto py-1.5 no-scrollbar">
+            {loading ? (
+              <div className="flex items-center justify-center py-12 gap-2 text-white/30">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-xs">Loading file tree…</span>
+              </div>
+            ) : search && searchResults.length === 0 ? (
+              <div className="text-center py-10 text-white/25 text-xs">No files match "{search}"</div>
+            ) : search ? (
+              <div className="px-2">
+                {searchResults.map(f => (
+                  <button key={f.path} onClick={() => { setSelectedFile(f); setSearch(""); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/[0.05] transition-colors text-left group">
+                    <FileText size={13} className={cn("shrink-0", extColor(f.ext))} />
+                    <span className="text-[12px] text-white/80 truncate flex-1">{f.name}</span>
+                    <span className="text-[10px] text-white/25 shrink-0 font-mono truncate max-w-[120px]">
+                      {f.path.replace(/^artifacts\/[^/]+\/src\//, "")}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="px-2">
+                <RealFileTree
+                  nodes={tree} onSelect={setSelectedFile}
+                  selectedPath={selectedFile?.path ?? ""}
+                  openDirs={openDirs} toggleDir={toggleDir} search=""
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Footer stat */}
+          {!loading && tree.length > 0 && !search && (
+            <div className="px-4 py-2 border-t border-white/[0.04] shrink-0 flex items-center gap-2">
+              <span className="text-[10px] text-white/20">{flatFiles(tree).length} files in {activeRoot}</span>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* File content viewer */}
+      {selectedFile && (
+        <div className="flex-1 overflow-y-auto no-scrollbar">
+          {fileLoading ? (
+            <div className="flex items-center justify-center py-16 gap-2 text-white/30">
+              <Loader2 size={16} className="animate-spin" />
+              <span className="text-xs">Loading…</span>
+            </div>
+          ) : fileContent ? (
+            <pre className="text-[11px] leading-[1.65] font-mono text-white/75 whitespace-pre-wrap break-all px-4 py-3 select-text">
+              {fileContent.content}
+            </pre>
+          ) : null}
+        </div>
+      )}
     </motion.div>
   );
 }

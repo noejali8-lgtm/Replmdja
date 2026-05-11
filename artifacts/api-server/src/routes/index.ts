@@ -15,6 +15,7 @@ import mcpRouter from "./mcp";
 import multiChatRouter from "./multi-chat";
 import godmodeRouter from "./godmode";
 import runRouter from "./run";
+import filesRouter from "./files";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use("/mcp", mcpRouter);
 router.use("/multi-chat", multiChatRouter);
 router.use("/godmode", godmodeRouter);
 router.use("/run", runRouter);
+router.use("/files", filesRouter);
 
 export default router;
