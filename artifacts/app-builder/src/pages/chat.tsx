@@ -1548,54 +1548,299 @@ function AuthPanel({ onClose }: { onClose: () => void }) {
 /* ─────────────────────────────────────────────────────────
    RUN PANEL (terminal output)
    ───────────────────────────────────────────────────────── */
-const MOCK_LOGS = [
-  { t: "00:00", msg: "> pnpm run dev", cls: "text-muted-foreground" },
-  { t: "00:01", msg: "> vite --host 0.0.0.0", cls: "text-muted-foreground" },
-  { t: "00:02", msg: "  VITE v7.3.2  ready in 382ms", cls: "text-green-400" },
-  { t: "00:02", msg: "  ➜  Local:   http://localhost:3000/", cls: "text-blue-400" },
-  { t: "00:02", msg: "  ➜  Network: http://0.0.0.0:3000/", cls: "text-blue-400" },
-  { t: "00:05", msg: "[HMR] connected.", cls: "text-muted-foreground/60" },
-];
+type RunLog = { time: string; level: string; msg: string };
+
+function levelColor(level: string): string {
+  switch (level) {
+    case "OK":    return "text-green-400";
+    case "WARN":  return "text-yellow-400";
+    case "ERROR": return "text-red-400";
+    case "DEBUG": return "text-white/30";
+    default:      return "text-white/60";
+  }
+}
+
+function levelBadge(level: string): string {
+  switch (level) {
+    case "OK":    return "text-green-400 bg-green-500/15";
+    case "WARN":  return "text-yellow-400 bg-yellow-500/15";
+    case "ERROR": return "text-red-400 bg-red-500/15";
+    case "DEBUG": return "text-white/25 bg-white/5";
+    default:      return "text-blue-300 bg-blue-500/15";
+  }
+}
+
+interface ServerStatus {
+  running: boolean;
+  uptime: number;
+  pid: number;
+  version: string;
+  env: string;
+  port: string;
+  memory: { rss: number; heapUsed: number; heapTotal: number };
+  loadAvg: number[];
+  platform: string;
+  arch: string;
+}
 
 function RunPanel({ onClose }: { onClose: () => void }) {
-  const [running, setRunning] = useState(true);
-  const [logs, setLogs] = useState(MOCK_LOGS);
+  const [status, setStatus]         = useState<ServerStatus | null>(null);
+  const [connected, setConnected]   = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const [logs, setLogs]             = useState<RunLog[]>([]);
+  const [cmd, setCmd]               = useState("");
+  const [cmdHistory, setCmdHistory] = useState<string[]>([]);
+  const [cmdIdx, setCmdIdx]         = useState(-1);
+  const [filter, setFilter]         = useState<"all"|"WARN"|"ERROR">("all");
+  const logsEndRef   = useRef<HTMLDivElement>(null);
+  const esRef        = useRef<EventSource | null>(null);
+  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const restart = () => {
-    setRunning(false);
+  const pushLog = (log: RunLog) =>
+    setLogs(prev => [...prev.slice(-300), log]);
+
+  /* ── Poll real status ── */
+  const fetchStatus = useCallback(async () => {
+    try {
+      const r = await fetch(`${BASE_URL}/api/run/status`);
+      if (r.ok) {
+        const data = await r.json();
+        setStatus(data);
+        setConnected(true);
+      }
+    } catch {
+      setConnected(false);
+    }
+  }, []);
+
+  /* ── SSE log stream ── */
+  const connectStream = useCallback(() => {
+    esRef.current?.close();
+    const es = new EventSource(`${BASE_URL}/api/run/stream`);
+    esRef.current = es;
+    es.onopen    = () => setConnected(true);
+    es.onerror   = () => { setConnected(false); };
+    es.onmessage = (e) => {
+      try { pushLog(JSON.parse(e.data)); } catch { /* skip */ }
+    };
+  }, []);
+
+  useEffect(() => {
+    fetchStatus();
+    connectStream();
+    pollRef.current = setInterval(fetchStatus, 3000);
+    return () => {
+      esRef.current?.close();
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [fetchStatus, connectStream]);
+
+  /* Auto-scroll */
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
+
+  /* ── Restart ── */
+  const handleRestart = async () => {
+    setRestarting(true);
     setLogs([]);
-    setTimeout(() => {
-      setRunning(true);
-      setLogs(MOCK_LOGS);
-    }, 800);
+    pushLog({ time: new Date().toISOString().slice(11, 23), level: "WARN", msg: "Sending restart signal to server…" });
+    try {
+      await fetch(`${BASE_URL}/api/run/restart`, { method: "POST" });
+    } catch { /* expected — server exits */ }
+    pushLog({ time: new Date().toISOString().slice(11, 23), level: "WARN", msg: "Server process exited. Waiting for workflow manager to restart…" });
+    /* Reconnect after ~4s */
+    setTimeout(async () => {
+      pushLog({ time: new Date().toISOString().slice(11, 23), level: "INFO", msg: "Attempting reconnect…" });
+      await fetchStatus();
+      connectStream();
+      setRestarting(false);
+    }, 4000);
   };
+
+  /* ── Terminal command runner ── */
+  const runCommand = async (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    setCmdHistory(h => [trimmed, ...h].slice(0, 50));
+    setCmdIdx(-1);
+    setCmd("");
+    pushLog({ time: new Date().toISOString().slice(11, 23), level: "DEBUG", msg: `$ ${trimmed}` });
+
+    const lower = trimmed.toLowerCase();
+    if (lower === "clear" || lower === "cls") {
+      setLogs([]);
+      return;
+    }
+    if (lower === "status") {
+      await fetchStatus();
+      pushLog({ time: new Date().toISOString().slice(11, 23), level: "OK", msg: `Server running · uptime ${status?.uptime ?? "?"}s · PID ${status?.pid ?? "?"} · RSS ${status?.memory?.rss ?? "?"}MB` });
+      return;
+    }
+    if (lower === "restart") { handleRestart(); return; }
+    if (lower.startsWith("get ") || lower.startsWith("curl ")) {
+      const path = trimmed.replace(/^(get|curl)\s+/i, "");
+      const url = path.startsWith("/") ? `${BASE_URL}${path}` : path;
+      try {
+        const r = await fetch(url);
+        const text = await r.text();
+        pushLog({ time: new Date().toISOString().slice(11, 23), level: r.ok ? "OK" : "ERROR", msg: `${r.status} ${url}` });
+        const preview = text.length > 200 ? text.slice(0, 200) + "…" : text;
+        pushLog({ time: new Date().toISOString().slice(11, 23), level: "DEBUG", msg: preview });
+      } catch (err) {
+        pushLog({ time: new Date().toISOString().slice(11, 23), level: "ERROR", msg: String(err) });
+      }
+      return;
+    }
+    pushLog({ time: new Date().toISOString().slice(11, 23), level: "WARN", msg: `Unknown command: "${trimmed}". Try: status · restart · clear · get /api/...` });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") { runCommand(cmd); return; }
+    if (e.key === "ArrowUp") {
+      const next = Math.min(cmdIdx + 1, cmdHistory.length - 1);
+      setCmdIdx(next);
+      setCmd(cmdHistory[next] ?? "");
+    }
+    if (e.key === "ArrowDown") {
+      const next = Math.max(cmdIdx - 1, -1);
+      setCmdIdx(next);
+      setCmd(next === -1 ? "" : cmdHistory[next] ?? "");
+    }
+  };
+
+  const visibleLogs = filter === "all" ? logs : logs.filter(l => l.level === filter);
+  const uptimeStr = status
+    ? status.uptime >= 3600
+      ? `${Math.floor(status.uptime / 3600)}h ${Math.floor((status.uptime % 3600) / 60)}m`
+      : status.uptime >= 60
+      ? `${Math.floor(status.uptime / 60)}m ${status.uptime % 60}s`
+      : `${status.uptime}s`
+    : "—";
 
   return (
     <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
       transition={{ type: "spring", stiffness: 340, damping: 36 }}
-      className="absolute inset-0 z-50 flex flex-col bg-background">
-      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
-        <div className="flex-1" />
-        <div className={cn("w-2 h-2 rounded-full", running ? "bg-green-400" : "bg-red-400")} />
-        <span className="text-base font-semibold text-foreground">Run</span>
-        <div className="flex-1" />
-        <button onClick={restart} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><RefreshCw size={15} /></button>
-        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+      className="absolute inset-0 z-50 flex flex-col bg-[#0d1117]">
+
+      {/* ── Header ── */}
+      <div className="flex items-center gap-1.5 px-3 pt-10 pb-3 border-b border-white/[0.07] shrink-0">
+        <button onClick={onClose}
+          className="w-9 h-9 flex items-center justify-center text-white/50 hover:text-white rounded-xl hover:bg-white/8 transition-colors">
+          <ArrowLeft size={20} />
+        </button>
+        <div className="flex items-center gap-2 flex-1 justify-center">
+          <motion.div
+            animate={connected && !restarting ? { opacity: [1, 0.4, 1] } : {}}
+            transition={{ duration: 2, repeat: Infinity }}
+            className={cn("w-2 h-2 rounded-full shrink-0",
+              restarting ? "bg-yellow-400" : connected ? "bg-green-400" : "bg-red-400"
+            )}
+          />
+          <span className="text-base font-semibold text-white">
+            {restarting ? "Restarting…" : connected ? "API Server" : "Disconnected"}
+          </span>
+          {connected && !restarting && (
+            <span className="text-[10px] text-white/30 font-mono">:{status?.port ?? "8000"}</span>
+          )}
+        </div>
+        <button
+          onClick={handleRestart}
+          disabled={restarting}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/[0.06] border border-white/[0.10] text-white/50 hover:text-white hover:bg-white/[0.10] text-[11px] font-semibold transition-all disabled:opacity-40"
+        >
+          <RefreshCw size={12} className={restarting ? "animate-spin" : ""} />
+          Restart
+        </button>
       </div>
-      <div className="flex-1 bg-[#0d1117] overflow-y-auto px-4 py-3 font-mono no-scrollbar">
-        {!running ? (
-          <div className="flex items-center gap-2 text-muted-foreground/60 text-xs"><Loader2 size={13} className="animate-spin" /> Starting...</div>
-        ) : logs.map((l, i) => (
-          <div key={i} className="flex items-start gap-3 text-xs leading-relaxed">
-            <span className="text-muted-foreground/30 shrink-0 w-10">{l.t}</span>
-            <span className={l.cls}>{l.msg}</span>
+
+      {/* ── Stats strip ── */}
+      <div className="shrink-0 flex items-stretch border-b border-white/[0.06] bg-white/[0.02]">
+        {[
+          { label: "Uptime",  value: uptimeStr,                       color: "text-green-400" },
+          { label: "RSS",     value: status ? `${status.memory.rss}MB` : "—",  color: "text-purple-400" },
+          { label: "Heap",    value: status ? `${status.memory.heapUsed}/${status.memory.heapTotal}MB` : "—", color: "text-cyan-400" },
+          { label: "PID",     value: status ? String(status.pid) : "—", color: "text-white/60" },
+          { label: "Node",    value: status?.version ?? "—",           color: "text-yellow-400" },
+        ].map(s => (
+          <div key={s.label} className="flex-1 flex flex-col items-center justify-center py-2 border-r border-white/[0.05] last:border-0">
+            <span className={cn("text-[11px] font-bold font-mono leading-none", s.color)}>{s.value}</span>
+            <span className="text-[9px] text-white/25 mt-0.5 uppercase tracking-wider">{s.label}</span>
           </div>
         ))}
       </div>
-      <div className="shrink-0 border-t border-border bg-card/60 px-4 py-2 flex items-center gap-2">
-        <span className="text-xs text-muted-foreground/60">$</span>
-        <input placeholder="Enter command..." className="flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/40" />
+
+      {/* ── Log filter tabs ── */}
+      <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 border-b border-white/[0.06]">
+        {(["all", "WARN", "ERROR"] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={cn(
+              "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all",
+              filter === f ? "bg-white/10 text-white" : "text-white/30 hover:text-white/60"
+            )}
+          >{f === "all" ? "All logs" : f}</button>
+        ))}
+        <div className="flex-1" />
+        <button onClick={() => setLogs([])}
+          className="text-[10px] text-white/25 hover:text-white/50 transition-colors px-2">
+          Clear
+        </button>
+        <div className="flex items-center gap-1">
+          <div className={cn("w-1 h-1 rounded-full", connected ? "bg-green-400" : "bg-red-400")} />
+          <span className="text-[10px] text-white/25">{logs.length} lines</span>
+        </div>
+      </div>
+
+      {/* ── Log output ── */}
+      <div className="flex-1 overflow-y-auto no-scrollbar bg-[#080810] font-mono">
+        {restarting && (
+          <div className="flex items-center gap-2 px-4 py-3 text-yellow-400/70 text-xs">
+            <Loader2 size={13} className="animate-spin shrink-0" />
+            Waiting for server to come back online…
+          </div>
+        )}
+        {visibleLogs.length === 0 && !restarting && (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center text-white/20 text-xs space-y-1">
+              <p>No logs yet</p>
+              <p className="text-[10px]">Connecting to stream…</p>
+            </div>
+          </div>
+        )}
+        {visibleLogs.map((log, i) => (
+          <motion.div
+            key={i}
+            initial={i === visibleLogs.length - 1 ? { opacity: 0, x: -4 } : false}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex items-start gap-2 px-3 py-[3px] hover:bg-white/[0.025] transition-colors border-b border-white/[0.02]"
+          >
+            <span className="text-[9px] text-white/20 shrink-0 mt-[2px] w-[68px] font-mono">{log.time}</span>
+            <span className={cn("text-[9px] font-bold shrink-0 mt-[2px] px-1 rounded leading-none py-[2px]", levelBadge(log.level))}>
+              {log.level}
+            </span>
+            <span className={cn("text-[11px] leading-snug break-all", levelColor(log.level))}>{log.msg}</span>
+          </motion.div>
+        ))}
+        <div ref={logsEndRef} />
+      </div>
+
+      {/* ── Terminal input ── */}
+      <div className="shrink-0 border-t border-white/[0.08] bg-[#0a0a12] px-3 py-2 flex items-center gap-2">
+        <span className="text-green-400/70 text-xs font-mono shrink-0 select-none">›</span>
+        <input
+          value={cmd}
+          onChange={e => setCmd(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="status · restart · clear · get /api/healthz"
+          className="flex-1 bg-transparent text-xs text-white/80 font-mono outline-none placeholder:text-white/20"
+        />
+        <button
+          onClick={() => runCommand(cmd)}
+          disabled={!cmd.trim()}
+          className="w-6 h-6 flex items-center justify-center rounded-lg bg-white/[0.07] text-white/40 hover:text-white hover:bg-white/[0.12] transition-all disabled:opacity-30"
+        >
+          <ArrowUp size={11} strokeWidth={2.5} />
+        </button>
       </div>
     </motion.div>
   );
