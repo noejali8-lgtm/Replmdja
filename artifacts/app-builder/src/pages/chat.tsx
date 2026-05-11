@@ -10,7 +10,7 @@ import {
   GitBranch, Trash2, LogIn, MessageSquare, RotateCcw,
   ExternalLink, UserCircle2, CheckCircle, Circle as CircleIcon,
   Link2, Key, Terminal, Server, ShieldCheck, Rocket, RefreshCw,
-  FileText, Star, Eye, EyeOff, Edit3, Save, ChevronRight,
+  FileText, Star, Eye, EyeOff, Edit3, Save, ChevronRight, ChevronLeft,
   Table, Wifi, WifiOff, Mail, Chrome, AlertCircle,
   Cpu, Activity, Layers, Zap, Users, Network, Sparkles,
   GitMerge, Code2, Palette, BarChart3, TrendingUp,
@@ -1935,28 +1935,161 @@ function FilesPanel({ onClose }: { onClose: () => void }) {
    WEBVIEW PANEL
    ───────────────────────────────────────────────────────── */
 function WebviewPanel({ onClose }: { onClose: () => void }) {
+  const origin = window.location.origin;
+  const QUICK_LINKS = [
+    { label: "App Home", url: origin + "/", icon: "🏠", desc: "App Builder UI" },
+    { label: "API Server", url: origin.replace(/:\d+/, ":8000") + "/api/health", icon: "⚡", desc: "Express API · port 8000" },
+    { label: "Projects", url: origin + "/projects", icon: "📁", desc: "Your project list" },
+    { label: "Explore", url: origin + "/explore", icon: "🧭", desc: "Community repls" },
+    { label: "OpenClaw", url: origin + "/openclaw", icon: "🦞", desc: "AI gateway" },
+    { label: "JARVIS", url: origin + "/jarvis", icon: "🤖", desc: "AI assistant" },
+  ];
+
+  const [url, setUrl] = useState(origin + "/");
+  const [inputUrl, setInputUrl] = useState(origin + "/");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState<string[]>([origin + "/"]);
+  const [histIdx, setHistIdx] = useState(0);
+  const [showQuick, setShowQuick] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const navigate = (dest: string) => {
+    const next = dest.startsWith("http") ? dest : origin + dest;
+    setUrl(next);
+    setInputUrl(next);
+    setLoading(true);
+    setRefreshKey(k => k + 1);
+    const newHist = [...history.slice(0, histIdx + 1), next];
+    setHistory(newHist);
+    setHistIdx(newHist.length - 1);
+    setShowQuick(false);
+  };
+
+  const handleBack = () => {
+    if (histIdx <= 0) return;
+    const prev = history[histIdx - 1];
+    setUrl(prev);
+    setInputUrl(prev);
+    setHistIdx(histIdx - 1);
+    setRefreshKey(k => k + 1);
+    setLoading(true);
+  };
+
+  const handleForward = () => {
+    if (histIdx >= history.length - 1) return;
+    const next = history[histIdx + 1];
+    setUrl(next);
+    setInputUrl(next);
+    setHistIdx(histIdx + 1);
+    setRefreshKey(k => k + 1);
+    setLoading(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    navigate(inputUrl);
+  };
+
   return (
     <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
       transition={{ type: "spring", stiffness: 340, damping: 36 }}
-      className="absolute inset-0 z-50 flex flex-col bg-background">
-      <div className="flex items-center gap-2 px-4 pt-10 pb-3 border-b border-border shrink-0">
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 transition-colors"><ArrowLeft size={15} /> Back</button>
+      className="absolute inset-0 z-50 flex flex-col bg-[#0d1117]">
+
+      {/* Header */}
+      <div className="flex items-center gap-1 px-2 pt-10 pb-2 border-b border-white/[0.07] shrink-0">
+        <button onClick={onClose}
+          className="w-9 h-9 flex items-center justify-center text-white/50 hover:text-white rounded-xl hover:bg-white/8 transition-colors">
+          <ArrowLeft size={20} />
+        </button>
+        <button onClick={handleBack} disabled={histIdx <= 0}
+          className="w-8 h-8 flex items-center justify-center text-white/35 hover:text-white rounded-lg hover:bg-white/8 transition-colors disabled:opacity-25">
+          <ChevronLeft size={17} />
+        </button>
+        <button onClick={handleForward} disabled={histIdx >= history.length - 1}
+          className="w-8 h-8 flex items-center justify-center text-white/35 hover:text-white rounded-lg hover:bg-white/8 transition-colors disabled:opacity-25">
+          <ChevronRight size={17} />
+        </button>
+        <button onClick={() => { setLoading(true); setRefreshKey(k => k + 1); }}
+          className="w-8 h-8 flex items-center justify-center text-white/35 hover:text-white rounded-lg hover:bg-white/8 transition-colors">
+          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+        </button>
         <div className="flex-1" />
-        <Monitor size={17} className="text-cyan-400" />
-        <span className="text-base font-semibold text-foreground">Webview</span>
-        <div className="flex-1" />
-        <button onClick={() => window.open(window.location.origin, "_blank")} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><ExternalLink size={15} /></button>
-        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary/60 transition-colors"><X size={18} /></button>
+        <button onClick={() => window.open(url, "_blank")}
+          className="w-8 h-8 flex items-center justify-center text-white/35 hover:text-white rounded-lg hover:bg-white/8 transition-colors">
+          <ExternalLink size={14} />
+        </button>
       </div>
-      <div className="px-3 py-2 border-b border-border/40 shrink-0">
-        <div className="flex items-center gap-2 bg-secondary/30 rounded-lg px-3 h-8 border border-border/30">
-          <Globe size={12} className="text-muted-foreground/60 shrink-0" />
-          <span className="flex-1 text-xs text-muted-foreground/70 truncate">{window.location.origin}/</span>
-          <RefreshCw size={12} className="text-muted-foreground/50 shrink-0 cursor-pointer hover:text-foreground transition-colors" />
+
+      {/* URL bar */}
+      <form onSubmit={handleSubmit} className="px-3 py-2 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center gap-2 bg-white/[0.06] border border-white/[0.10] rounded-xl px-3 h-9 focus-within:border-white/25 transition-colors">
+          <Globe size={12} className="text-white/30 shrink-0" />
+          <input
+            value={inputUrl}
+            onChange={e => setInputUrl(e.target.value)}
+            onFocus={() => setShowQuick(true)}
+            className="flex-1 bg-transparent text-[12px] text-white/80 outline-none font-mono placeholder:text-white/25 min-w-0"
+            placeholder="Enter URL or path..."
+          />
+          {loading && <Loader2 size={12} className="animate-spin text-white/30 shrink-0" />}
         </div>
+      </form>
+
+      {/* Quick links picker */}
+      <AnimatePresence>
+        {showQuick && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setShowQuick(false)} />
+            <motion.div
+              initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+              className="absolute left-3 right-3 top-[118px] z-20 bg-[#1a1a2e] border border-white/[0.12] rounded-2xl overflow-hidden shadow-2xl"
+            >
+              <div className="px-4 py-2.5 border-b border-white/[0.07]">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">Quick Access</span>
+              </div>
+              {QUICK_LINKS.map(link => (
+                <button key={link.url} onClick={() => navigate(link.url)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.06] transition-colors border-b border-white/[0.04] last:border-0">
+                  <span className="text-base">{link.icon}</span>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-white/80">{link.label}</p>
+                    <p className="text-[10px] text-white/35 font-mono">{link.desc}</p>
+                  </div>
+                  <ChevronRight size={12} className="ml-auto text-white/25" />
+                </button>
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* iframe */}
+      <div className="flex-1 relative overflow-hidden bg-white">
+        <iframe
+          ref={iframeRef}
+          key={refreshKey}
+          src={url}
+          className="w-full h-full border-0"
+          title="Project Preview"
+          onLoad={() => setLoading(false)}
+          onError={() => setLoading(false)}
+        />
+        {loading && (
+          <div className="absolute inset-0 bg-[#0d1117]/80 flex items-center justify-center pointer-events-none">
+            <div className="flex items-center gap-2 text-white/50 text-sm">
+              <Loader2 size={16} className="animate-spin" />
+              Loading...
+            </div>
+          </div>
+        )}
       </div>
-      <div className="flex-1 bg-white">
-        <iframe src="/" className="w-full h-full border-0" title="App Preview" />
+
+      {/* Status bar */}
+      <div className="shrink-0 px-4 py-1.5 bg-[#0d1117] border-t border-white/[0.05] flex items-center gap-2">
+        <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+        <span className="text-[10px] text-white/30 font-mono truncate flex-1">{url}</span>
+        <span className="text-[10px] text-white/20 shrink-0">iframe preview</span>
       </div>
     </motion.div>
   );
