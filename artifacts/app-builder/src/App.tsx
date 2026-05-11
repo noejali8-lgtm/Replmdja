@@ -36,6 +36,7 @@ import GodmodeReadmePage from "@/pages/godmode-readme";
 import GodmodeLeaderboardPage from "@/pages/godmode-leaderboard";
 import JarvisPage from "@/pages/jarvis";
 import OpenClawPage from "@/pages/openclaw";
+import LoginPage from "@/pages/login";
 
 const queryClient = new QueryClient();
 
@@ -78,6 +79,7 @@ function Router() {
         <Route path="/godmode-leaderboard" component={GodmodeLeaderboardPage} />
         <Route path="/jarvis" component={JarvisPage} />
         <Route path="/openclaw" component={OpenClawPage} />
+        <Route path="/login" component={LoginPage} />
 
         <Route component={NotFound} />
       </Switch>

@@ -67,7 +67,16 @@ export default defineConfig({
       strict: true,
     },
     proxy: {
+      "/api/terminal/ws": {
+        target: "ws://localhost:8000",
+        ws: true,
+        changeOrigin: true,
+      },
       "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/preview": {
         target: "http://localhost:8000",
         changeOrigin: true,
       },

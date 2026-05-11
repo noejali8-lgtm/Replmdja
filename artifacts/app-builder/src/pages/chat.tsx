@@ -22,6 +22,7 @@ import ReactMarkdown from "react-markdown";
 import { AIModelsPanel, ALL_MODELS } from "@/components/AIModelsPanel";
 import { AgentDebatePanel } from "@/components/AgentDebatePanel";
 import { DeploySheet } from "@/components/DeploySheet";
+import { TerminalPanel } from "@/components/TerminalPanel";
 
 interface MessageStats {
   inputTokens: number;
@@ -4888,6 +4889,7 @@ export default function Chat() {
   const [showAuth, setShowAuth] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
   const [showRun, setShowRun] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(false);
   const [showPublishing, setShowPublishing] = useState(false);
   const [showToolsSearch, setShowToolsSearch] = useState(false);
   const [showWebview, setShowWebview] = useState(false);
@@ -5566,6 +5568,7 @@ export default function Chat() {
                 { icon: <Clock size={14} className="text-cyan-400" />, label: "Checkpoints", action: () => { setShowCheckpoints(true); setShowMoreTools(false); } },
                 { icon: <BarChart3 size={14} className="text-orange-400" />, label: "Agent Insights", action: () => { setShowInsights(true); setShowMoreTools(false); } },
                 { icon: <AlignJustify size={14} className="text-muted-foreground" />, label: "Files", action: () => { setShowFiles(true); setShowMoreTools(false); } },
+                { icon: <Terminal size={14} className="text-green-400" />, label: "Terminal", action: () => { setShowTerminal(true); setShowMoreTools(false); } },
                 { icon: <Globe size={14} className="text-blue-400" />, label: "Publishing", action: () => { setShowPublishing(true); setShowMoreTools(false); } },
                 { icon: <Globe size={14} className="text-blue-400" />, label: "Webview Preview", action: () => { setShowWebview(true); setShowMoreTools(false); } },
                 { icon: <Zap size={14} className="text-purple-400" />, label: "Agent Debate", action: () => { setShowDebate(true); setShowMoreTools(false); } },
@@ -5904,6 +5907,11 @@ export default function Chat() {
       {/* ── Files Panel ── */}
       <AnimatePresence>
         {showFiles && <FilesPanel onClose={() => setShowFiles(false)} />}
+      </AnimatePresence>
+
+      {/* ── Terminal Panel ── */}
+      <AnimatePresence>
+        {showTerminal && <TerminalPanel onClose={() => setShowTerminal(false)} />}
       </AnimatePresence>
 
       {/* ── Run Panel ── */}
