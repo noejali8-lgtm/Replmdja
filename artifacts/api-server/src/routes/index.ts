@@ -20,6 +20,7 @@ import authRouter from "./auth";
 import projectsRouter from "./projects";
 import systemRouter from "./system";
 import dbGuiRouter from "./db-gui";
+import ideAgentRouter from "./ide-agent";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,6 @@ router.use("/auth", authRouter);
 router.use("/projects", projectsRouter);
 router.use("/system", systemRouter);
 router.use("/db-gui", dbGuiRouter);
+router.use("/ide-agent", ideAgentRouter);
 
 export default router;

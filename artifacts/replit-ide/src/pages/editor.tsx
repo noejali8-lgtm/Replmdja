@@ -1108,6 +1108,41 @@ export default function Editor() {
                     initialMessage={aiPrompt}
                     onClose={() => { setShowAI(false); setAiPrompt(undefined); }}
                     onApplyCode={handleApplyCode}
+                    fileTree={(() => {
+                      function renderTree(nodes: FileNode[], prefix = ""): string {
+                        return nodes.map(n => {
+                          const line = `${prefix}${n.type === "dir" ? "📁" : "📄"} ${n.name}`;
+                          if (n.type === "dir" && n.children) return line + "\n" + renderTree(n.children, prefix + "  ");
+                          return line;
+                        }).join("\n");
+                      }
+                      return renderTree(tree);
+                    })()}
+                    onFileWrite={(filePath, content) => {
+                      const ext = filePath.split(".").pop() ?? "";
+                      const lang = getLanguage(ext);
+                      const existingIdx = tabs.findIndex(t => t.path === filePath);
+                      if (existingIdx >= 0) {
+                        setTabs(prev => prev.map((t, i) =>
+                          i === existingIdx ? { ...t, content, savedContent: content } : t
+                        ));
+                        setActiveTabIdx(existingIdx);
+                      } else {
+                        const name = filePath.split("/").pop() ?? filePath;
+                        const newTab: Tab = { path: filePath, name, ext, content, savedContent: content, language: lang };
+                        setTabs(prev => { const n = [...prev, newTab]; setActiveTabIdx(n.length - 1); return n; });
+                      }
+                      saveContent(projectName, filePath, content);
+                      const parts = filePath.split("/");
+                      const newNode: FileNode = { name: parts[parts.length - 1] ?? filePath, path: filePath, type: "file", ext };
+                      setTree(prev => {
+                        const exists = flattenTree(prev).some(f => f.path === filePath);
+                        if (exists) return prev;
+                        const parent = parts.slice(0, -1).join("/");
+                        return addToTree(prev, parent, newNode);
+                      });
+                      sound.play("save");
+                    }}
                   />
                 </div>
               </Panel>
