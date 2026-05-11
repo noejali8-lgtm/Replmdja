@@ -6,7 +6,8 @@ import {
   FileCode, Search, GitBranch, Terminal, Eye, Sparkles, Monitor,
   ChevronDown, X, Circle, Maximize2, Minimize2, Split, Package,
   Database, Lock, RefreshCw, ExternalLink, ChevronRight, Plus,
-  Layers, Code2, Globe, AlertTriangle
+  Layers, Code2, Globe, AlertTriangle, Bug, Box, BarChart2, Camera,
+  Shield, Mic
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { MonacoEditorPane, getLanguage, type CursorPosition } from "@/components/editor/MonacoEditor";
@@ -17,9 +18,17 @@ import { FileTree, type FileNode } from "@/components/editor/FileTree";
 import { AIPanel } from "@/components/editor/AIPanel";
 import { SearchPanel } from "@/components/editor/SearchPanel";
 import { DiffViewer } from "@/components/editor/DiffViewer";
+import { ResourceMonitor } from "@/components/editor/ResourceMonitor";
+import { DebugPanel } from "@/components/editor/DebugPanel";
+import { DatabaseGUI } from "@/components/editor/DatabaseGUI";
+import { PackageManager } from "@/components/editor/PackageManager";
+import { AIReviewer } from "@/components/editor/AIReviewer";
+import { SnapshotPanel } from "@/components/editor/SnapshotPanel";
+import { AnalyticsPanel } from "@/components/editor/AnalyticsPanel";
+import { VoiceCommand, type VoiceCommandAction } from "@/components/editor/VoiceCommand";
 
 /* ─── Types ─────────────────────────────────────────── */
-type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database";
+type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database" | "debug" | "packages" | "analytics" | "snapshots" | "review";
 type BottomPanel = "terminal" | "preview" | "console";
 
 interface Tab {
@@ -568,6 +577,34 @@ export default function Editor() {
     setTimeout(() => toast({ title: "Deployed!", description: "Live at https://my-web-app.replit.app" }), 2500);
   }, [toast]);
 
+  /* ─── Voice command handler ─── */
+  const handleVoiceCommand = useCallback((action: VoiceCommandAction, _raw: string) => {
+    switch (action) {
+      case "save":           saveActiveFile(); break;
+      case "run":            handleRun(); break;
+      case "stop":           handleStop(); break;
+      case "new-file":       handleNewFile(""); break;
+      case "toggle-terminal": setShowBottom(p => !p); setBottomPanel("terminal"); break;
+      case "toggle-ai":      setShowAI(p => !p); break;
+      case "toggle-search":  setSidePanel("search"); setShowSide(true); break;
+      case "deploy":         handleDeploy(); break;
+      case "split-editor":   setIsSplitView(p => !p); break;
+      case "close-tab":      if (tabs.length > 1) setTabs(p => { const n = p.filter((_, i) => i !== activeTabIdx); setActiveTabIdx(Math.max(0, activeTabIdx - 1)); return n; }); break;
+      case "zoom-in":        document.documentElement.style.fontSize = "14px"; break;
+      case "zoom-out":       document.documentElement.style.fontSize = "12px"; break;
+    }
+  }, [saveActiveFile, handleRun, handleStop, handleNewFile, handleDeploy, tabs, activeTabIdx]);
+
+  /* ─── Snapshot restore handler ─── */
+  const handleSnapshotRestore = useCallback((files: { path: string; content: string }[]) => {
+    files.forEach(f => saveContent(projectName, f.path, f.content));
+    setTabs(prev => prev.map(t => {
+      const restored = files.find(f => f.path === t.path);
+      return restored ? { ...t, content: restored.content, savedContent: restored.content } : t;
+    }));
+    toast({ title: "Snapshot restored", description: `${files.length} files restored from snapshot.` });
+  }, [projectName, toast]);
+
   const handleShare = useCallback(() => {
     navigator.clipboard.writeText(window.location.href).catch(() => {});
     setCopied(true);
@@ -670,6 +707,8 @@ export default function Editor() {
             <span className="hidden lg:inline">Deploy</span>
           </button>
 
+          <VoiceCommand onCommand={handleVoiceCommand} />
+
           <button onClick={() => setShowAI(p => !p)}
             title="AI Panel (⌘⇧A)"
             className={`h-8 w-8 flex items-center justify-center rounded transition-colors border ${showAI ? "bg-[#a371f7]/20 border-[#a371f7]/30 text-[#a371f7]" : "border-[#30363d] text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"}`}>
@@ -687,9 +726,14 @@ export default function Editor() {
           <SideBtn icon={<Search className="h-4 w-4" />} id="search" title="Search (⌘⇧F)" />
           <SideBtn icon={<GitBranch className="h-4 w-4" />} id="git" title="Source Control" />
           <SideBtn icon={<Package className="h-4 w-4" />} id="extensions" title="Extensions" />
+          <SideBtn icon={<Bug className="h-4 w-4" />} id="debug" title="Debugger" />
+          <SideBtn icon={<Box className="h-4 w-4" />} id="packages" title="Package Manager" />
+          <SideBtn icon={<BarChart2 className="h-4 w-4" />} id="analytics" title="Analytics Dashboard" />
+          <SideBtn icon={<Camera className="h-4 w-4" />} id="snapshots" title="Snapshots" />
+          <SideBtn icon={<Shield className="h-4 w-4" />} id="review" title="AI Code Review" />
           <div className="flex-1" />
           <SideBtn icon={<Lock className="h-4 w-4" />} id="secrets" title="Secrets" />
-          <SideBtn icon={<Database className="h-4 w-4" />} id="database" title="Database" />
+          <SideBtn icon={<Database className="h-4 w-4" />} id="database" title="Database GUI" />
         </div>
 
         <PanelGroup direction="horizontal" className="flex-1 overflow-hidden">
@@ -774,15 +818,23 @@ export default function Editor() {
                       </button>
                     </div>
                   )}
-                  {sidePanel === "database" && (
-                    <div className="flex flex-col h-full p-3 gap-2">
-                      <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest">Database</p>
-                      <div className="flex items-center gap-2 p-2 rounded bg-[#161b22] border border-green-500/20">
-                        <Circle className="h-2 w-2 fill-green-400 text-green-400" />
-                        <span className="text-xs text-green-400">PostgreSQL connected</span>
-                      </div>
-                      <p className="text-[10px] text-[#8b949e]">Manage your database via the Database panel in the App Builder.</p>
-                    </div>
+                  {sidePanel === "database" && <DatabaseGUI />}
+                  {sidePanel === "debug"    && <DebugPanel currentFile={activeTab?.name} currentLine={cursorPos.line} />}
+                  {sidePanel === "packages" && <PackageManager />}
+                  {sidePanel === "analytics"&& <AnalyticsPanel />}
+                  {sidePanel === "snapshots" && (
+                    <SnapshotPanel
+                      project={projectName}
+                      currentFiles={flattenTree(tree).map(f => ({ path: f.path, content: tabs.find(t => t.path === f.path)?.content ?? resolveContent(projectName, f.path) }))}
+                      onRestore={handleSnapshotRestore}
+                    />
+                  )}
+                  {sidePanel === "review" && (
+                    <AIReviewer
+                      code={activeTab?.content}
+                      language={activeTab?.language}
+                      filename={activeTab?.name}
+                    />
                   )}
                 </div>
               </Panel>
@@ -1050,17 +1102,22 @@ export default function Editor() {
       </div>
 
       {/* ── Status Bar ── */}
-      <StatusBar
-        language={activeTab?.language}
-        line={cursorPos.line}
-        column={cursorPos.column}
-        branch="main"
-        isDirty={!!activeTab && activeTab.content !== activeTab.savedContent}
-        isConnected
-        fileName={activeTab?.name}
-        fileSize={activeTab ? new Blob([activeTab.content]).size : undefined}
-        onBranchClick={() => { setSidePanel("git"); setShowSide(true); }}
-      />
+      <div className="relative">
+        <StatusBar
+          language={activeTab?.language}
+          line={cursorPos.line}
+          column={cursorPos.column}
+          branch="main"
+          isDirty={!!activeTab && activeTab.content !== activeTab.savedContent}
+          isConnected
+          fileName={activeTab?.name}
+          fileSize={activeTab ? new Blob([activeTab.content]).size : undefined}
+          onBranchClick={() => { setSidePanel("git"); setShowSide(true); }}
+        />
+        <div className="absolute right-2 top-0 h-full flex items-center text-white">
+          <ResourceMonitor />
+        </div>
+      </div>
     </div>
   );
 }

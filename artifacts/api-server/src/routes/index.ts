@@ -18,6 +18,8 @@ import runRouter from "./run";
 import filesRouter from "./files";
 import authRouter from "./auth";
 import projectsRouter from "./projects";
+import systemRouter from "./system";
+import dbGuiRouter from "./db-gui";
 
 const router: IRouter = Router();
 
@@ -40,5 +42,7 @@ router.use("/run", runRouter);
 router.use("/files", filesRouter);
 router.use("/auth", authRouter);
 router.use("/projects", projectsRouter);
+router.use("/system", systemRouter);
+router.use("/db-gui", dbGuiRouter);
 
 export default router;

@@ -613,4 +613,64 @@ Rules:
   }
 });
 
+/* ─────────────────── AI Code Review (streaming) ─────────────────── */
+router.post("/code-review", async (req, res) => {
+  try {
+    const { code, language = "typescript", filename = "file" } = req.body as {
+      code?: string; language?: string; filename?: string;
+    };
+    if (!code?.trim()) { res.status(400).json({ error: "code required" }); return; }
+
+    const systemPrompt = `You are an elite senior software engineer performing a thorough code review. Analyze the provided code and deliver a structured, actionable report.
+
+Your review MUST cover these categories (only if issues exist):
+1. **Security** — injection risks, secret exposure, auth bypass, insecure dependencies
+2. **Performance** — O(n²) loops, memory leaks, missing memoization, blocking calls
+3. **Correctness** — logic bugs, off-by-one, null/undefined handling, race conditions
+4. **Code Quality** — naming, DRY violations, complexity, dead code, magic numbers
+5. **Best Practices** — TypeScript strictness, error handling, accessibility, testing gaps
+
+Format:
+## Score: [0-100]
+> One sentence summary of overall quality.
+
+## [Category] — [✅ Good | ⚠️ Issues Found | ❌ Critical]
+For each issue:
+- **[Severity: Critical/High/Medium/Low]** [Title] — [Concise explanation, reference line numbers if possible]
+
+## ✅ What's Done Well
+[2-4 specific positives]
+
+## 🔧 Top Recommendations
+[Ordered list of the 3 most impactful improvements with code snippets where helpful]
+
+Be specific, reference actual code, give real line numbers when possible. Never be vague.`;
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const stream = anthropic.messages.stream({
+      model: "claude-opus-4-7",
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: "user", content: `Review this ${language} file (${filename}):\n\n\`\`\`${language}\n${code}\n\`\`\`` }],
+    });
+
+    for await (const event of stream) {
+      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+        res.write(`data: ${JSON.stringify({ content: event.delta.text })}\n\n`);
+      }
+    }
+
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
+  } catch (err) {
+    req.log.error({ err }, "code-review failed");
+    if (!res.headersSent) res.status(500).json({ error: "Review failed" });
+    else { res.write(`data: ${JSON.stringify({ error: "Stream error" })}\n\n`); res.end(); }
+  }
+});
+
 export default router;
