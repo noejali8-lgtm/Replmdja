@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Sparkles, Send, X, Code2, FileText, Wrench, ChevronDown } from "lucide-react";
+import { Sparkles, Send, X, Code2, FileText, Wrench, ChevronDown, ClipboardCopy, Play } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 interface Message {
@@ -14,6 +14,7 @@ interface AIPanelProps {
   language?: string;
   initialMessage?: string;
   onClose?: () => void;
+  onApplyCode?: (code: string, language: string) => void;
 }
 
 const QUICK_ACTIONS = [
@@ -29,11 +30,102 @@ const MODELS = [
   { id: "claude-opus-4-7", label: "Claude Opus 4.7", badge: "Most Capable" },
 ];
 
-export function AIPanel({ currentFile, currentCode, language = "txt", initialMessage, onClose }: AIPanelProps) {
+/* ─── Parse code blocks from markdown text ─── */
+interface CodeBlock {
+  lang: string;
+  code: string;
+  start: number;
+  end: number;
+}
+function extractCodeBlocks(text: string): CodeBlock[] {
+  const blocks: CodeBlock[] = [];
+  const re = /```(\w*)\n([\s\S]*?)```/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    blocks.push({ lang: m[1] || "plaintext", code: m[2], start: m.index, end: m.index + m[0].length });
+  }
+  return blocks;
+}
+
+/* ─── Render message with interactive code blocks ─── */
+function MessageContent({
+  text,
+  onApply,
+  currentFile,
+}: {
+  text: string;
+  onApply?: (code: string, lang: string) => void;
+  currentFile?: string;
+}) {
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const blocks = extractCodeBlocks(text);
+  if (blocks.length === 0) {
+    return (
+      <div className="prose prose-invert prose-xs max-w-none [&_pre]:bg-[#0d1117] [&_pre]:border [&_pre]:border-[#30363d] [&_pre]:rounded [&_pre]:p-2 [&_code]:text-[#ffa657] [&_code]:bg-[#161b22] [&_code]:px-1 [&_code]:rounded [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:mb-0.5 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-xs [&_strong]:text-[#e6edf3] [&_a]:text-[#58a6ff]">
+        <ReactMarkdown>{text}</ReactMarkdown>
+      </div>
+    );
+  }
+
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  blocks.forEach((block, idx) => {
+    if (cursor < block.start) {
+      const prose = text.slice(cursor, block.start);
+      parts.push(
+        <div key={`prose-${idx}`} className="prose prose-invert prose-xs max-w-none [&_pre]:bg-[#0d1117] [&_pre]:border [&_pre]:border-[#30363d] [&_pre]:rounded [&_pre]:p-2 [&_code]:text-[#ffa657] [&_code]:bg-[#161b22] [&_code]:px-1 [&_code]:rounded [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:mb-0.5 [&_strong]:text-[#e6edf3]">
+          <ReactMarkdown>{prose}</ReactMarkdown>
+        </div>
+      );
+    }
+    parts.push(
+      <div key={`code-${idx}`} className="rounded-lg border border-[#30363d] overflow-hidden my-2">
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#21262d] border-b border-[#30363d]">
+          <span className="text-[10px] font-mono text-[#8b949e] flex-1">{block.lang || "code"}</span>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(block.code).catch(() => {});
+              setCopiedIdx(idx);
+              setTimeout(() => setCopiedIdx(null), 1500);
+            }}
+            className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#30363d] transition-colors">
+            <ClipboardCopy className="h-2.5 w-2.5" />
+            {copiedIdx === idx ? "Copied!" : "Copy"}
+          </button>
+          {onApply && (
+            <button
+              onClick={() => onApply(block.code, block.lang)}
+              className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-[#238636]/80 hover:bg-[#238636] text-[#3fb950] border border-[#3fb950]/20 transition-colors font-medium">
+              <Play className="h-2.5 w-2.5" />
+              Apply{currentFile ? ` to ${currentFile}` : ""}
+            </button>
+          )}
+        </div>
+        <pre className="p-3 overflow-x-auto bg-[#0d1117] text-[11px] leading-relaxed">
+          <code className="text-[#e6edf3] font-mono">{block.code}</code>
+        </pre>
+      </div>
+    );
+    cursor = block.end;
+  });
+
+  if (cursor < text.length) {
+    const prose = text.slice(cursor);
+    parts.push(
+      <div key="prose-tail" className="prose prose-invert prose-xs max-w-none [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:mb-0.5 [&_strong]:text-[#e6edf3]">
+        <ReactMarkdown>{prose}</ReactMarkdown>
+      </div>
+    );
+  }
+
+  return <div className="space-y-1">{parts}</div>;
+}
+
+export function AIPanel({ currentFile, currentCode, language = "txt", initialMessage, onClose, onApplyCode }: AIPanelProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "agent",
-      text: "Hi! I'm your AI assistant powered by Claude. I can see your current file and help you:\n\n- 🐛 Debug errors and fix bugs\n- ✨ Add new features\n- 🔄 Refactor and clean up code\n- 📖 Explain any part of the codebase\n- 💡 Suggest improvements\n\nWhat would you like to do?",
+      text: "Hi! I'm your AI assistant powered by Claude. I can see your current file and help you:\n\n- 🐛 Debug errors and fix bugs\n- ✨ Add new features\n- 🔄 Refactor and clean up code\n- 📖 Explain any part of the codebase\n- 💡 Suggest improvements\n\nWhen I write code, you'll see an **Apply** button to preview the diff before accepting.",
     },
   ]);
   const [input, setInput] = useState(initialMessage ?? "");
@@ -181,7 +273,7 @@ export function AIPanel({ currentFile, currentCode, language = "txt", initialMes
             <div className={`h-6 w-6 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold ${m.role === "agent" ? "bg-gradient-to-br from-[#58a6ff] to-[#a371f7] text-white" : "bg-[#30363d] text-[#e6edf3]"}`}>
               {m.role === "agent" ? <Sparkles className="h-3 w-3" /> : "U"}
             </div>
-            <div className={`max-w-[88%] rounded-xl px-3 py-2 text-xs leading-relaxed ${m.role === "agent" ? "bg-[#161b22] text-[#e6edf3] rounded-tl-none" : "bg-[#1f6feb] text-white rounded-tr-none"}`}>
+            <div className={`max-w-[92%] rounded-xl px-3 py-2 text-xs leading-relaxed ${m.role === "agent" ? "bg-[#161b22] text-[#e6edf3] rounded-tl-none" : "bg-[#1f6feb] text-white rounded-tr-none"}`}>
               {m.role === "agent" ? (
                 m.isStreaming && !m.text ? (
                   <div className="flex gap-1 py-1">
@@ -190,9 +282,11 @@ export function AIPanel({ currentFile, currentCode, language = "txt", initialMes
                     ))}
                   </div>
                 ) : (
-                  <div className="prose prose-invert prose-xs max-w-none [&_pre]:bg-[#0d1117] [&_pre]:border [&_pre]:border-[#30363d] [&_pre]:rounded [&_pre]:p-2 [&_code]:text-[#ffa657] [&_code]:bg-[#161b22] [&_code]:px-1 [&_code]:rounded [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:mb-0.5 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-xs [&_strong]:text-[#e6edf3] [&_a]:text-[#58a6ff]">
-                    <ReactMarkdown>{m.text}</ReactMarkdown>
-                  </div>
+                  <MessageContent
+                    text={m.text}
+                    onApply={onApplyCode}
+                    currentFile={currentFile}
+                  />
                 )
               ) : (
                 <p>{m.text}</p>

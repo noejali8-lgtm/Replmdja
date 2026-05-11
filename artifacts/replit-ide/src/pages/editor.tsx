@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import {
   ArrowLeft, Play, Square, Share2, Rocket, Settings, Check,
   FileCode, Search, GitBranch, Terminal, Eye, Sparkles, Monitor,
   ChevronDown, X, Circle, Maximize2, Minimize2, Split, Package,
   Database, Lock, RefreshCw, ExternalLink, ChevronRight, Plus,
-  Layers, Code2, Globe
+  Layers, Code2, Globe, AlertTriangle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { MonacoEditorPane, getLanguage, type CursorPosition } from "@/components/editor/MonacoEditor";
@@ -16,6 +16,7 @@ import { StatusBar } from "@/components/editor/StatusBar";
 import { FileTree, type FileNode } from "@/components/editor/FileTree";
 import { AIPanel } from "@/components/editor/AIPanel";
 import { SearchPanel } from "@/components/editor/SearchPanel";
+import { DiffViewer } from "@/components/editor/DiffViewer";
 
 /* ─── Types ─────────────────────────────────────────── */
 type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database";
@@ -36,7 +37,14 @@ interface ConsoleLine {
   ts: string;
 }
 
-/* ─── Initial demo file tree ─────────────────────────── */
+interface DiffState {
+  originalCode: string;
+  proposedCode: string;
+  language: string;
+  tabIdx: number;
+}
+
+/* ─── Default demo file contents ─────────────────────── */
 const APP_TSX = `import { useState } from "react";
 
 function App() {
@@ -172,69 +180,64 @@ npm run dev
 - 🚀 Deploy to Replit in one click
 `;
 
-const DEMO_TREE: FileNode[] = [
+/* ─── File-content stubs keyed by path ─── */
+const DEFAULT_CONTENTS: Record<string, string> = {
+  "src/App.tsx": APP_TSX,
+  "src/main.tsx": MAIN_TSX,
+  "src/index.css": INDEX_CSS,
+  "package.json": PKG_JSON,
+  "README.md": README_MD,
+};
+
+const DEFAULT_TREE: FileNode[] = [
   {
-    name: "my-web-app", path: "my-web-app", type: "dir",
+    name: "src", path: "src", type: "dir",
     children: [
-      {
-        name: "src", path: "my-web-app/src", type: "dir",
-        children: [
-          { name: "App.tsx", path: "my-web-app/src/App.tsx", type: "file", ext: "tsx", content: APP_TSX } as FileNode & { content: string },
-          { name: "main.tsx", path: "my-web-app/src/main.tsx", type: "file", ext: "tsx", content: MAIN_TSX } as FileNode & { content: string },
-          { name: "index.css", path: "my-web-app/src/index.css", type: "file", ext: "css", content: INDEX_CSS } as FileNode & { content: string },
-        ],
-      },
-      { name: "package.json", path: "my-web-app/package.json", type: "file", ext: "json", content: PKG_JSON } as FileNode & { content: string },
-      { name: "README.md", path: "my-web-app/README.md", type: "file", ext: "md", content: README_MD } as FileNode & { content: string },
+      { name: "App.tsx",   path: "src/App.tsx",   type: "file", ext: "tsx" },
+      { name: "main.tsx",  path: "src/main.tsx",  type: "file", ext: "tsx" },
+      { name: "index.css", path: "src/index.css", type: "file", ext: "css" },
     ],
   },
+  { name: "package.json", path: "package.json", type: "file", ext: "json" },
+  { name: "README.md",    path: "README.md",    type: "file", ext: "md"   },
 ];
 
-/* ─── Helpers ────────────────────────────────────────── */
-function flattenTree(nodes: FileNode[]): (FileNode & { content?: string })[] {
-  return nodes.flatMap(n =>
-    n.type === "file"
-      ? [n as FileNode & { content?: string }]
-      : flattenTree(n.children ?? [])
-  );
+/* ─── Persistence helpers ─────────────────────────────── */
+function lsKey(project: string, suffix: string) {
+  return `ide-${project}-${suffix}`;
+}
+function saveTree(project: string, tree: FileNode[]) {
+  try { localStorage.setItem(lsKey(project, "tree"), JSON.stringify(tree)); } catch { /**/ }
+}
+function loadTree(project: string): FileNode[] | null {
+  try {
+    const raw = localStorage.getItem(lsKey(project, "tree"));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function saveContent(project: string, path: string, content: string) {
+  try { localStorage.setItem(lsKey(project, `file:${path}`), content); } catch { /**/ }
+}
+function loadContent(project: string, path: string): string | null {
+  return localStorage.getItem(lsKey(project, `file:${path}`));
+}
+function deleteContent(project: string, path: string) {
+  localStorage.removeItem(lsKey(project, `file:${path}`));
+}
+function saveOpenTabs(project: string, paths: string[]) {
+  try { localStorage.setItem(lsKey(project, "tabs"), JSON.stringify(paths)); } catch { /**/ }
+}
+function loadOpenTabs(project: string): string[] | null {
+  try {
+    const raw = localStorage.getItem(lsKey(project, "tabs"));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
 }
 
-function buildPreviewHtml(code: string): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Preview</title>
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0d1117;color:#e6edf3;font-family:system-ui,sans-serif}</style>
-</head>
-<body>
-  <div id="root"></div>
-  <script type="text/babel">
-    ${code.replace(/^import\s+.*?(\n|;)/gm, "").replace(/export\s+default\s+/, "const __App = ")}
-    const _root = ReactDOM.createRoot(document.getElementById('root'));
-    _root.render(React.createElement(typeof __App !== 'undefined' ? __App : () => React.createElement('div', {style:{padding:'2rem',color:'#8b949e'}}, 'Export default not found')));
-  </script>
-</body>
-</html>`;
+/* ─── Tree helpers ───────────────────────────────────── */
+function flattenTree(nodes: FileNode[]): FileNode[] {
+  return nodes.flatMap(n => n.type === "file" ? [n] : flattenTree(n.children ?? []));
 }
-
-function nodeToTab(node: FileNode & { content?: string }): Tab {
-  const content = node.content ?? "";
-  return {
-    path: node.path,
-    name: node.name,
-    ext: node.ext ?? "",
-    content,
-    savedContent: content,
-    language: getLanguage(node.ext ?? ""),
-  };
-}
-
-const STORAGE_KEY = "replit-ide-open-tabs";
 
 function addToTree(nodes: FileNode[], parentPath: string, newNode: FileNode): FileNode[] {
   if (!parentPath) return [...nodes, newNode];
@@ -259,9 +262,76 @@ function renameInTree(nodes: FileNode[], oldPath: string, newName: string, newPa
   });
 }
 
+/* ─── Preview builder (in-browser Babel) ─────────────── */
+function buildPreviewHtml(allFiles: { path: string; content: string }[]): string {
+  const appFile = allFiles.find(f => f.path.endsWith("App.tsx") || f.path.endsWith("App.jsx"));
+  const cssFile = allFiles.find(f => f.path.endsWith("index.css") || f.path.endsWith("App.css"));
+  const appCode = appFile?.content ?? "export default () => <div>No App.tsx found</div>;";
+  const cssCode = cssFile?.content ?? "";
+
+  const cleanedCode = appCode
+    .replace(/^import\s+.*?from\s+['"][^'"]+['"]\s*;?\s*$/gm, "")
+    .replace(/export\s+default\s+/, "const __App = ")
+    .replace(/export\s+\{[^}]+\}\s*;?/g, "");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Browser Preview</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#0d1117;color:#e6edf3;font-family:system-ui,sans-serif}
+    ${cssCode}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react,typescript">
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
+    ${cleanedCode}
+    try {
+      const _root = ReactDOM.createRoot(document.getElementById('root'));
+      _root.render(React.createElement(typeof __App !== 'undefined' ? __App : () => React.createElement('div', {style:{padding:'2rem',color:'#8b949e',textAlign:'center'}}, '⚠️ No default export found in App.tsx')));
+    } catch(e) {
+      document.getElementById('root').innerHTML = '<div style="padding:1.5rem;color:#ff7b72;font-family:monospace;font-size:13px;background:#161b22;border:1px solid #f85149;border-radius:8px;margin:1rem"><strong>Runtime Error</strong><br/><br/>' + e.message + '</div>';
+    }
+  </script>
+</body>
+</html>`;
+}
+
+/* ─── Resolve file content (localStorage → defaults) ─── */
+function resolveContent(project: string, path: string): string {
+  const saved = loadContent(project, path);
+  if (saved !== null) return saved;
+  const relative = path.replace(/^[^/]+\//, "");
+  return DEFAULT_CONTENTS[path] ?? DEFAULT_CONTENTS[relative] ?? "";
+}
+
+function nodeToTab(project: string, node: FileNode): Tab {
+  const content = resolveContent(project, node.path);
+  return {
+    path: node.path,
+    name: node.name,
+    ext: node.ext ?? "",
+    content,
+    savedContent: content,
+    language: getLanguage(node.ext ?? ""),
+  };
+}
+
 /* ─── Main Editor Component ──────────────────────────── */
 export default function Editor() {
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  const projectName = params.get("project") ?? "my-web-app";
+
   const { toast } = useToast();
 
   /* Layout */
@@ -274,11 +344,14 @@ export default function Editor() {
   const [isSplitView, setIsSplitView] = useState(false);
   const [isBottomExpanded, setIsBottomExpanded] = useState(false);
 
+  /* Diff viewer */
+  const [diffState, setDiffState] = useState<DiffState | null>(null);
+
   /* Editor */
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabIdx, setActiveTabIdx] = useState(0);
   const [splitTabIdx, setSplitTabIdx] = useState(1);
-  const [tree, setTree] = useState<FileNode[]>(DEMO_TREE);
+  const [tree, setTree] = useState<FileNode[]>([]);
   const [cursorPos, setCursorPos] = useState<CursorPosition>({ line: 1, column: 1 });
   const [aiPrompt, setAiPrompt] = useState<string | undefined>();
 
@@ -286,7 +359,7 @@ export default function Editor() {
   const [isRunning, setIsRunning] = useState(false);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [consoleLines, setConsoleLines] = useState<ConsoleLine[]>([
-    { text: "Ready. Click Run to start your project.", level: "info", ts: new Date().toLocaleTimeString() },
+    { text: "Ready. Click Run to launch the in-browser preview.", level: "info", ts: new Date().toLocaleTimeString() },
   ]);
   const [copied, setCopied] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -294,24 +367,36 @@ export default function Editor() {
   const activeTab = tabs[activeTabIdx] ?? null;
   const splitTab = tabs[splitTabIdx] ?? null;
 
-  /* ─── Init tabs from localStorage ─── */
+  /* ─── Init: load tree + open tabs from localStorage ─── */
   useEffect(() => {
-    const allFiles = flattenTree(DEMO_TREE);
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const paths: string[] = JSON.parse(saved);
-        const restored = paths.map(p => allFiles.find(f => f.path === p)).filter(Boolean).map(f => nodeToTab(f!));
-        if (restored.length > 0) { setTabs(restored); return; }
-      }
-    } catch { /**/ }
-    const def = allFiles[0];
-    if (def) setTabs([nodeToTab(def)]);
-  }, []);
+    const savedTree = loadTree(projectName) ?? DEFAULT_TREE;
+    setTree(savedTree);
 
+    const allFiles = flattenTree(savedTree);
+    const savedTabPaths = loadOpenTabs(projectName);
+    if (savedTabPaths && savedTabPaths.length > 0) {
+      const restored = savedTabPaths
+        .map(p => allFiles.find(f => f.path === p))
+        .filter(Boolean)
+        .map(f => nodeToTab(projectName, f!));
+      if (restored.length > 0) {
+        setTabs(restored);
+        return;
+      }
+    }
+    const def = allFiles[0];
+    if (def) setTabs([nodeToTab(projectName, def)]);
+  }, [projectName]);
+
+  /* Persist open tab list */
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tabs.map(t => t.path)));
-  }, [tabs]);
+    if (tabs.length > 0) saveOpenTabs(projectName, tabs.map(t => t.path));
+  }, [tabs, projectName]);
+
+  /* Persist tree structure */
+  useEffect(() => {
+    if (tree.length > 0) saveTree(projectName, tree);
+  }, [tree, projectName]);
 
   /* ─── Keyboard shortcuts ─── */
   useEffect(() => {
@@ -323,23 +408,24 @@ export default function Editor() {
       if (ctrl && e.shiftKey && e.key.toUpperCase() === "F") { e.preventDefault(); setSidePanel("search"); setShowSide(true); }
       if (ctrl && e.shiftKey && e.key.toUpperCase() === "A") { e.preventDefault(); setShowAI(p => !p); }
       if (ctrl && e.shiftKey && e.key.toUpperCase() === "P") { e.preventDefault(); setBottomPanel("preview"); setShowBottom(true); }
+      if (e.key === "Escape" && diffState) { setDiffState(null); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [diffState]);
 
   /* ─── File operations ─── */
-  const openFile = useCallback((node: FileNode & { content?: string }) => {
+  const openFile = useCallback((node: FileNode) => {
     if (node.type !== "file") return;
     const existing = tabs.findIndex(t => t.path === node.path);
     if (existing >= 0) { setActiveTabIdx(existing); return; }
-    const tab = nodeToTab(node);
+    const tab = nodeToTab(projectName, node);
     setTabs(prev => {
       const next = [...prev, tab];
       setActiveTabIdx(next.length - 1);
       return next;
     });
-  }, [tabs]);
+  }, [tabs, projectName]);
 
   const closeTab = (e: React.MouseEvent, idx: number) => {
     e.stopPropagation();
@@ -359,7 +445,10 @@ export default function Editor() {
   const saveActiveFile = useCallback(async () => {
     if (!activeTab) return;
     setTabs(prev => prev.map((t, i) => i === activeTabIdx ? { ...t, savedContent: t.content } : t));
+    /* 1. Persist to localStorage (instant, always works) */
+    saveContent(projectName, activeTab.path, activeTab.content);
     toast({ title: "Saved", description: activeTab.name });
+    /* 2. Best-effort write to disk */
     try {
       await fetch(`/api/files/write?path=${encodeURIComponent(activeTab.path)}`, {
         method: "PUT",
@@ -367,24 +456,25 @@ export default function Editor() {
         body: JSON.stringify({ content: activeTab.content }),
       });
     } catch { /**/ }
-  }, [activeTab, activeTabIdx, toast]);
+  }, [activeTab, activeTabIdx, projectName, toast]);
 
   const handleNewFile = useCallback((parentPath: string) => {
     const name = window.prompt("File name (e.g. utils.ts):");
     if (!name?.trim()) return;
     const trimmed = name.trim();
-    const path = parentPath ? `${parentPath}/${trimmed}` : `my-web-app/${trimmed}`;
+    const path = parentPath ? `${parentPath}/${trimmed}` : trimmed;
     const ext = trimmed.split(".").pop() ?? "";
-    const newNode = { name: trimmed, path, type: "file" as const, ext, content: "" };
+    const newNode: FileNode = { name: trimmed, path, type: "file", ext };
+    saveContent(projectName, path, "");
     setTree(prev => addToTree(prev, parentPath, newNode));
     openFile(newNode);
-  }, [openFile]);
+  }, [openFile, projectName]);
 
   const handleNewFolder = useCallback((parentPath: string) => {
     const name = window.prompt("Folder name:");
     if (!name?.trim()) return;
     const trimmed = name.trim();
-    const path = parentPath ? `${parentPath}/${trimmed}` : `my-web-app/${trimmed}`;
+    const path = parentPath ? `${parentPath}/${trimmed}` : trimmed;
     const newNode: FileNode = { name: trimmed, path, type: "dir", children: [] };
     setTree(prev => addToTree(prev, parentPath, newNode));
   }, []);
@@ -393,50 +483,83 @@ export default function Editor() {
     if (!window.confirm(`Delete "${node.name}"?`)) return;
     setTree(prev => removeFromTree(prev, node.path));
     setTabs(prev => prev.filter(t => !t.path.startsWith(node.path)));
-  }, []);
+    flattenTree([node]).forEach(f => deleteContent(projectName, f.path));
+  }, [projectName]);
 
   const handleRename = useCallback((node: FileNode, newName: string) => {
     const newPath = node.path.replace(/[^/]+$/, newName);
+    const oldContent = loadContent(projectName, node.path) ?? resolveContent(projectName, node.path);
+    saveContent(projectName, newPath, oldContent);
+    deleteContent(projectName, node.path);
     setTree(prev => renameInTree(prev, node.path, newName, newPath));
     setTabs(prev => prev.map(t =>
       t.path === node.path
         ? { ...t, name: newName, path: newPath, ext: newName.split(".").pop() ?? "", language: getLanguage(newName.split(".").pop() ?? "") }
         : t
     ));
-  }, []);
+  }, [projectName]);
 
   const handleDownload = useCallback((node: FileNode) => {
     const tab = tabs.find(t => t.path === node.path);
-    const content = tab?.content ?? (node as any).content ?? "";
+    const content = tab?.content ?? resolveContent(projectName, node.path);
     const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = node.name; a.click();
     URL.revokeObjectURL(url);
-  }, [tabs]);
+  }, [tabs, projectName]);
+
+  /* ─── AI code apply → diff viewer ─── */
+  const handleApplyCode = useCallback((code: string, lang: string) => {
+    if (!activeTab) {
+      toast({ title: "No file open", description: "Open a file first to apply changes." });
+      return;
+    }
+    setDiffState({
+      originalCode: activeTab.content,
+      proposedCode: code,
+      language: lang || activeTab.language,
+      tabIdx: activeTabIdx,
+    });
+  }, [activeTab, activeTabIdx, toast]);
+
+  const handleDiffAccept = useCallback((newCode: string) => {
+    if (!diffState) return;
+    setTabs(prev => prev.map((t, i) =>
+      i === diffState.tabIdx ? { ...t, content: newCode } : t
+    ));
+    setDiffState(null);
+    toast({ title: "Changes applied", description: "Code updated. Press Ctrl+S to save." });
+  }, [diffState, toast]);
+
+  const handleDiffReject = useCallback(() => {
+    setDiffState(null);
+  }, []);
 
   /* ─── Run / Stop ─── */
+  const allFilesForPreview = flattenTree(tree).map(f => ({
+    path: f.path,
+    content: tabs.find(t => t.path === f.path)?.content ?? resolveContent(projectName, f.path),
+  }));
+
   const handleRun = useCallback(() => {
     setIsRunning(true);
-    const appTab = tabs.find(t => t.name === "App.tsx");
-    const appFile = flattenTree(tree).find(f => f.name === "App.tsx");
-    const code = appTab?.content ?? appFile?.content ?? "";
-    setPreviewHtml(buildPreviewHtml(code));
+    setPreviewHtml(buildPreviewHtml(allFilesForPreview));
     setBottomPanel("preview");
     setShowBottom(true);
+    const ts = new Date().toLocaleTimeString();
     setConsoleLines([
-      { text: "> npm run dev", level: "success", ts: new Date().toLocaleTimeString() },
-      { text: "VITE v7.3.2  ready in 312 ms", level: "info", ts: new Date().toLocaleTimeString() },
-      { text: "➜  Local:   http://localhost:5173/", level: "success", ts: new Date().toLocaleTimeString() },
-      { text: "➜  Network: http://172.31.0.1:5173/", level: "info", ts: new Date().toLocaleTimeString() },
+      { text: "⚠  Browser Preview — runs via in-browser Babel (no Node.js)", level: "warn", ts },
+      { text: "Transpiling React/TypeScript with Babel standalone…", level: "info", ts },
+      { text: "✓ Preview ready — CSS + React rendered in iframe", level: "success", ts },
     ]);
-    toast({ title: "Running", description: "Dev server started on port 5173" });
-  }, [tabs, tree, toast]);
+    toast({ title: "Preview running", description: "Browser Preview (Babel) — not a real dev server" });
+  }, [allFilesForPreview, toast]);
 
   const handleStop = useCallback(() => {
     setIsRunning(false);
     setPreviewHtml(null);
-    setConsoleLines(prev => [...prev, { text: "Process terminated.", level: "error", ts: new Date().toLocaleTimeString() }]);
+    setConsoleLines(prev => [...prev, { text: "Preview stopped.", level: "error", ts: new Date().toLocaleTimeString() }]);
     toast({ title: "Stopped" });
   }, [toast]);
 
@@ -456,7 +579,7 @@ export default function Editor() {
   const breadcrumbs = activeTab ? activeTab.path.split("/") : [];
   const filesForSearch = flattenTree(tree).map(f => ({
     ...f,
-    content: tabs.find(t => t.path === f.path)?.content ?? f.content ?? "",
+    content: tabs.find(t => t.path === f.path)?.content ?? resolveContent(projectName, f.path),
   }));
 
   /* ─── Sidebar toggle button ─── */
@@ -507,13 +630,12 @@ export default function Editor() {
           <div className="h-4 w-4 rounded bg-gradient-to-br from-[#58a6ff] to-[#a371f7] flex items-center justify-center shrink-0">
             <span className="text-white text-[8px] font-bold">R</span>
           </div>
-          <span className="text-xs font-medium">my-web-app</span>
+          <span className="text-xs font-medium truncate max-w-[120px]">{projectName}</span>
           <ChevronDown className="h-3 w-3 text-[#8b949e]" />
         </div>
 
         <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1f6feb]/20 text-[#58a6ff] border border-[#1f6feb]/30">main</span>
 
-        {/* Command palette trigger (desktop) */}
         <button onClick={() => setShowCommandPalette(true)}
           className="hidden md:flex items-center gap-2 flex-1 max-w-xs px-3 py-1 rounded bg-[#21262d] border border-[#30363d] text-xs text-[#484f58] hover:text-[#8b949e] hover:border-[#484f58] transition-colors">
           <Search className="h-3 w-3" />
@@ -646,7 +768,7 @@ export default function Editor() {
                   {sidePanel === "secrets" && (
                     <div className="flex flex-col h-full p-3">
                       <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest mb-3">Secrets</p>
-                      <p className="text-[10px] text-[#8b949e] mb-3">Environment variables injected at runtime</p>
+                      <p className="text-[10px] text-[#8b949e] mb-3">Environment variables for this project</p>
                       <button className="flex items-center gap-2 px-3 py-2 rounded border border-dashed border-[#30363d] text-xs text-[#8b949e] hover:text-[#e6edf3] hover:border-[#484f58] transition-colors w-full">
                         <Plus className="h-3.5 w-3.5" /> Add secret
                       </button>
@@ -699,7 +821,6 @@ export default function Editor() {
                       className="h-full px-3 text-[#484f58] hover:text-[#8b949e] hover:bg-[#21262d] transition-colors shrink-0">
                       <Plus className="h-3.5 w-3.5" />
                     </button>
-                    {/* Split toggle */}
                     <div className="ml-auto px-2 shrink-0">
                       <button onClick={() => setIsSplitView(p => !p)}
                         title="Split Editor (⌘\)"
@@ -712,73 +833,88 @@ export default function Editor() {
                   {/* Breadcrumbs */}
                   {activeTab && (
                     <div className="flex items-center gap-0.5 px-3 py-1 bg-[#0d1117] border-b border-[#21262d] text-[10px] text-[#8b949e] shrink-0 overflow-x-auto">
+                      <span className="text-[#8b949e] shrink-0">{projectName}</span>
                       {breadcrumbs.map((part, i) => (
                         <span key={i} className="flex items-center gap-0.5 shrink-0">
-                          {i > 0 && <ChevronRight className="h-2.5 w-2.5 opacity-50" />}
+                          <ChevronRight className="h-2.5 w-2.5 opacity-50" />
                           <span className={i === breadcrumbs.length - 1 ? "text-[#e6edf3]" : ""}>{part}</span>
                         </span>
                       ))}
                     </div>
                   )}
 
-                  {/* Editor panes */}
-                  <div className="flex flex-1 overflow-hidden">
-                    {activeTab ? (
-                      <>
-                        <div className="flex-1 overflow-hidden">
-                          <MonacoEditorPane
-                            value={activeTab.content}
-                            language={activeTab.language}
-                            onChange={handleCodeChange}
-                            onSave={saveActiveFile}
-                            onCursorChange={setCursorPos}
-                            onInlineAssist={(selection) => {
-                              setShowAI(true);
-                              if (selection) {
-                                setAiPrompt(`Please explain and improve this code:\n\`\`\`${activeTab.language}\n${selection}\n\`\`\``);
-                              } else {
-                                setAiPrompt("What would you like help with in this file?");
-                              }
-                            }}
-                          />
-                        </div>
-                        {isSplitView && splitTab && (
-                          <>
-                            <div className="w-px bg-[#21262d]" />
-                            <div className="flex-1 overflow-hidden flex flex-col">
-                              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#21262d] bg-[#161b22] shrink-0">
-                                {tabs.map((t, i) => (
-                                  <button key={t.path}
-                                    onClick={() => setSplitTabIdx(i)}
-                                    className={`text-xs px-2 py-0.5 rounded transition-colors ${splitTabIdx === i ? "text-[#58a6ff] bg-[#1f6feb]/10" : "text-[#8b949e] hover:text-[#e6edf3]"}`}>
-                                    {t.name}
-                                  </button>
-                                ))}
+                  {/* ── Diff Viewer overlay ── */}
+                  {diffState ? (
+                    <div className="flex-1 overflow-hidden">
+                      <DiffViewer
+                        fileName={tabs[diffState.tabIdx]?.name ?? "file"}
+                        originalCode={diffState.originalCode}
+                        proposedCode={diffState.proposedCode}
+                        language={diffState.language}
+                        onAccept={handleDiffAccept}
+                        onReject={handleDiffReject}
+                      />
+                    </div>
+                  ) : (
+                    /* Editor panes */
+                    <div className="flex flex-1 overflow-hidden">
+                      {activeTab ? (
+                        <>
+                          <div className="flex-1 overflow-hidden">
+                            <MonacoEditorPane
+                              value={activeTab.content}
+                              language={activeTab.language}
+                              onChange={handleCodeChange}
+                              onSave={saveActiveFile}
+                              onCursorChange={setCursorPos}
+                              onInlineAssist={(selection) => {
+                                setShowAI(true);
+                                if (selection) {
+                                  setAiPrompt(`Please explain and improve this code:\n\`\`\`${activeTab.language}\n${selection}\n\`\`\``);
+                                } else {
+                                  setAiPrompt("What would you like help with in this file?");
+                                }
+                              }}
+                            />
+                          </div>
+                          {isSplitView && splitTab && (
+                            <>
+                              <div className="w-px bg-[#21262d]" />
+                              <div className="flex-1 overflow-hidden flex flex-col">
+                                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#21262d] bg-[#161b22] shrink-0">
+                                  {tabs.map((t, i) => (
+                                    <button key={t.path}
+                                      onClick={() => setSplitTabIdx(i)}
+                                      className={`text-xs px-2 py-0.5 rounded transition-colors ${splitTabIdx === i ? "text-[#58a6ff] bg-[#1f6feb]/10" : "text-[#8b949e] hover:text-[#e6edf3]"}`}>
+                                      {t.name}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                  <MonacoEditorPane
+                                    value={splitTab.content}
+                                    language={splitTab.language}
+                                    onChange={() => {}}
+                                    readOnly
+                                  />
+                                </div>
                               </div>
-                              <div className="flex-1 overflow-hidden">
-                                <MonacoEditorPane
-                                  value={splitTab.content}
-                                  language={splitTab.language}
-                                  onChange={() => {}}
-                                  readOnly
-                                />
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center flex-1 text-[#484f58] gap-4 bg-[#0d1117]">
-                        <Code2 className="h-12 w-12 opacity-20" />
-                        <div className="text-center">
-                          <p className="text-sm font-medium text-[#8b949e] mb-1">No file open</p>
-                          <p className="text-xs">Select a file from the explorer or press</p>
-                          <kbd className="mt-1 inline-block px-1.5 py-0.5 rounded bg-[#21262d] border border-[#30363d] text-[10px]">⌘K</kbd>
-                          <span className="text-xs"> to search</span>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center flex-1 text-[#484f58] gap-4 bg-[#0d1117]">
+                          <Code2 className="h-12 w-12 opacity-20" />
+                          <div className="text-center">
+                            <p className="text-sm font-medium text-[#8b949e] mb-1">No file open</p>
+                            <p className="text-xs">Select a file from the explorer or press</p>
+                            <kbd className="mt-1 inline-block px-1.5 py-0.5 rounded bg-[#21262d] border border-[#30363d] text-[10px]">⌘K</kbd>
+                            <span className="text-xs"> to search</span>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </Panel>
 
@@ -792,7 +928,7 @@ export default function Editor() {
                       <div className="flex items-center gap-0.5 px-2 py-1 border-b border-[#21262d] bg-[#161b22] shrink-0">
                         {[
                           { id: "terminal" as const, icon: <Terminal className="h-3 w-3" />, label: "Terminal" },
-                          { id: "preview" as const, icon: <Globe className="h-3 w-3" />, label: "Preview" },
+                          { id: "preview" as const, icon: <Globe className="h-3 w-3" />, label: "Browser Preview" },
                           { id: "console" as const, icon: <Layers className="h-3 w-3" />, label: "Console" },
                         ].map(p => (
                           <button key={p.id} onClick={() => setBottomPanel(p.id)}
@@ -818,6 +954,7 @@ export default function Editor() {
 
                         {bottomPanel === "preview" && (
                           <div className="flex flex-col h-full">
+                            {/* Preview toolbar */}
                             <div className="flex items-center gap-2 px-3 py-1.5 bg-[#161b22] border-b border-[#21262d] shrink-0">
                               <div className="flex gap-1.5">
                                 <div className="h-2.5 w-2.5 rounded-full bg-[#f85149]" />
@@ -826,13 +963,15 @@ export default function Editor() {
                               </div>
                               <div className="flex-1 flex items-center gap-2 bg-[#0d1117] border border-[#30363d] rounded px-2 py-0.5 text-[10px] text-[#8b949e]">
                                 <Globe className="h-2.5 w-2.5" />
-                                <span className="truncate">{isRunning ? "localhost:5173" : "Not running"}</span>
+                                <span className="truncate">Browser Preview (Babel)</span>
+                              </div>
+                              {/* Babel badge */}
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#d29922]/10 border border-[#d29922]/20 text-[9px] text-[#d29922] shrink-0">
+                                <AlertTriangle className="h-2.5 w-2.5" />
+                                <span>In-browser only</span>
                               </div>
                               <button
-                                onClick={() => {
-                                  const tab = tabs.find(t => t.name === "App.tsx");
-                                  if (tab) setPreviewHtml(buildPreviewHtml(tab.content));
-                                }}
+                                onClick={() => setPreviewHtml(buildPreviewHtml(allFilesForPreview))}
                                 className="h-5 w-5 flex items-center justify-center rounded text-[#484f58] hover:text-[#8b949e] hover:bg-[#21262d] transition-colors">
                                 <RefreshCw className="h-3 w-3" />
                               </button>
@@ -842,16 +981,17 @@ export default function Editor() {
                             </div>
                             {previewHtml ? (
                               <iframe ref={iframeRef} srcDoc={previewHtml}
-                                title="Preview" className="flex-1 border-none bg-white"
+                                title="Browser Preview" className="flex-1 border-none bg-white"
                                 sandbox="allow-scripts allow-same-origin" />
                             ) : (
                               <div className="flex flex-col items-center justify-center flex-1 text-[#484f58] gap-3">
                                 <Monitor className="h-10 w-10 opacity-20" />
                                 <div className="text-center">
                                   <p className="text-xs font-medium text-[#8b949e] mb-1">Preview not running</p>
+                                  <p className="text-[10px] text-[#484f58] mb-3">Renders React/HTML via in-browser Babel (no Node.js)</p>
                                   <button onClick={handleRun}
-                                    className="flex items-center gap-1.5 mx-auto px-3 py-1.5 rounded bg-[#238636] hover:bg-[#2ea043] text-white text-xs transition-colors mt-2">
-                                    <Play className="h-3.5 w-3.5" /> Run Project
+                                    className="flex items-center gap-1.5 mx-auto px-3 py-1.5 rounded bg-[#238636] hover:bg-[#2ea043] text-white text-xs transition-colors">
+                                    <Play className="h-3.5 w-3.5" /> Run Preview
                                   </button>
                                 </div>
                               </div>
@@ -900,6 +1040,7 @@ export default function Editor() {
                     language={activeTab?.language}
                     initialMessage={aiPrompt}
                     onClose={() => { setShowAI(false); setAiPrompt(undefined); }}
+                    onApplyCode={handleApplyCode}
                   />
                 </div>
               </Panel>
