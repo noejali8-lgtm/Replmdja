@@ -132,4 +132,67 @@ router.get("/content", (req, res) => {
   res.json({ content, size: stat.size, lines, ext, name: path.basename(abs) });
 });
 
+/* ── Write file content  PUT /api/files/write?path=... ── */
+router.put("/write", (req, res) => {
+  const relPath = String(req.query.path ?? "");
+  if (!relPath) { res.status(400).json({ error: "path required" }); return; }
+
+  const abs = path.resolve(WORKSPACE, relPath);
+  if (!abs.startsWith(WORKSPACE)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const content: string = typeof req.body?.content === "string" ? req.body.content : "";
+
+  try {
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content, "utf-8");
+    const size  = Buffer.byteLength(content, "utf-8");
+    const lines = content.split("\n").length;
+    res.json({ ok: true, size, lines, path: relPath });
+  } catch (err) {
+    res.status(500).json({ error: "Cannot write file" });
+  }
+});
+
+/* ── Create file  POST /api/files/create?path=... ── */
+router.post("/create", (req, res) => {
+  const relPath = String(req.query.path ?? "");
+  if (!relPath) { res.status(400).json({ error: "path required" }); return; }
+
+  const abs = path.resolve(WORKSPACE, relPath);
+  if (!abs.startsWith(WORKSPACE)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  try {
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    if (!fs.existsSync(abs)) fs.writeFileSync(abs, req.body?.content ?? "", "utf-8");
+    res.status(201).json({ ok: true, path: relPath });
+  } catch {
+    res.status(500).json({ error: "Cannot create file" });
+  }
+});
+
+/* ── Delete file  DELETE /api/files/delete?path=... ── */
+router.delete("/delete", (req, res) => {
+  const relPath = String(req.query.path ?? "");
+  if (!relPath) { res.status(400).json({ error: "path required" }); return; }
+
+  const abs = path.resolve(WORKSPACE, relPath);
+  if (!abs.startsWith(WORKSPACE)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  try {
+    if (fs.existsSync(abs)) fs.rmSync(abs, { recursive: true, force: true });
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Cannot delete file" });
+  }
+});
+
 export default router;

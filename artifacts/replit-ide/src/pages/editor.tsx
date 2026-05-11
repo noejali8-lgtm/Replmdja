@@ -1,183 +1,158 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
+import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import {
-  Play, Square, Share2, Rocket, ChevronRight, ChevronDown,
-  FileCode, FolderOpen, Folder, X, Terminal, Eye, ArrowLeft,
-  Monitor, Sparkles, Globe, Plus, LayoutTemplate, PanelRight,
-  RefreshCw, ExternalLink, Maximize2, Send, Bot, RotateCcw,
-  Settings, GitBranch, Search, Bell, ChevronUp, Copy, Check,
-  FileJson, FileText, Cpu, Wifi, WifiOff, CircleDot, Package
+  ArrowLeft, Play, Square, Share2, Rocket, Settings, Check,
+  FileCode, Search, GitBranch, Terminal, Eye, Sparkles, Monitor,
+  ChevronDown, X, Circle, Maximize2, Minimize2, Split, Package,
+  Database, Lock, RefreshCw, ExternalLink, ChevronRight, Plus,
+  Layers, Code2, Globe
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { MonacoEditorPane, getLanguage, type CursorPosition } from "@/components/editor/MonacoEditor";
+import { TerminalPane } from "@/components/editor/TerminalPane";
+import { CommandPalette } from "@/components/editor/CommandPalette";
+import { StatusBar } from "@/components/editor/StatusBar";
+import { FileTree, type FileNode } from "@/components/editor/FileTree";
+import { AIPanel } from "@/components/editor/AIPanel";
+import { SearchPanel } from "@/components/editor/SearchPanel";
 
 /* ─── Types ─────────────────────────────────────────── */
-type FileNode = {
+type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database";
+type BottomPanel = "terminal" | "preview" | "console";
+
+interface Tab {
+  path: string;
   name: string;
-  type: "file" | "folder";
-  children?: FileNode[];
-  content?: string;
-  language?: string;
-};
+  ext: string;
+  content: string;
+  savedContent: string;
+  language: string;
+}
 
-type Panel = "files" | "editor" | "preview" | "agent" | "console";
+interface ConsoleLine {
+  text: string;
+  level: "info" | "warn" | "error" | "success";
+  ts: string;
+}
 
-/* ─── Mock file tree ─────────────────────────────────── */
-const INITIAL_FILES: FileNode[] = [
-  {
-    name: "src", type: "folder", children: [
-      {
-        name: "App.tsx", type: "file", language: "tsx",
-        content: `import { useState } from 'react';
+/* ─── Initial demo file tree ─────────────────────────── */
+const APP_TSX = `import { useState } from "react";
 
-function Counter() {
+function App() {
   const [count, setCount] = useState(0);
+  const [message, setMessage] = useState("Hello, World!");
+
   return (
     <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg,#0d1117 0%,#161b22 100%)',
-      color: '#e6edf3',
-      fontFamily: 'system-ui,sans-serif'
+      minHeight: "100vh",
+      background: "linear-gradient(135deg, #0d1117 0%, #161b22 100%)",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      color: "#e6edf3",
+      fontFamily: "system-ui, sans-serif",
+      gap: "2rem",
     }}>
-      <h1 style={{fontSize:'3rem',fontWeight:700,
-        background:'linear-gradient(90deg,#58a6ff,#a371f7)',
-        WebkitBackgroundClip:'text',
-        WebkitTextFillColor:'transparent',
-        marginBottom:'1rem'}}>
-        Hello, World!
-      </h1>
-      <p style={{color:'#8b949e',fontSize:'1.1rem',marginBottom:'2rem'}}>
-        Built with React + TypeScript
-      </p>
+      <div style={{ textAlign: "center" }}>
+        <h1 style={{ fontSize: "3rem", fontWeight: "bold", marginBottom: "0.5rem" }}>
+          ⚡ {message}
+        </h1>
+        <p style={{ color: "#8b949e", fontSize: "1.1rem" }}>
+          Built with React + TypeScript
+        </p>
+      </div>
+
       <div style={{
-        background:'#21262d',border:'1px solid #30363d',
-        borderRadius:'12px',padding:'2rem 3rem',textAlign:'center'
+        background: "#21262d",
+        border: "1px solid #30363d",
+        borderRadius: "12px",
+        padding: "2rem",
+        textAlign: "center",
+        minWidth: "240px",
       }}>
-        <p style={{fontSize:'4rem',fontWeight:700,margin:'0 0 1rem',
-          color:'#58a6ff'}}>{count}</p>
-        <div style={{display:'flex',gap:'0.75rem'}}>
-          <button
-            onClick={() => setCount(c => c - 1)}
-            style={{padding:'0.5rem 1.5rem',background:'#21262d',
-              color:'#e6edf3',border:'1px solid #30363d',
-              borderRadius:'8px',cursor:'pointer',fontSize:'1.2rem'}}>
+        <p style={{ color: "#8b949e", marginBottom: "1rem", fontSize: "0.9rem" }}>Counter</p>
+        <div style={{ fontSize: "3rem", fontWeight: "bold", color: "#58a6ff", marginBottom: "1rem" }}>
+          {count}
+        </div>
+        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
+          <button onClick={() => setCount(c => c - 1)}
+            style={{ padding: "0.5rem 1.25rem", borderRadius: "8px", border: "1px solid #30363d", background: "#30363d", color: "#e6edf3", cursor: "pointer", fontSize: "1.1rem", fontWeight: "bold" }}>
             −
           </button>
-          <button
-            onClick={() => setCount(0)}
-            style={{padding:'0.5rem 1.5rem',background:'#21262d',
-              color:'#8b949e',border:'1px solid #30363d',
-              borderRadius:'8px',cursor:'pointer'}}>
-            Reset
-          </button>
-          <button
-            onClick={() => setCount(c => c + 1)}
-            style={{padding:'0.5rem 1.5rem',background:'#1f6feb',
-              color:'white',border:'none',
-              borderRadius:'8px',cursor:'pointer',fontSize:'1.2rem'}}>
+          <button onClick={() => setCount(c => c + 1)}
+            style={{ padding: "0.5rem 1.25rem", borderRadius: "8px", border: "none", background: "#238636", color: "white", cursor: "pointer", fontSize: "1.1rem", fontWeight: "bold" }}>
             +
+          </button>
+          <button onClick={() => setCount(0)}
+            style={{ padding: "0.5rem 1.25rem", borderRadius: "8px", border: "1px solid #f85149", background: "transparent", color: "#f85149", cursor: "pointer", fontSize: "0.85rem" }}>
+            Reset
           </button>
         </div>
       </div>
-      <p style={{marginTop:'2rem',color:'#484f58',fontSize:'0.85rem'}}>
-        Running on localhost:5173
-      </p>
+
+      <input value={message} onChange={e => setMessage(e.target.value)}
+        placeholder="Type a message…"
+        style={{ background: "#161b22", border: "1px solid #30363d", borderRadius: "8px", padding: "0.75rem 1rem", color: "#e6edf3", fontSize: "1rem", outline: "none", width: "300px" }}
+      />
     </div>
   );
 }
 
-export default function App() {
-  return <Counter />;
-}`
-      },
-      {
-        name: "index.tsx", type: "file", language: "tsx",
-        content: `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-import './index.css';
+export default App;
+`;
 
-ReactDOM.createRoot(
-  document.getElementById('root')!
-).render(
+const MAIN_TSX = `import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import "./index.css";
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
-);`
-      },
-      {
-        name: "index.css", type: "file", language: "css",
-        content: `* {
+);
+`;
+
+const INDEX_CSS = `*, *::before, *::after {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont,
-    'Segoe UI', Roboto, Oxygen, sans-serif;
+  font-family: system-ui, -apple-system, sans-serif;
   background: #0d1117;
   color: #e6edf3;
 }
 
 #root {
   min-height: 100vh;
-}`
-      },
-    ]
-  },
-  {
-    name: "public", type: "folder", children: [
-      {
-        name: "index.html", type: "file", language: "html",
-        content: `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport"
-      content="width=device-width, initial-scale=1.0" />
-    <title>My App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/index.tsx"></script>
-  </body>
-</html>`
-      },
-    ]
-  },
-  {
-    name: "package.json", type: "file", language: "json",
-    content: `{
+}
+`;
+
+const PKG_JSON = `{
   "name": "my-web-app",
-  "version": "1.0.0",
-  "type": "module",
+  "version": "0.1.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
-    "@vitejs/plugin-react": "^4.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
     "typescript": "^5.0.0",
-    "vite": "^4.4.0"
+    "vite": "^7.0.0"
   }
-}`
-  },
-  {
-    name: "README.md", type: "file", language: "md",
-    content: `# My Web App
+}
+`;
+
+const README_MD = `# My Web App
 
 A React + TypeScript app built with Vite.
 
@@ -188,54 +163,43 @@ npm install
 npm run dev
 \`\`\`
 
-Open [http://localhost:5173](http://localhost:5173).
-
 ## Features
-- ⚡ Vite for fast development
-- ⚛️ React 18
+
+- ⚡ Vite for lightning-fast builds
+- ⚛️ React 19
 - 🔷 TypeScript
 - 🎨 CSS3
-`
+- 🚀 Deploy to Replit in one click
+`;
+
+const DEMO_TREE: FileNode[] = [
+  {
+    name: "my-web-app", path: "my-web-app", type: "dir",
+    children: [
+      {
+        name: "src", path: "my-web-app/src", type: "dir",
+        children: [
+          { name: "App.tsx", path: "my-web-app/src/App.tsx", type: "file", ext: "tsx", content: APP_TSX } as FileNode & { content: string },
+          { name: "main.tsx", path: "my-web-app/src/main.tsx", type: "file", ext: "tsx", content: MAIN_TSX } as FileNode & { content: string },
+          { name: "index.css", path: "my-web-app/src/index.css", type: "file", ext: "css", content: INDEX_CSS } as FileNode & { content: string },
+        ],
+      },
+      { name: "package.json", path: "my-web-app/package.json", type: "file", ext: "json", content: PKG_JSON } as FileNode & { content: string },
+      { name: "README.md", path: "my-web-app/README.md", type: "file", ext: "md", content: README_MD } as FileNode & { content: string },
+    ],
   },
 ];
 
-/* ─── AI agent messages ──────────────────────────────── */
-const INITIAL_AI_MSGS = [
-  { role: "agent", text: "Hi! I'm your AI Agent powered by **Claude Opus** — the most capable AI available.\n\nI can see your current file and help you:\n- 🐛 Debug errors\n- ✨ Add new features\n- 🔄 Refactor code\n- 📖 Explain any code\n\nWhat would you like to do?" },
-];
-
-/* ─── Syntax highlight (simple) ─────────────────────── */
-function highlight(raw: string, lang = "txt") {
-  const esc = raw.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  if (lang === "tsx" || lang === "jsx" || lang === "ts" || lang === "js") {
-    return esc
-      .replace(/\b(import|from|export|default|function|const|let|var|return|if|else|class|extends|new|typeof|void|null|undefined|true|false|async|await|of|in|for|while|do|switch|case|break|continue|throw|try|catch|finally|type|interface|enum)\b/g,
-        '<span style="color:#ff7b72">$1</span>')
-      .replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g,
-        '<span style="color:#a5d6ff">$1</span>')
-      .replace(/(\/\/[^\n]*)/g, '<span style="color:#8b949e">$1</span>')
-      .replace(/\b([A-Z][a-zA-Z0-9]*)\b/g, '<span style="color:#ffa657">$1</span>')
-      .replace(/\b(\d+\.?\d*)\b/g, '<span style="color:#79c0ff">$1</span>');
-  }
-  if (lang === "css") {
-    return esc
-      .replace(/(\/\*[\s\S]*?\*\/)/g, '<span style="color:#8b949e">$1</span>')
-      .replace(/([.#]?[a-zA-Z-]+)(\s*\{)/g, '<span style="color:#7ee787">$1</span>$2')
-      .replace(/([a-z-]+)(\s*:)/g, '<span style="color:#79c0ff">$1</span>$2')
-      .replace(/(#[0-9a-fA-F]{3,8})/g, '<span style="color:#ffa657">$1</span>');
-  }
-  if (lang === "json") {
-    return esc
-      .replace(/("(?:[^"\\]|\\.)*")\s*:/g, '<span style="color:#79c0ff">$1</span>:')
-      .replace(/:\s*("(?:[^"\\]|\\.)*")/g, ': <span style="color:#a5d6ff">$1</span>')
-      .replace(/\b(true|false|null)\b/g, '<span style="color:#ff7b72">$1</span>')
-      .replace(/\b(\d+\.?\d*)\b/g, '<span style="color:#ffa657">$1</span>');
-  }
-  return esc;
+/* ─── Helpers ────────────────────────────────────────── */
+function flattenTree(nodes: FileNode[]): (FileNode & { content?: string })[] {
+  return nodes.flatMap(n =>
+    n.type === "file"
+      ? [n as FileNode & { content?: string }]
+      : flattenTree(n.children ?? [])
+  );
 }
 
-/* ─── Preview HTML builder ───────────────────────────── */
-function buildPreviewHtml(appCode: string): string {
+function buildPreviewHtml(code: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -249,780 +213,713 @@ function buildPreviewHtml(appCode: string): string {
 </head>
 <body>
   <div id="root"></div>
-  <script type="text/babel" data-type="module">
-    ${appCode.replace(/^import.*$/gm, "").replace(/export default /, "const __DefaultExport = ")}
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(typeof __DefaultExport !== 'undefined' ? __DefaultExport : () => React.createElement('div', {style:{padding:'2rem',color:'#8b949e'}}, 'Loading...')));
+  <script type="text/babel">
+    ${code.replace(/^import\s+.*?(\n|;)/gm, "").replace(/export\s+default\s+/, "const __App = ")}
+    const _root = ReactDOM.createRoot(document.getElementById('root'));
+    _root.render(React.createElement(typeof __App !== 'undefined' ? __App : () => React.createElement('div', {style:{padding:'2rem',color:'#8b949e'}}, 'Export default not found')));
   </script>
 </body>
 </html>`;
 }
 
-/* ─── File tree item ─────────────────────────────────── */
-function FileTreeItem({ node, depth = 0, onSelect, selectedName }: {
-  node: FileNode; depth?: number;
-  onSelect: (n: FileNode) => void; selectedName: string;
-}) {
-  const [open, setOpen] = useState(depth < 1);
-
-  const getIcon = (name: string) => {
-    if (name.endsWith(".tsx") || name.endsWith(".jsx")) return <FileCode className="h-3.5 w-3.5 text-blue-400 shrink-0" />;
-    if (name.endsWith(".css")) return <FileCode className="h-3.5 w-3.5 text-pink-400 shrink-0" />;
-    if (name.endsWith(".json")) return <FileJson className="h-3.5 w-3.5 text-yellow-400 shrink-0" />;
-    if (name.endsWith(".md")) return <FileText className="h-3.5 w-3.5 text-green-400 shrink-0" />;
-    if (name.endsWith(".html")) return <FileCode className="h-3.5 w-3.5 text-orange-400 shrink-0" />;
-    return <FileCode className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
+function nodeToTab(node: FileNode & { content?: string }): Tab {
+  const content = node.content ?? "";
+  return {
+    path: node.path,
+    name: node.name,
+    ext: node.ext ?? "",
+    content,
+    savedContent: content,
+    language: getLanguage(node.ext ?? ""),
   };
-
-  if (node.type === "folder") {
-    return (
-      <div>
-        <button onClick={() => setOpen(!open)}
-          className="w-full flex items-center gap-1.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
-          style={{ paddingLeft: `${8 + depth * 12}px` }}
-          data-testid={`folder-${node.name}`}>
-          {open ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
-          {open ? <FolderOpen className="h-3.5 w-3.5 text-blue-300 shrink-0" /> : <Folder className="h-3.5 w-3.5 text-blue-300 shrink-0" />}
-          <span>{node.name}</span>
-        </button>
-        {open && node.children?.map(c => (
-          <FileTreeItem key={c.name} node={c} depth={depth + 1} onSelect={onSelect} selectedName={selectedName} />
-        ))}
-      </div>
-    );
-  }
-  return (
-    <button onClick={() => onSelect(node)}
-      className={`w-full flex items-center gap-1.5 py-1 text-xs transition-colors ${selectedName === node.name ? "bg-primary/15 text-primary border-l-2 border-primary" : "text-muted-foreground hover:text-foreground hover:bg-white/5"}`}
-      style={{ paddingLeft: `${20 + depth * 12}px` }}
-      data-testid={`file-${node.name}`}>
-      {getIcon(node.name)}
-      <span>{node.name}</span>
-    </button>
-  );
 }
 
-/* ─── Main Editor ────────────────────────────────────── */
+const STORAGE_KEY = "replit-ide-open-tabs";
+
+function addToTree(nodes: FileNode[], parentPath: string, newNode: FileNode): FileNode[] {
+  if (!parentPath) return [...nodes, newNode];
+  return nodes.map(n => {
+    if (n.path === parentPath && n.type === "dir") return { ...n, children: [...(n.children ?? []), newNode] };
+    if (n.children) return { ...n, children: addToTree(n.children, parentPath, newNode) };
+    return n;
+  });
+}
+
+function removeFromTree(nodes: FileNode[], targetPath: string): FileNode[] {
+  return nodes
+    .filter(n => n.path !== targetPath)
+    .map(n => n.children ? { ...n, children: removeFromTree(n.children, targetPath) } : n);
+}
+
+function renameInTree(nodes: FileNode[], oldPath: string, newName: string, newPath: string): FileNode[] {
+  return nodes.map(n => {
+    if (n.path === oldPath) return { ...n, name: newName, path: newPath };
+    if (n.children) return { ...n, children: renameInTree(n.children, oldPath, newName, newPath) };
+    return n;
+  });
+}
+
+/* ─── Main Editor Component ──────────────────────────── */
 export default function Editor() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  const [files, setFiles] = useState(INITIAL_FILES);
-  const [selectedFile, setSelectedFile] = useState<FileNode>(INITIAL_FILES[0].children![0]);
-  const [openTabs, setOpenTabs] = useState<FileNode[]>([INITIAL_FILES[0].children![0]]);
+  /* Layout */
+  const [sidePanel, setSidePanel] = useState<SidePanel>("files");
+  const [bottomPanel, setBottomPanel] = useState<BottomPanel>("terminal");
+  const [showAI, setShowAI] = useState(true);
+  const [showBottom, setShowBottom] = useState(true);
+  const [showSide, setShowSide] = useState(true);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [isSplitView, setIsSplitView] = useState(false);
+  const [isBottomExpanded, setIsBottomExpanded] = useState(false);
+
+  /* Editor */
+  const [tabs, setTabs] = useState<Tab[]>([]);
+  const [activeTabIdx, setActiveTabIdx] = useState(0);
+  const [splitTabIdx, setSplitTabIdx] = useState(1);
+  const [tree, setTree] = useState<FileNode[]>(DEMO_TREE);
+  const [cursorPos, setCursorPos] = useState<CursorPosition>({ line: 1, column: 1 });
+  const [aiPrompt, setAiPrompt] = useState<string | undefined>();
+
+  /* Runtime */
   const [isRunning, setIsRunning] = useState(false);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
-  const [activePanel, setActivePanel] = useState<Panel>("editor");
-  const [agentMessages, setAgentMessages] = useState(INITIAL_AI_MSGS);
-  const [agentInput, setAgentInput] = useState("");
-  const [agentTyping, setAgentTyping] = useState(false);
-  const [chatHistory, setChatHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
-  const [terminalLines, setTerminalLines] = useState([
-    { text: "> Ready. Press Run to start your project.", color: "#8b949e" },
+  const [consoleLines, setConsoleLines] = useState<ConsoleLine[]>([
+    { text: "Ready. Click Run to start your project.", level: "info", ts: new Date().toLocaleTimeString() },
   ]);
-  const [previewUrl, setPreviewUrl] = useState("localhost:5173");
-  const [consoleExpanded, setConsoleExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const agentEndRef = useRef<HTMLDivElement>(null);
 
-  // scroll agent to bottom
-  useEffect(() => { agentEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [agentMessages]);
+  const activeTab = tabs[activeTabIdx] ?? null;
+  const splitTab = tabs[splitTabIdx] ?? null;
 
-  const getAppCode = useCallback(() => {
-    const appFile = files[0]?.children?.find(f => f.name === "App.tsx");
-    return appFile?.content || "";
-  }, [files]);
+  /* ─── Init tabs from localStorage ─── */
+  useEffect(() => {
+    const allFiles = flattenTree(DEMO_TREE);
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const paths: string[] = JSON.parse(saved);
+        const restored = paths.map(p => allFiles.find(f => f.path === p)).filter(Boolean).map(f => nodeToTab(f!));
+        if (restored.length > 0) { setTabs(restored); return; }
+      }
+    } catch { /**/ }
+    const def = allFiles[0];
+    if (def) setTabs([nodeToTab(def)]);
+  }, []);
 
-  const handleRun = () => {
-    setIsRunning(true);
-    setTerminalLines([
-      { text: "> npm run dev", color: "#7ee787" },
-      { text: "", color: "#8b949e" },
-      { text: "  VITE v4.4.0  ready in 312 ms", color: "#79c0ff" },
-      { text: "", color: "#8b949e" },
-      { text: "  ➜  Local:   http://localhost:5173/", color: "#7ee787" },
-      { text: "  ➜  Network: http://172.31.0.1:5173/", color: "#8b949e" },
-    ]);
-    const html = buildPreviewHtml(getAppCode());
-    setPreviewHtml(html);
-    setActivePanel("preview");
-    toast({ title: "Running", description: "Server started on port 5173" });
-  };
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tabs.map(t => t.path)));
+  }, [tabs]);
 
-  const handleStop = () => {
-    setIsRunning(false);
-    setPreviewHtml(null);
-    setTerminalLines(prev => [...prev, { text: "> Server stopped.", color: "#f85149" }]);
-    toast({ title: "Stopped" });
-  };
+  /* ─── Keyboard shortcuts ─── */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && e.key === "k") { e.preventDefault(); setShowCommandPalette(true); }
+      if (ctrl && e.key === "`") { e.preventDefault(); setShowBottom(p => !p); }
+      if (ctrl && e.key === "\\") { e.preventDefault(); setIsSplitView(p => !p); }
+      if (ctrl && e.shiftKey && e.key.toUpperCase() === "F") { e.preventDefault(); setSidePanel("search"); setShowSide(true); }
+      if (ctrl && e.shiftKey && e.key.toUpperCase() === "A") { e.preventDefault(); setShowAI(p => !p); }
+      if (ctrl && e.shiftKey && e.key.toUpperCase() === "P") { e.preventDefault(); setBottomPanel("preview"); setShowBottom(true); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
-  const handleRefreshPreview = () => {
-    if (iframeRef.current && previewHtml) {
-      const html = buildPreviewHtml(getAppCode());
-      setPreviewHtml(html);
-    }
-  };
+  /* ─── File operations ─── */
+  const openFile = useCallback((node: FileNode & { content?: string }) => {
+    if (node.type !== "file") return;
+    const existing = tabs.findIndex(t => t.path === node.path);
+    if (existing >= 0) { setActiveTabIdx(existing); return; }
+    const tab = nodeToTab(node);
+    setTabs(prev => {
+      const next = [...prev, tab];
+      setActiveTabIdx(next.length - 1);
+      return next;
+    });
+  }, [tabs]);
 
-  const handleFileSelect = (node: FileNode) => {
-    setSelectedFile(node);
-    if (!openTabs.find(t => t.name === node.name)) setOpenTabs(p => [...p, node]);
-    setActivePanel("editor");
-  };
-
-  const closeTab = (e: React.MouseEvent, node: FileNode) => {
+  const closeTab = (e: React.MouseEvent, idx: number) => {
     e.stopPropagation();
-    const next = openTabs.filter(t => t.name !== node.name);
-    setOpenTabs(next);
-    if (selectedFile.name === node.name && next.length) setSelectedFile(next[next.length - 1]);
-  };
-
-  const handleCodeChange = (val: string) => {
-    setSelectedFile(prev => ({ ...prev, content: val }));
-    // update in file tree
-    setFiles(prev => {
-      const update = (nodes: FileNode[]): FileNode[] => nodes.map(n => {
-        if (n.name === selectedFile.name && n.type === "file") return { ...n, content: val };
-        if (n.children) return { ...n, children: update(n.children) };
-        return n;
-      });
-      return update(prev);
+    setTabs(prev => {
+      if (prev.length === 1) return prev;
+      const next = prev.filter((_, i) => i !== idx);
+      if (activeTabIdx >= next.length) setActiveTabIdx(next.length - 1);
+      else if (activeTabIdx === idx) setActiveTabIdx(Math.max(0, idx - 1));
+      return next;
     });
   };
 
-  const handleShare = () => {
-    navigator.clipboard.writeText("https://replit.com/@N/my-web-app").catch(() => {});
+  const handleCodeChange = useCallback((val: string) => {
+    setTabs(prev => prev.map((t, i) => i === activeTabIdx ? { ...t, content: val } : t));
+  }, [activeTabIdx]);
+
+  const saveActiveFile = useCallback(async () => {
+    if (!activeTab) return;
+    setTabs(prev => prev.map((t, i) => i === activeTabIdx ? { ...t, savedContent: t.content } : t));
+    toast({ title: "Saved", description: activeTab.name });
+    try {
+      await fetch(`/api/files/write?path=${encodeURIComponent(activeTab.path)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: activeTab.content }),
+      });
+    } catch { /**/ }
+  }, [activeTab, activeTabIdx, toast]);
+
+  const handleNewFile = useCallback((parentPath: string) => {
+    const name = window.prompt("File name (e.g. utils.ts):");
+    if (!name?.trim()) return;
+    const trimmed = name.trim();
+    const path = parentPath ? `${parentPath}/${trimmed}` : `my-web-app/${trimmed}`;
+    const ext = trimmed.split(".").pop() ?? "";
+    const newNode = { name: trimmed, path, type: "file" as const, ext, content: "" };
+    setTree(prev => addToTree(prev, parentPath, newNode));
+    openFile(newNode);
+  }, [openFile]);
+
+  const handleNewFolder = useCallback((parentPath: string) => {
+    const name = window.prompt("Folder name:");
+    if (!name?.trim()) return;
+    const trimmed = name.trim();
+    const path = parentPath ? `${parentPath}/${trimmed}` : `my-web-app/${trimmed}`;
+    const newNode: FileNode = { name: trimmed, path, type: "dir", children: [] };
+    setTree(prev => addToTree(prev, parentPath, newNode));
+  }, []);
+
+  const handleDelete = useCallback((node: FileNode) => {
+    if (!window.confirm(`Delete "${node.name}"?`)) return;
+    setTree(prev => removeFromTree(prev, node.path));
+    setTabs(prev => prev.filter(t => !t.path.startsWith(node.path)));
+  }, []);
+
+  const handleRename = useCallback((node: FileNode, newName: string) => {
+    const newPath = node.path.replace(/[^/]+$/, newName);
+    setTree(prev => renameInTree(prev, node.path, newName, newPath));
+    setTabs(prev => prev.map(t =>
+      t.path === node.path
+        ? { ...t, name: newName, path: newPath, ext: newName.split(".").pop() ?? "", language: getLanguage(newName.split(".").pop() ?? "") }
+        : t
+    ));
+  }, []);
+
+  const handleDownload = useCallback((node: FileNode) => {
+    const tab = tabs.find(t => t.path === node.path);
+    const content = tab?.content ?? (node as any).content ?? "";
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = node.name; a.click();
+    URL.revokeObjectURL(url);
+  }, [tabs]);
+
+  /* ─── Run / Stop ─── */
+  const handleRun = useCallback(() => {
+    setIsRunning(true);
+    const appTab = tabs.find(t => t.name === "App.tsx");
+    const appFile = flattenTree(tree).find(f => f.name === "App.tsx");
+    const code = appTab?.content ?? appFile?.content ?? "";
+    setPreviewHtml(buildPreviewHtml(code));
+    setBottomPanel("preview");
+    setShowBottom(true);
+    setConsoleLines([
+      { text: "> npm run dev", level: "success", ts: new Date().toLocaleTimeString() },
+      { text: "VITE v7.3.2  ready in 312 ms", level: "info", ts: new Date().toLocaleTimeString() },
+      { text: "➜  Local:   http://localhost:5173/", level: "success", ts: new Date().toLocaleTimeString() },
+      { text: "➜  Network: http://172.31.0.1:5173/", level: "info", ts: new Date().toLocaleTimeString() },
+    ]);
+    toast({ title: "Running", description: "Dev server started on port 5173" });
+  }, [tabs, tree, toast]);
+
+  const handleStop = useCallback(() => {
+    setIsRunning(false);
+    setPreviewHtml(null);
+    setConsoleLines(prev => [...prev, { text: "Process terminated.", level: "error", ts: new Date().toLocaleTimeString() }]);
+    toast({ title: "Stopped" });
+  }, [toast]);
+
+  const handleDeploy = useCallback(() => {
+    toast({ title: "Deploying…", description: "Building for production." });
+    setTimeout(() => toast({ title: "Deployed!", description: "Live at https://my-web-app.replit.app" }), 2500);
+  }, [toast]);
+
+  const handleShare = useCallback(() => {
+    navigator.clipboard.writeText(window.location.href).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     toast({ title: "Link copied!" });
-  };
+  }, [toast]);
 
-  const handleDeploy = () => {
-    toast({ title: "Deploying...", description: "Building and deploying to Replit hosting" });
-    setTimeout(() => toast({ title: "Deployed!", description: "Live at https://my-web-app.replit.app" }), 2500);
-  };
+  const dirtyPaths = new Set(tabs.filter(t => t.content !== t.savedContent).map(t => t.path));
+  const breadcrumbs = activeTab ? activeTab.path.split("/") : [];
+  const filesForSearch = flattenTree(tree).map(f => ({
+    ...f,
+    content: tabs.find(t => t.path === f.path)?.content ?? f.content ?? "",
+  }));
 
-  const sendAgentMessage = async () => {
-    if (!agentInput.trim() || agentTyping) return;
-    const userMsg = agentInput.trim();
-    setAgentMessages(p => [...p, { role: "user", text: userMsg }]);
-    setAgentInput("");
-    setAgentTyping(true);
+  /* ─── Sidebar toggle button ─── */
+  function SideBtn({ icon, id, title }: { icon: React.ReactNode; id: SidePanel; title: string }) {
+    return (
+      <button
+        title={title}
+        onClick={() => {
+          if (sidePanel === id && showSide) setShowSide(false);
+          else { setSidePanel(id); setShowSide(true); }
+        }}
+        className={`h-9 w-9 flex items-center justify-center rounded transition-colors ${sidePanel === id && showSide ? "text-[#e6edf3] bg-[#21262d]" : "text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"}`}>
+        {icon}
+      </button>
+    );
+  }
 
-    const newHistory: { role: "user" | "assistant"; content: string }[] = [
-      ...chatHistory,
-      { role: "user", content: userMsg },
-    ];
-
-    // Add empty streaming message placeholder
-    setAgentMessages(p => [...p, { role: "agent", text: "" }]);
-
-    try {
-      const response = await fetch("/api/anthropic/code-assist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: userMsg,
-          code: selectedFile.content || "",
-          language: selectedFile.language || "txt",
-          filename: selectedFile.name || "unknown",
-          history: chatHistory,
-        }),
-      });
-
-      if (!response.ok || !response.body) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = "";
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (data.content) {
-              fullText += data.content;
-              const snapshot = fullText;
-              setAgentMessages(p => {
-                const msgs = [...p];
-                msgs[msgs.length - 1] = { role: "agent", text: snapshot };
-                return msgs;
-              });
-            }
-            if (data.done || data.error) break;
-          } catch {/* ignore parse errors */}
-        }
-      }
-
-      setChatHistory([...newHistory, { role: "assistant", content: fullText }]);
-    } catch (err) {
-      setAgentMessages(p => {
-        const msgs = [...p];
-        msgs[msgs.length - 1] = { role: "agent", text: "Sorry, I couldn't connect to the AI. Make sure the API server is running." };
-        return msgs;
-      });
-    } finally {
-      setAgentTyping(false);
-    }
-  };
-
-  const codeLines = (selectedFile.content || "").split("\n");
-
-  /* ──── RENDER ──── */
+  /* ─── RENDER ─── */
   return (
-    <div className="flex flex-col h-screen bg-[#0d1117] text-[#e6edf3] overflow-hidden select-none" data-testid="editor-root">
+    <div className="flex flex-col h-screen bg-[#0d1117] text-[#e6edf3] overflow-hidden select-none">
 
-      {/* ── Top toolbar ── */}
-      <div className="h-12 flex items-center gap-2 px-3 border-b border-[#21262d] bg-[#161b22] shrink-0 z-20">
-        {/* Back + project name */}
+      {/* Command Palette */}
+      <CommandPalette
+        open={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        files={flattenTree(tree)}
+        onFileSelect={openFile}
+        onRun={handleRun}
+        onStop={handleStop}
+        onDeploy={handleDeploy}
+        onShare={handleShare}
+        onNewFile={() => handleNewFile("")}
+        onToggleSplit={() => setIsSplitView(p => !p)}
+        onToggleAI={() => setShowAI(p => !p)}
+        onToggleTerminal={() => { setShowBottom(p => !p); setBottomPanel("terminal"); }}
+        onTogglePreview={() => { setShowBottom(true); setBottomPanel("preview"); }}
+        isRunning={isRunning}
+      />
+
+      {/* ── Header ── */}
+      <div className="h-11 flex items-center gap-2 px-3 border-b border-[#21262d] bg-[#161b22] shrink-0 z-20">
         <button onClick={() => setLocation("/")}
-          className="flex items-center gap-1.5 text-[#8b949e] hover:text-[#e6edf3] text-sm px-2 py-1 rounded hover:bg-[#21262d] transition-colors"
-          data-testid="button-back">
+          className="flex items-center gap-1.5 text-[#8b949e] hover:text-[#e6edf3] px-2 py-1 rounded hover:bg-[#21262d] transition-colors shrink-0">
           <ArrowLeft className="h-4 w-4" />
         </button>
 
         <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-[#21262d] border border-[#30363d]">
-          <div className="h-4 w-4 rounded bg-gradient-to-br from-[#58a6ff] to-[#a371f7] flex items-center justify-center">
+          <div className="h-4 w-4 rounded bg-gradient-to-br from-[#58a6ff] to-[#a371f7] flex items-center justify-center shrink-0">
             <span className="text-white text-[8px] font-bold">R</span>
           </div>
-          <span className="text-sm font-medium">my-web-app</span>
+          <span className="text-xs font-medium">my-web-app</span>
           <ChevronDown className="h-3 w-3 text-[#8b949e]" />
         </div>
 
-        <div className="flex items-center gap-1 ml-1">
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1f6feb]/20 text-[#58a6ff] border border-[#1f6feb]/30">main</span>
-        </div>
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1f6feb]/20 text-[#58a6ff] border border-[#1f6feb]/30">main</span>
+
+        {/* Command palette trigger (desktop) */}
+        <button onClick={() => setShowCommandPalette(true)}
+          className="hidden md:flex items-center gap-2 flex-1 max-w-xs px-3 py-1 rounded bg-[#21262d] border border-[#30363d] text-xs text-[#484f58] hover:text-[#8b949e] hover:border-[#484f58] transition-colors">
+          <Search className="h-3 w-3" />
+          <span>Search files, commands…</span>
+          <kbd className="ml-auto text-[9px] px-1 rounded bg-[#0d1117] border border-[#30363d]">⌘K</kbd>
+        </button>
 
         <div className="flex-1" />
 
-        {/* Run / Stop */}
-        {isRunning ? (
-          <button onClick={handleStop}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#da3633] hover:bg-[#f85149] text-white text-xs font-medium transition-colors"
-            data-testid="button-stop">
-            <Square className="h-3.5 w-3.5" /> Stop
+        <div className="flex items-center gap-1">
+          {isRunning ? (
+            <button onClick={handleStop}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#da3633] hover:bg-[#f85149] text-white text-xs font-medium transition-colors">
+              <Square className="h-3.5 w-3.5" /> Stop
+            </button>
+          ) : (
+            <button onClick={handleRun}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#238636] hover:bg-[#2ea043] text-white text-xs font-medium transition-colors">
+              <Play className="h-3.5 w-3.5" /> Run
+            </button>
+          )}
+
+          <button onClick={handleShare}
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-xs transition-colors">
+            {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Share2 className="h-3.5 w-3.5" />}
+            <span className="hidden lg:inline">Share</span>
           </button>
-        ) : (
-          <button onClick={handleRun}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#238636] hover:bg-[#2ea043] text-white text-xs font-medium transition-colors"
-            data-testid="button-run">
-            <Play className="h-3.5 w-3.5" /> Run
+
+          <button onClick={handleDeploy}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-[#6e40c9] hover:bg-[#8957e5] text-white text-xs font-medium transition-colors">
+            <Rocket className="h-3.5 w-3.5" />
+            <span className="hidden lg:inline">Deploy</span>
           </button>
-        )}
 
-        <button onClick={handleShare}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-xs transition-colors"
-          data-testid="button-share">
-          {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Share2 className="h-3.5 w-3.5" />}
-          <span className="hidden sm:inline">Share</span>
-        </button>
-
-        <button onClick={handleDeploy}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#6e40c9] hover:bg-[#8957e5] text-white text-xs font-medium transition-colors"
-          data-testid="button-deploy">
-          <Rocket className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Deploy</span>
-        </button>
-
-        <button className="h-8 w-8 flex items-center justify-center rounded hover:bg-[#21262d] text-[#8b949e] transition-colors"
-          data-testid="button-settings">
-          <Settings className="h-4 w-4" />
-        </button>
+          <button onClick={() => setShowAI(p => !p)}
+            title="AI Panel (⌘⇧A)"
+            className={`h-8 w-8 flex items-center justify-center rounded transition-colors border ${showAI ? "bg-[#a371f7]/20 border-[#a371f7]/30 text-[#a371f7]" : "border-[#30363d] text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"}`}>
+            <Sparkles className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
-      {/* ── Main workspace ── */}
+      {/* ── Workspace ── */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* ── Left sidebar icons (desktop) ── */}
-        <div className="hidden md:flex flex-col items-center w-10 border-r border-[#21262d] bg-[#161b22] py-2 gap-1 shrink-0">
-          {[
-            { icon: <FileCode className="h-4 w-4" />, label: "Files", panel: "files" as Panel },
-            { icon: <Search className="h-4 w-4" />, label: "Search", panel: "files" as Panel },
-            { icon: <GitBranch className="h-4 w-4" />, label: "Git", panel: "files" as Panel },
-            { icon: <Package className="h-4 w-4" />, label: "Extensions", panel: "files" as Panel },
-          ].map(item => (
-            <button key={item.label}
-              onClick={() => {
-                if (item.label === "Extensions") {
-                  setLocation("/extensions");
-                } else {
-                  setActivePanel(item.panel);
-                }
-              }}
-              title={item.label}
-              className="h-8 w-8 flex items-center justify-center rounded text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d] transition-colors"
-              data-testid={`sidebar-${item.label.toLowerCase()}`}>
-              {item.icon}
-            </button>
-          ))}
+        {/* Activity bar */}
+        <div className="flex flex-col items-center w-10 border-r border-[#21262d] bg-[#161b22] py-1.5 gap-0.5 shrink-0">
+          <SideBtn icon={<FileCode className="h-4 w-4" />} id="files" title="Explorer (⌘⇧E)" />
+          <SideBtn icon={<Search className="h-4 w-4" />} id="search" title="Search (⌘⇧F)" />
+          <SideBtn icon={<GitBranch className="h-4 w-4" />} id="git" title="Source Control" />
+          <SideBtn icon={<Package className="h-4 w-4" />} id="extensions" title="Extensions" />
           <div className="flex-1" />
-          <button title="Settings" className="h-8 w-8 flex items-center justify-center rounded text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d] transition-colors">
-            <Settings className="h-4 w-4" />
-          </button>
+          <SideBtn icon={<Lock className="h-4 w-4" />} id="secrets" title="Secrets" />
+          <SideBtn icon={<Database className="h-4 w-4" />} id="database" title="Database" />
         </div>
 
-        {/* ── File explorer (desktop) ── */}
-        <div className="hidden md:flex flex-col w-48 border-r border-[#21262d] bg-[#161b22] shrink-0 overflow-y-auto">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-[#21262d]">
-            <span className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest">Files</span>
-            <button className="h-5 w-5 flex items-center justify-center rounded hover:bg-[#21262d] text-[#8b949e]"
-              data-testid="button-new-file">
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <div className="py-1 flex-1">
-            {files.map(n => <FileTreeItem key={n.name} node={n} onSelect={handleFileSelect} selectedName={selectedFile.name} />)}
-          </div>
-        </div>
+        <PanelGroup direction="horizontal" className="flex-1 overflow-hidden">
 
-        {/* ── CENTER: editor or mobile panels ── */}
-        <div className="flex flex-col flex-1 overflow-hidden">
-          {/* ── Tabs bar ── */}
-          {(activePanel === "editor" || true) && (
-            <div className="flex items-center border-b border-[#21262d] bg-[#161b22] overflow-x-auto shrink-0" style={{ minHeight: 36 }}>
-              {openTabs.map(tab => (
-                <div key={tab.name} onClick={() => { setSelectedFile(tab); setActivePanel("editor"); }}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs border-r border-[#21262d] cursor-pointer shrink-0 transition-colors ${selectedFile.name === tab.name && activePanel === "editor" ? "bg-[#0d1117] text-[#e6edf3] border-t-2 border-t-[#58a6ff]" : "text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"}`}
-                  data-testid={`tab-${tab.name}`}>
-                  <FileCode className="h-3 w-3 shrink-0" />
-                  {tab.name}
-                  {openTabs.length > 1 && (
-                    <button onClick={e => closeTab(e, tab)}
-                      className="h-3.5 w-3.5 flex items-center justify-center rounded hover:bg-[#30363d] ml-1"
-                      data-testid={`close-${tab.name}`}>
-                      <X className="h-2.5 w-2.5" />
-                    </button>
+          {/* ── Side panel ── */}
+          {showSide && (
+            <>
+              <Panel defaultSize={18} minSize={12} maxSize={35}>
+                <div className="flex flex-col h-full border-r border-[#21262d] bg-[#0d1117] overflow-hidden">
+                  {sidePanel === "files" && (
+                    <FileTree
+                      tree={tree}
+                      selectedPath={activeTab?.path}
+                      dirtyPaths={dirtyPaths}
+                      onSelect={openFile}
+                      onNewFile={handleNewFile}
+                      onNewFolder={handleNewFolder}
+                      onRename={handleRename}
+                      onDelete={handleDelete}
+                      onDownload={handleDownload}
+                    />
+                  )}
+                  {sidePanel === "search" && (
+                    <SearchPanel files={filesForSearch} onFileSelect={(f) => openFile(f)} />
+                  )}
+                  {sidePanel === "git" && (
+                    <div className="flex flex-col h-full p-3">
+                      <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest mb-3">Source Control</p>
+                      {dirtyPaths.size > 0 ? (
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-[#8b949e] mb-2">Changes ({dirtyPaths.size})</p>
+                          {[...dirtyPaths].map(p => (
+                            <div key={p} className="flex items-center gap-2 text-xs text-[#f2cc60] px-2 py-1 rounded bg-[#21262d]">
+                              <Circle className="h-1.5 w-1.5 fill-[#f2cc60]" />
+                              <span className="truncate">{p.split("/").pop()}</span>
+                              <span className="ml-auto text-[#484f58] font-mono">M</span>
+                            </div>
+                          ))}
+                          <button className="w-full mt-3 px-3 py-1.5 rounded bg-[#238636] hover:bg-[#2ea043] text-white text-xs transition-colors">
+                            Commit Changes
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-center text-[#484f58] text-xs pt-8">
+                          <GitBranch className="h-8 w-8 mx-auto opacity-30 mb-2" />
+                          <p>No pending changes</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {sidePanel === "extensions" && (
+                    <div className="flex flex-col h-full p-3 gap-2 overflow-y-auto">
+                      <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest">Extensions</p>
+                      {[
+                        { name: "Prettier", desc: "Code formatter", installed: true },
+                        { name: "ESLint", desc: "JavaScript linter", installed: true },
+                        { name: "GitHub Copilot", desc: "AI completions", installed: false },
+                        { name: "Tailwind CSS", desc: "IntelliSense support", installed: false },
+                        { name: "Error Lens", desc: "Inline error display", installed: false },
+                      ].map(ext => (
+                        <div key={ext.name} className="flex items-start gap-2 p-2 rounded bg-[#161b22] border border-[#21262d]">
+                          <div className="h-6 w-6 rounded bg-[#21262d] flex items-center justify-center shrink-0">
+                            <Package className="h-3.5 w-3.5 text-[#8b949e]" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] font-medium text-[#e6edf3]">{ext.name}</p>
+                            <p className="text-[10px] text-[#8b949e]">{ext.desc}</p>
+                          </div>
+                          <button className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors shrink-0 ${ext.installed ? "border-green-500/30 text-green-400 bg-green-500/10" : "border-[#30363d] text-[#8b949e] hover:bg-[#21262d]"}`}>
+                            {ext.installed ? "✓" : "Install"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {sidePanel === "secrets" && (
+                    <div className="flex flex-col h-full p-3">
+                      <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest mb-3">Secrets</p>
+                      <p className="text-[10px] text-[#8b949e] mb-3">Environment variables injected at runtime</p>
+                      <button className="flex items-center gap-2 px-3 py-2 rounded border border-dashed border-[#30363d] text-xs text-[#8b949e] hover:text-[#e6edf3] hover:border-[#484f58] transition-colors w-full">
+                        <Plus className="h-3.5 w-3.5" /> Add secret
+                      </button>
+                    </div>
+                  )}
+                  {sidePanel === "database" && (
+                    <div className="flex flex-col h-full p-3 gap-2">
+                      <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest">Database</p>
+                      <div className="flex items-center gap-2 p-2 rounded bg-[#161b22] border border-green-500/20">
+                        <Circle className="h-2 w-2 fill-green-400 text-green-400" />
+                        <span className="text-xs text-green-400">PostgreSQL connected</span>
+                      </div>
+                      <p className="text-[10px] text-[#8b949e]">Manage your database via the Database panel in the App Builder.</p>
+                    </div>
                   )}
                 </div>
-              ))}
-            </div>
+              </Panel>
+              <PanelResizeHandle className="w-px bg-[#21262d] hover:bg-[#58a6ff] transition-colors cursor-col-resize" />
+            </>
           )}
 
-          {/* ── Split: editor + preview ── */}
-          <div className="flex flex-1 overflow-hidden">
+          {/* ── Editor + Bottom ── */}
+          <Panel defaultSize={showAI ? 55 : 82} minSize={30}>
+            <PanelGroup direction="vertical" className="h-full">
+              {/* Editor */}
+              <Panel defaultSize={isBottomExpanded ? 20 : 65} minSize={20}>
+                <div className="flex flex-col h-full">
 
-            {/* Code editor (hidden on mobile when other panel active) */}
-            <div className={`flex-1 overflow-auto bg-[#0d1117] ${activePanel !== "editor" && activePanel !== "files" && activePanel !== "agent" && activePanel !== "console" ? "hidden md:flex" : "flex"} flex-col`}>
-              {activePanel === "files" ? (
-                /* Mobile file explorer */
-                <div className="flex flex-col flex-1 overflow-y-auto md:hidden">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-[#21262d]">
-                    <span className="text-sm font-semibold">Files</span>
-                    <button className="text-[#8b949e]"><Plus className="h-4 w-4" /></button>
-                  </div>
-                  {files.map(n => <FileTreeItem key={n.name} node={n} onSelect={handleFileSelect} selectedName={selectedFile.name} />)}
-                </div>
-              ) : activePanel === "agent" ? (
-                /* Mobile agent panel */
-                <div className="flex flex-col flex-1 overflow-hidden md:hidden">
-                  <AgentPanel messages={agentMessages} input={agentInput} typing={agentTyping}
-                    onInput={setAgentInput} onSend={sendAgentMessage} endRef={agentEndRef} />
-                </div>
-              ) : activePanel === "console" ? (
-                /* Mobile console */
-                <div className="flex flex-col flex-1 overflow-y-auto md:hidden">
-                  <div className="flex items-center px-4 py-2 border-b border-[#21262d]">
-                    <Terminal className="h-4 w-4 mr-2 text-[#8b949e]" />
-                    <span className="text-sm">Console</span>
-                  </div>
-                  <div className="flex-1 p-4 font-mono text-xs space-y-0.5 overflow-y-auto">
-                    {terminalLines.map((l, i) => (
-                      <div key={i} style={{ color: l.color }}>{l.text || "\u00A0"}</div>
-                    ))}
-                    {isRunning && <div style={{ color: "#7ee787" }} className="animate-pulse">● Server running on port 5173</div>}
-                  </div>
-                </div>
-              ) : activePanel === "preview" ? (
-                /* Mobile preview */
-                <div className="flex flex-col flex-1 overflow-hidden md:hidden">
-                  <PreviewPanel
-                    previewHtml={previewHtml}
-                    isRunning={isRunning}
-                    iframeRef={iframeRef}
-                    url={previewUrl}
-                    onRefresh={handleRefreshPreview}
-                    onRun={handleRun}
-                  />
-                </div>
-              ) : (
-                /* Code editor */
-                <div className="flex flex-1 overflow-auto">
-                  <div className="w-10 shrink-0 text-right pt-4 pb-4 font-mono text-[11px] leading-6 text-[#484f58] select-none bg-[#0d1117] border-r border-[#21262d]/50">
-                    {codeLines.map((_, i) => (
-                      <div key={i} className="pr-3">{i + 1}</div>
-                    ))}
-                  </div>
-                  <pre className="flex-1 p-4 text-[12px] font-mono leading-6 overflow-x-auto outline-none">
-                    {codeLines.map((line, i) => (
-                      <div key={i}
-                        className="hover:bg-white/[0.03] px-1 rounded cursor-text"
-                        dangerouslySetInnerHTML={{ __html: highlight(line, selectedFile.language || "txt") || "\u00A0" }}
-                      />
-                    ))}
-                  </pre>
-                </div>
-              )}
-            </div>
-
-            {/* ── Desktop right panels ── */}
-            <div className="hidden md:flex flex-col border-l border-[#21262d]" style={{ width: "45%" }}>
-              {/* Panel switcher */}
-              <div className="flex items-center border-b border-[#21262d] bg-[#161b22] shrink-0">
-                {[
-                  { id: "preview" as Panel, icon: <Monitor className="h-3.5 w-3.5" />, label: "Preview" },
-                  { id: "console" as Panel, icon: <Terminal className="h-3.5 w-3.5" />, label: "Console" },
-                  { id: "agent" as Panel, icon: <Sparkles className="h-3.5 w-3.5" />, label: "Agent" },
-                ].map(p => (
-                  <button key={p.id} onClick={() => setActivePanel(p.id)}
-                    className={`flex items-center gap-1.5 px-4 py-2 text-xs border-r border-[#21262d] transition-colors ${activePanel === p.id ? "bg-[#0d1117] text-[#e6edf3] border-t-2 border-t-[#a371f7]" : "text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"}`}
-                    data-testid={`panel-tab-${p.id}`}>
-                    {p.icon} {p.label}
-                  </button>
-                ))}
-                <div className="flex-1" />
-                {activePanel === "preview" && isRunning && (
-                  <div className="flex items-center gap-2 pr-2">
-                    <button onClick={handleRefreshPreview}
-                      className="h-6 w-6 flex items-center justify-center rounded hover:bg-[#21262d] text-[#8b949e]"
-                      data-testid="button-refresh-preview">
-                      <RefreshCw className="h-3.5 w-3.5" />
-                    </button>
-                    <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-[#21262d] text-[#8b949e]">
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Panel content */}
-              <div className="flex-1 overflow-hidden bg-[#0d1117]">
-                {activePanel === "preview" && (
-                  <PreviewPanel
-                    previewHtml={previewHtml}
-                    isRunning={isRunning}
-                    iframeRef={iframeRef}
-                    url={previewUrl}
-                    onRefresh={handleRefreshPreview}
-                    onRun={handleRun}
-                  />
-                )}
-                {activePanel === "console" && (
-                  <div className="flex flex-col h-full">
-                    <div className="flex-1 overflow-y-auto p-4 font-mono text-xs space-y-0.5">
-                      {terminalLines.map((l, i) => (
-                        <div key={i} style={{ color: l.color }}>{l.text || "\u00A0"}</div>
-                      ))}
-                      {isRunning && <div style={{ color: "#7ee787" }} className="animate-pulse">● Server running on port 5173</div>}
-                    </div>
-                    <div className="border-t border-[#21262d] flex items-center px-3 py-2 gap-2">
-                      <span style={{ color: "#7ee787" }} className="font-mono text-xs">$</span>
-                      <input className="flex-1 bg-transparent font-mono text-xs text-[#e6edf3] outline-none placeholder-[#484f58]"
-                        placeholder="Enter command..."
-                        onKeyDown={e => {
-                          if (e.key === "Enter" && (e.target as HTMLInputElement).value) {
-                            const val = (e.target as HTMLInputElement).value;
-                            setTerminalLines(p => [...p, { text: `$ ${val}`, color: "#7ee787" }, { text: `bash: ${val}: command not found`, color: "#f85149" }]);
-                            (e.target as HTMLInputElement).value = "";
+                  {/* Tabs */}
+                  <div className="flex items-center border-b border-[#21262d] bg-[#161b22] overflow-x-auto shrink-0">
+                    {tabs.map((tab, i) => {
+                      const dirty = tab.content !== tab.savedContent;
+                      const isActive = i === activeTabIdx;
+                      return (
+                        <div key={tab.path} onClick={() => setActiveTabIdx(i)}
+                          className={`flex items-center gap-1.5 px-4 py-2 text-xs cursor-pointer border-r border-[#21262d] transition-colors group shrink-0 min-w-0 ${isActive ? "bg-[#0d1117] text-[#e6edf3] border-t-2 border-t-[#e36209]" : "text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"}`}>
+                          {dirty
+                            ? <Circle className="h-2 w-2 fill-[#f2cc60] text-[#f2cc60] shrink-0" />
+                            : <div className="w-2 h-2 shrink-0" />
                           }
-                        }}
-                        data-testid="input-terminal"
-                      />
+                          <span className="truncate max-w-[120px]">{tab.name}</span>
+                          <button onClick={e => closeTab(e, i)}
+                            className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all shrink-0">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                    <button onClick={() => handleNewFile("")}
+                      className="h-full px-3 text-[#484f58] hover:text-[#8b949e] hover:bg-[#21262d] transition-colors shrink-0">
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                    {/* Split toggle */}
+                    <div className="ml-auto px-2 shrink-0">
+                      <button onClick={() => setIsSplitView(p => !p)}
+                        title="Split Editor (⌘\)"
+                        className={`h-6 w-6 flex items-center justify-center rounded transition-colors ${isSplitView ? "text-[#58a6ff] bg-[#1f6feb]/20" : "text-[#484f58] hover:text-[#8b949e] hover:bg-[#21262d]"}`}>
+                        <Split className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
-                )}
-                {activePanel === "agent" && (
-                  <AgentPanel messages={agentMessages} input={agentInput} typing={agentTyping}
-                    onInput={setAgentInput} onSend={sendAgentMessage} endRef={agentEndRef} />
-                )}
-              </div>
-            </div>
-          </div>
 
-          {/* ── Status bar ── */}
-          <div className="hidden md:flex h-6 items-center gap-4 px-3 border-t border-[#21262d] bg-[#161b22] shrink-0 text-[10px] text-[#8b949e]">
-            <div className="flex items-center gap-1">
-              {isRunning
-                ? <><CircleDot className="h-3 w-3 text-green-400" /><span className="text-green-400">Running</span></>
-                : <><CircleDot className="h-3 w-3" /><span>Stopped</span></>
-              }
-            </div>
-            <span>|</span>
-            <div className="flex items-center gap-1">
-              <GitBranch className="h-3 w-3" /> main
-            </div>
-            <span>|</span>
-            <span>{selectedFile.language?.toUpperCase() || "TXT"}</span>
-            <span>|</span>
-            <span>{codeLines.length} lines</span>
-            <div className="flex-1" />
-            <div className="flex items-center gap-1">
-              {isRunning ? <Wifi className="h-3 w-3 text-green-400" /> : <WifiOff className="h-3 w-3" />}
-              <span>{isRunning ? "localhost:5173" : "Offline"}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+                  {/* Breadcrumbs */}
+                  {activeTab && (
+                    <div className="flex items-center gap-0.5 px-3 py-1 bg-[#0d1117] border-b border-[#21262d] text-[10px] text-[#8b949e] shrink-0 overflow-x-auto">
+                      {breadcrumbs.map((part, i) => (
+                        <span key={i} className="flex items-center gap-0.5 shrink-0">
+                          {i > 0 && <ChevronRight className="h-2.5 w-2.5 opacity-50" />}
+                          <span className={i === breadcrumbs.length - 1 ? "text-[#e6edf3]" : ""}>{part}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
-      {/* ── Bottom toolbar (mobile, like Replit app) ── */}
-      <div className="md:hidden flex items-center justify-around h-14 border-t border-[#21262d] bg-[#161b22] shrink-0 px-2">
-        {[
-          { id: "files" as Panel, icon: <FileCode className="h-5 w-5" />, label: "Files" },
-          { id: "editor" as Panel, icon: <LayoutTemplate className="h-5 w-5" />, label: "Editor" },
-          { id: "agent" as Panel, icon: <Sparkles className="h-5 w-5" />, label: "Agent" },
-          { id: "preview" as Panel, icon: <Monitor className="h-5 w-5" />, label: "Preview" },
-          { id: "console" as Panel, icon: <Terminal className="h-5 w-5" />, label: "Console" },
-        ].map(p => (
-          <button key={p.id} onClick={() => setActivePanel(p.id)}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-all ${activePanel === p.id ? "text-[#a371f7] bg-[#a371f7]/10" : "text-[#8b949e] hover:text-[#e6edf3]"}`}
-            data-testid={`mobile-tab-${p.id}`}>
-            {p.icon}
-            <span className="text-[9px] font-medium">{p.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+                  {/* Editor panes */}
+                  <div className="flex flex-1 overflow-hidden">
+                    {activeTab ? (
+                      <>
+                        <div className="flex-1 overflow-hidden">
+                          <MonacoEditorPane
+                            value={activeTab.content}
+                            language={activeTab.language}
+                            onChange={handleCodeChange}
+                            onSave={saveActiveFile}
+                            onCursorChange={setCursorPos}
+                            onInlineAssist={(selection) => {
+                              setShowAI(true);
+                              if (selection) {
+                                setAiPrompt(`Please explain and improve this code:\n\`\`\`${activeTab.language}\n${selection}\n\`\`\``);
+                              } else {
+                                setAiPrompt("What would you like help with in this file?");
+                              }
+                            }}
+                          />
+                        </div>
+                        {isSplitView && splitTab && (
+                          <>
+                            <div className="w-px bg-[#21262d]" />
+                            <div className="flex-1 overflow-hidden flex flex-col">
+                              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#21262d] bg-[#161b22] shrink-0">
+                                {tabs.map((t, i) => (
+                                  <button key={t.path}
+                                    onClick={() => setSplitTabIdx(i)}
+                                    className={`text-xs px-2 py-0.5 rounded transition-colors ${splitTabIdx === i ? "text-[#58a6ff] bg-[#1f6feb]/10" : "text-[#8b949e] hover:text-[#e6edf3]"}`}>
+                                    {t.name}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="flex-1 overflow-hidden">
+                                <MonacoEditorPane
+                                  value={splitTab.content}
+                                  language={splitTab.language}
+                                  onChange={() => {}}
+                                  readOnly
+                                />
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center flex-1 text-[#484f58] gap-4 bg-[#0d1117]">
+                        <Code2 className="h-12 w-12 opacity-20" />
+                        <div className="text-center">
+                          <p className="text-sm font-medium text-[#8b949e] mb-1">No file open</p>
+                          <p className="text-xs">Select a file from the explorer or press</p>
+                          <kbd className="mt-1 inline-block px-1.5 py-0.5 rounded bg-[#21262d] border border-[#30363d] text-[10px]">⌘K</kbd>
+                          <span className="text-xs"> to search</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Panel>
 
-/* ─── Preview Panel ──────────────────────────────────── */
-function PreviewPanel({ previewHtml, isRunning, iframeRef, url, onRefresh, onRun }: {
-  previewHtml: string | null;
-  isRunning: boolean;
-  iframeRef: React.RefObject<HTMLIFrameElement | null>;
-  url: string;
-  onRefresh: () => void;
-  onRun: () => void;
-}) {
-  return (
-    <div className="flex flex-col h-full">
-      {/* URL bar */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[#21262d] bg-[#161b22] shrink-0">
-        <div className={`h-2 w-2 rounded-full ${isRunning ? "bg-green-400" : "bg-[#484f58]"}`} />
-        <div className="flex-1 flex items-center bg-[#0d1117] border border-[#21262d] rounded px-2 py-1 gap-2">
-          <Globe className="h-3 w-3 text-[#8b949e] shrink-0" />
-          <span className="text-xs font-mono text-[#8b949e] truncate flex-1">
-            {isRunning ? `https://${url}` : "Not running"}
-          </span>
-        </div>
-        <button onClick={onRefresh}
-          className="h-6 w-6 flex items-center justify-center rounded hover:bg-[#21262d] text-[#8b949e]"
-          data-testid="button-refresh">
-          <RefreshCw className="h-3.5 w-3.5" />
-        </button>
-        <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-[#21262d] text-[#8b949e]">
-          <Maximize2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
+              {/* Bottom panel */}
+              {showBottom && (
+                <>
+                  <PanelResizeHandle className="h-px bg-[#21262d] hover:bg-[#58a6ff] transition-colors cursor-row-resize" />
+                  <Panel defaultSize={isBottomExpanded ? 80 : 35} minSize={15} maxSize={isBottomExpanded ? 85 : 65}>
+                    <div className="flex flex-col h-full bg-[#0d1117]">
+                      {/* Bottom tab bar */}
+                      <div className="flex items-center gap-0.5 px-2 py-1 border-b border-[#21262d] bg-[#161b22] shrink-0">
+                        {[
+                          { id: "terminal" as const, icon: <Terminal className="h-3 w-3" />, label: "Terminal" },
+                          { id: "preview" as const, icon: <Globe className="h-3 w-3" />, label: "Preview" },
+                          { id: "console" as const, icon: <Layers className="h-3 w-3" />, label: "Console" },
+                        ].map(p => (
+                          <button key={p.id} onClick={() => setBottomPanel(p.id)}
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs transition-colors ${bottomPanel === p.id ? "bg-[#0d1117] text-[#e6edf3]" : "text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"}`}>
+                            {p.icon}
+                            <span>{p.label}</span>
+                            {p.id === "terminal" && <Circle className="h-1.5 w-1.5 fill-green-400 text-green-400" />}
+                          </button>
+                        ))}
+                        <div className="flex-1" />
+                        <button onClick={() => setIsBottomExpanded(p => !p)}
+                          className="h-6 w-6 flex items-center justify-center rounded text-[#484f58] hover:text-[#8b949e] hover:bg-[#21262d] transition-colors">
+                          {isBottomExpanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+                        </button>
+                        <button onClick={() => setShowBottom(false)}
+                          className="h-6 w-6 flex items-center justify-center rounded text-[#484f58] hover:text-red-400 hover:bg-[#21262d] transition-colors">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
 
-      {/* iframe / placeholder */}
-      <div className="flex-1 overflow-hidden relative bg-white">
-        {previewHtml ? (
-          <iframe
-            ref={iframeRef}
-            srcDoc={previewHtml}
-            title="Preview"
-            className="w-full h-full border-none"
-            sandbox="allow-scripts allow-same-origin"
-            data-testid="preview-iframe"
-          />
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full bg-[#0d1117] text-[#8b949e] gap-4">
-            <Monitor className="h-16 w-16 opacity-20" />
-            <div className="text-center">
-              <p className="text-sm font-medium text-[#e6edf3] mb-1">Preview is not running</p>
-              <p className="text-xs mb-4">Click Run to start your development server</p>
-              <button onClick={onRun}
-                className="flex items-center gap-2 mx-auto px-4 py-2 rounded bg-[#238636] hover:bg-[#2ea043] text-white text-sm font-medium transition-colors"
-                data-testid="button-run-from-preview">
-                <Play className="h-4 w-4" /> Run
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+                      <div className="flex-1 overflow-hidden">
+                        {bottomPanel === "terminal" && <TerminalPane cwd="/home/runner/workspace" />}
 
-/* ─── Markdown renderer (no external deps) ───────────── */
-function renderMarkdown(text: string) {
-  const lines = text.split("\n");
-  const elements: React.ReactNode[] = [];
-  let i = 0;
+                        {bottomPanel === "preview" && (
+                          <div className="flex flex-col h-full">
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-[#161b22] border-b border-[#21262d] shrink-0">
+                              <div className="flex gap-1.5">
+                                <div className="h-2.5 w-2.5 rounded-full bg-[#f85149]" />
+                                <div className="h-2.5 w-2.5 rounded-full bg-[#d29922]" />
+                                <div className="h-2.5 w-2.5 rounded-full bg-[#3fb950]" />
+                              </div>
+                              <div className="flex-1 flex items-center gap-2 bg-[#0d1117] border border-[#30363d] rounded px-2 py-0.5 text-[10px] text-[#8b949e]">
+                                <Globe className="h-2.5 w-2.5" />
+                                <span className="truncate">{isRunning ? "localhost:5173" : "Not running"}</span>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  const tab = tabs.find(t => t.name === "App.tsx");
+                                  if (tab) setPreviewHtml(buildPreviewHtml(tab.content));
+                                }}
+                                className="h-5 w-5 flex items-center justify-center rounded text-[#484f58] hover:text-[#8b949e] hover:bg-[#21262d] transition-colors">
+                                <RefreshCw className="h-3 w-3" />
+                              </button>
+                              <button className="h-5 w-5 flex items-center justify-center rounded text-[#484f58] hover:text-[#8b949e] hover:bg-[#21262d] transition-colors">
+                                <ExternalLink className="h-3 w-3" />
+                              </button>
+                            </div>
+                            {previewHtml ? (
+                              <iframe ref={iframeRef} srcDoc={previewHtml}
+                                title="Preview" className="flex-1 border-none bg-white"
+                                sandbox="allow-scripts allow-same-origin" />
+                            ) : (
+                              <div className="flex flex-col items-center justify-center flex-1 text-[#484f58] gap-3">
+                                <Monitor className="h-10 w-10 opacity-20" />
+                                <div className="text-center">
+                                  <p className="text-xs font-medium text-[#8b949e] mb-1">Preview not running</p>
+                                  <button onClick={handleRun}
+                                    className="flex items-center gap-1.5 mx-auto px-3 py-1.5 rounded bg-[#238636] hover:bg-[#2ea043] text-white text-xs transition-colors mt-2">
+                                    <Play className="h-3.5 w-3.5" /> Run Project
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
 
-  while (i < lines.length) {
-    const line = lines[i];
+                        {bottomPanel === "console" && (
+                          <div className="flex flex-col h-full font-mono text-[11px]">
+                            <div className="flex-1 overflow-y-auto p-3 space-y-0.5">
+                              {consoleLines.map((line, i) => (
+                                <div key={i} className={`flex items-start gap-2 ${
+                                  line.level === "error" ? "text-[#ff7b72]" :
+                                  line.level === "warn" ? "text-[#d29922]" :
+                                  line.level === "success" ? "text-[#3fb950]" : "text-[#8b949e]"
+                                }`}>
+                                  <span className="text-[#484f58] shrink-0">[{line.ts}]</span>
+                                  <span>{line.text}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="border-t border-[#21262d] px-3 py-1.5 flex items-center gap-2 bg-[#161b22] shrink-0">
+                              <span className="text-[#3fb950]">$</span>
+                              <input className="flex-1 bg-transparent text-[#e6edf3] text-xs outline-none placeholder-[#484f58]"
+                                placeholder="Run a command…" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Panel>
+                </>
+              )}
+            </PanelGroup>
+          </Panel>
 
-    // Code block
-    if (line.startsWith("```")) {
-      const lang = line.slice(3).trim();
-      const codeLines: string[] = [];
-      i++;
-      while (i < lines.length && !lines[i].startsWith("```")) {
-        codeLines.push(lines[i]);
-        i++;
-      }
-      elements.push(
-        <div key={i} className="my-2 rounded-lg overflow-hidden border border-[#30363d]">
-          {lang && (
-            <div className="flex items-center gap-2 px-3 py-1 bg-[#161b22] border-b border-[#30363d]">
-              <span className="text-[10px] font-mono text-[#8b949e] uppercase">{lang}</span>
-            </div>
+          {/* ── AI Panel ── */}
+          {showAI && (
+            <>
+              <PanelResizeHandle className="w-px bg-[#21262d] hover:bg-[#a371f7] transition-colors cursor-col-resize" />
+              <Panel defaultSize={25} minSize={20} maxSize={40}>
+                <div className="h-full border-l border-[#21262d] relative">
+                  <AIPanel
+                    currentFile={activeTab?.name}
+                    currentCode={activeTab?.content}
+                    language={activeTab?.language}
+                    initialMessage={aiPrompt}
+                    onClose={() => { setShowAI(false); setAiPrompt(undefined); }}
+                  />
+                </div>
+              </Panel>
+            </>
           )}
-          <pre className="bg-[#0d1117] p-3 overflow-x-auto">
-            <code className="text-xs font-mono text-[#e6edf3] leading-relaxed whitespace-pre">
-              {codeLines.join("\n")}
-            </code>
-          </pre>
-        </div>
-      );
-      i++;
-      continue;
-    }
-
-    // Bullet
-    if (line.match(/^[-*•]\s/)) {
-      elements.push(
-        <div key={i} className="flex gap-2 text-sm leading-relaxed">
-          <span className="text-[#58a6ff] mt-0.5 shrink-0">•</span>
-          <span>{inlineFormat(line.slice(2))}</span>
-        </div>
-      );
-      i++;
-      continue;
-    }
-
-    // Heading
-    if (line.startsWith("### ")) {
-      elements.push(<p key={i} className="text-sm font-semibold text-[#e6edf3] mt-3 mb-1">{inlineFormat(line.slice(4))}</p>);
-      i++;
-      continue;
-    }
-    if (line.startsWith("## ")) {
-      elements.push(<p key={i} className="text-sm font-bold text-[#58a6ff] mt-3 mb-1">{inlineFormat(line.slice(3))}</p>);
-      i++;
-      continue;
-    }
-    if (line.startsWith("# ")) {
-      elements.push(<p key={i} className="text-base font-bold text-[#58a6ff] mt-2 mb-1">{inlineFormat(line.slice(2))}</p>);
-      i++;
-      continue;
-    }
-
-    // Empty line → spacer
-    if (line.trim() === "") {
-      elements.push(<div key={i} className="h-1" />);
-      i++;
-      continue;
-    }
-
-    // Normal paragraph
-    elements.push(<p key={i} className="text-sm leading-relaxed">{inlineFormat(line)}</p>);
-    i++;
-  }
-
-  return <>{elements}</>;
-}
-
-function inlineFormat(text: string): React.ReactNode {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g);
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (part.startsWith("**") && part.endsWith("**")) {
-          return <strong key={i} className="font-semibold text-[#e6edf3]">{part.slice(2, -2)}</strong>;
-        }
-        if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
-          return <em key={i} className="italic">{part.slice(1, -1)}</em>;
-        }
-        if (part.startsWith("`") && part.endsWith("`")) {
-          return <code key={i} className="px-1.5 py-0.5 rounded bg-[#161b22] border border-[#30363d] font-mono text-[11px] text-[#ffa657]">{part.slice(1, -1)}</code>;
-        }
-        return <span key={i}>{part}</span>;
-      })}
-    </>
-  );
-}
-
-/* ─── Agent Panel ────────────────────────────────────── */
-function AgentPanel({ messages, input, typing, onInput, onSend, endRef }: {
-  messages: { role: string; text: string }[];
-  input: string;
-  typing: boolean;
-  onInput: (v: string) => void;
-  onSend: () => void;
-  endRef: React.RefObject<HTMLDivElement | null>;
-}) {
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-[#21262d] bg-[#161b22] shrink-0">
-        <div className="h-6 w-6 rounded bg-gradient-to-br from-[#58a6ff] to-[#a371f7] flex items-center justify-center">
-          <Sparkles className="h-3.5 w-3.5 text-white" />
-        </div>
-        <div>
-          <span className="text-sm font-semibold">AI Agent</span>
-        </div>
-        <div className="ml-auto flex items-center gap-1.5">
-          <div className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#a371f7]/20 text-[#a371f7] border border-[#a371f7]/30 font-medium">Claude Opus</span>
-        </div>
+        </PanelGroup>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((m, i) => (
-          <div key={i} className={`flex gap-3 ${m.role === "user" ? "flex-row-reverse" : ""}`}>
-            <div className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${m.role === "agent" ? "bg-gradient-to-br from-[#58a6ff] to-[#a371f7] text-white" : "bg-[#30363d] text-[#e6edf3]"}`}>
-              {m.role === "agent" ? <Sparkles className="h-3.5 w-3.5" /> : "U"}
-            </div>
-            <div
-              className={`max-w-[85%] rounded-xl px-3 py-2.5 ${m.role === "agent" ? "bg-[#21262d] text-[#e6edf3] rounded-tl-none" : "bg-[#1f6feb] text-white rounded-tr-none"}`}
-              data-testid={`msg-${m.role}-${i}`}
-            >
-              {m.role === "agent"
-                ? (m.text === ""
-                  ? <div className="flex gap-1 py-1">{[0,1,2].map(j => <div key={j} className="h-1.5 w-1.5 rounded-full bg-[#58a6ff] animate-bounce" style={{ animationDelay: `${j*0.15}s` }} />)}</div>
-                  : renderMarkdown(m.text))
-                : <p className="text-sm leading-relaxed">{m.text}</p>
-              }
-            </div>
-          </div>
-        ))}
-        {typing && agentMessages_typing_placeholder()}
-        <div ref={endRef} />
-      </div>
-
-      <div className="border-t border-[#21262d] p-3 bg-[#161b22] shrink-0">
-        <div className={`flex items-end gap-2 bg-[#21262d] rounded-xl border px-3 py-2 transition-colors ${typing ? "border-[#a371f7]/50" : "border-[#30363d]"}`}>
-          <textarea
-            value={input}
-            onChange={e => onInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
-            placeholder={typing ? "Claude is thinking..." : "Ask about your code..."}
-            rows={1}
-            disabled={typing}
-            className="flex-1 bg-transparent text-sm text-[#e6edf3] placeholder-[#484f58] outline-none resize-none disabled:opacity-50"
-            style={{ maxHeight: 100 }}
-            data-testid="input-agent"
-          />
-          <button onClick={onSend} disabled={typing}
-            className="h-7 w-7 flex items-center justify-center rounded-lg bg-[#a371f7] hover:bg-[#8957e5] text-white transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-            data-testid="button-agent-send">
-            {typing ? <div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-          </button>
-        </div>
-        <p className="text-[10px] text-[#484f58] text-center mt-2">Reads your current file • Claude Opus 4.7</p>
-      </div>
+      {/* ── Status Bar ── */}
+      <StatusBar
+        language={activeTab?.language}
+        line={cursorPos.line}
+        column={cursorPos.column}
+        branch="main"
+        isDirty={!!activeTab && activeTab.content !== activeTab.savedContent}
+        isConnected
+        fileName={activeTab?.name}
+        fileSize={activeTab ? new Blob([activeTab.content]).size : undefined}
+        onBranchClick={() => { setSidePanel("git"); setShowSide(true); }}
+      />
     </div>
   );
 }
-
-function agentMessages_typing_placeholder() { return null; }

@@ -26,6 +26,10 @@ args = "API Server"
 task = "workflow.run"
 args = "App Builder"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Replit IDE"
+
 [[workflows.workflow]]
 name = "API Server"
 author = "agent"
@@ -49,6 +53,18 @@ outputType = "webview"
 task = "shell.exec"
 args = "fuser -k 5000/tcp 2>/dev/null; sleep 1; PORT=5000 BASE_PATH=/ pnpm --filter @workspace/app-builder run dev"
 waitForPort = 5000
+
+[[workflows.workflow]]
+name = "Replit IDE"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "fuser -k 3001/tcp 2>/dev/null; sleep 1; PORT=3001 BASE_PATH=/ pnpm --filter @workspace/replit-ide run dev"
+waitForPort = 3001
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [agent]
 stack = "BEST_EFFORT_FALLBACK"
