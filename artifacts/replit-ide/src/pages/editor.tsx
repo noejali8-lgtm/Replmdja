@@ -7,7 +7,8 @@ import {
   ChevronDown, X, Circle, Maximize2, Minimize2, Split, Package,
   Database, Lock, RefreshCw, ExternalLink, ChevronRight, Plus,
   Layers, Code2, Globe, AlertTriangle, Bug, Box, BarChart2, Camera,
-  Shield, Mic
+  Shield, Mic, ScrollText, GitGraph, Zap, Keyboard, Users, Activity,
+  Network, GitMerge
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { MonacoEditorPane, getLanguage, type CursorPosition } from "@/components/editor/MonacoEditor";
@@ -26,10 +27,21 @@ import { AIReviewer } from "@/components/editor/AIReviewer";
 import { SnapshotPanel } from "@/components/editor/SnapshotPanel";
 import { AnalyticsPanel } from "@/components/editor/AnalyticsPanel";
 import { VoiceCommand, type VoiceCommandAction } from "@/components/editor/VoiceCommand";
+import { LogStreamingPanel } from "@/components/editor/LogStreamingPanel";
+import { EnvironmentTemplates } from "@/components/editor/EnvironmentTemplates";
+import { VulnerabilityScanner } from "@/components/editor/VulnerabilityScanner";
+import { AuditLogs } from "@/components/editor/AuditLogs";
+import { GitGraph as GitGraphPanel } from "@/components/editor/GitGraph";
+import { DeploymentPanel } from "@/components/editor/DeploymentPanel";
+import { MultiCursorPresence } from "@/components/editor/MultiCursorPresence";
+import { KeybindingsPanel } from "@/components/editor/KeybindingsPanel";
+import { GitEnhancedPanel } from "@/components/editor/GitEnhancedPanel";
+import { SelfHealingPanel } from "@/components/editor/SelfHealingPanel";
+import { sound } from "@/lib/soundSystem";
 
 /* ─── Types ─────────────────────────────────────────── */
-type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database" | "debug" | "packages" | "analytics" | "snapshots" | "review";
-type BottomPanel = "terminal" | "preview" | "console";
+type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database" | "debug" | "packages" | "analytics" | "snapshots" | "review" | "gitgraph" | "templates" | "vulnscan" | "auditlogs" | "deployment" | "presence" | "keybindings" | "selfheal";
+type BottomPanel = "terminal" | "preview" | "console" | "logs";
 
 interface Tab {
   path: string;
@@ -456,6 +468,7 @@ export default function Editor() {
     setTabs(prev => prev.map((t, i) => i === activeTabIdx ? { ...t, savedContent: t.content } : t));
     /* 1. Persist to localStorage (instant, always works) */
     saveContent(projectName, activeTab.path, activeTab.content);
+    sound.play("save");
     toast({ title: "Saved", description: activeTab.name });
     /* 2. Best-effort write to disk */
     try {
@@ -556,6 +569,7 @@ export default function Editor() {
     setPreviewHtml(buildPreviewHtml(allFilesForPreview));
     setBottomPanel("preview");
     setShowBottom(true);
+    sound.play("success");
     const ts = new Date().toLocaleTimeString();
     setConsoleLines([
       { text: "⚠  Browser Preview — runs via in-browser Babel (no Node.js)", level: "warn", ts },
@@ -568,13 +582,15 @@ export default function Editor() {
   const handleStop = useCallback(() => {
     setIsRunning(false);
     setPreviewHtml(null);
+    sound.play("close");
     setConsoleLines(prev => [...prev, { text: "Preview stopped.", level: "error", ts: new Date().toLocaleTimeString() }]);
     toast({ title: "Stopped" });
   }, [toast]);
 
   const handleDeploy = useCallback(() => {
+    sound.play("deploy");
     toast({ title: "Deploying…", description: "Building for production." });
-    setTimeout(() => toast({ title: "Deployed!", description: "Live at https://my-web-app.replit.app" }), 2500);
+    setTimeout(() => { sound.play("success"); toast({ title: "Deployed!", description: "Live at https://my-web-app.replit.app" }); }, 2500);
   }, [toast]);
 
   /* ─── Voice command handler ─── */
@@ -721,17 +737,25 @@ export default function Editor() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* Activity bar */}
-        <div className="flex flex-col items-center w-10 border-r border-[#21262d] bg-[#161b22] py-1.5 gap-0.5 shrink-0">
+        <div className="flex flex-col items-center w-10 border-r border-[#21262d] bg-[#161b22] py-1.5 gap-0.5 shrink-0 overflow-y-auto">
           <SideBtn icon={<FileCode className="h-4 w-4" />} id="files" title="Explorer (⌘⇧E)" />
           <SideBtn icon={<Search className="h-4 w-4" />} id="search" title="Search (⌘⇧F)" />
-          <SideBtn icon={<GitBranch className="h-4 w-4" />} id="git" title="Source Control" />
+          <SideBtn icon={<GitBranch className="h-4 w-4" />} id="git" title="Source Control + AI Commits" />
+          <SideBtn icon={<GitGraph className="h-4 w-4" />} id="gitgraph" title="Git Graph" />
           <SideBtn icon={<Package className="h-4 w-4" />} id="extensions" title="Extensions" />
           <SideBtn icon={<Bug className="h-4 w-4" />} id="debug" title="Debugger" />
+          <SideBtn icon={<Zap className="h-4 w-4" />} id="selfheal" title="Self-Healing AI" />
           <SideBtn icon={<Box className="h-4 w-4" />} id="packages" title="Package Manager" />
           <SideBtn icon={<BarChart2 className="h-4 w-4" />} id="analytics" title="Analytics Dashboard" />
           <SideBtn icon={<Camera className="h-4 w-4" />} id="snapshots" title="Snapshots" />
           <SideBtn icon={<Shield className="h-4 w-4" />} id="review" title="AI Code Review" />
+          <SideBtn icon={<Network className="h-4 w-4" />} id="vulnscan" title="Vulnerability Scanner" />
+          <SideBtn icon={<Activity className="h-4 w-4" />} id="auditlogs" title="Audit Log" />
+          <SideBtn icon={<Users className="h-4 w-4" />} id="presence" title="Collaborators" />
           <div className="flex-1" />
+          <SideBtn icon={<Layers className="h-4 w-4" />} id="templates" title="Environment Templates" />
+          <SideBtn icon={<Keyboard className="h-4 w-4" />} id="keybindings" title="Keybindings" />
+          <SideBtn icon={<Rocket className="h-4 w-4" />} id="deployment" title="Deployment" />
           <SideBtn icon={<Lock className="h-4 w-4" />} id="secrets" title="Secrets" />
           <SideBtn icon={<Database className="h-4 w-4" />} id="database" title="Database GUI" />
         </div>
@@ -760,29 +784,7 @@ export default function Editor() {
                     <SearchPanel files={filesForSearch} onFileSelect={(f) => openFile(f)} />
                   )}
                   {sidePanel === "git" && (
-                    <div className="flex flex-col h-full p-3">
-                      <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest mb-3">Source Control</p>
-                      {dirtyPaths.size > 0 ? (
-                        <div className="space-y-1">
-                          <p className="text-[10px] text-[#8b949e] mb-2">Changes ({dirtyPaths.size})</p>
-                          {[...dirtyPaths].map(p => (
-                            <div key={p} className="flex items-center gap-2 text-xs text-[#f2cc60] px-2 py-1 rounded bg-[#21262d]">
-                              <Circle className="h-1.5 w-1.5 fill-[#f2cc60]" />
-                              <span className="truncate">{p.split("/").pop()}</span>
-                              <span className="ml-auto text-[#484f58] font-mono">M</span>
-                            </div>
-                          ))}
-                          <button className="w-full mt-3 px-3 py-1.5 rounded bg-[#238636] hover:bg-[#2ea043] text-white text-xs transition-colors">
-                            Commit Changes
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="text-center text-[#484f58] text-xs pt-8">
-                          <GitBranch className="h-8 w-8 mx-auto opacity-30 mb-2" />
-                          <p>No pending changes</p>
-                        </div>
-                      )}
-                    </div>
+                    <GitEnhancedPanel dirtyPaths={dirtyPaths} projectName={projectName} />
                   )}
                   {sidePanel === "extensions" && (
                     <div className="flex flex-col h-full p-3 gap-2 overflow-y-auto">
@@ -836,6 +838,14 @@ export default function Editor() {
                       filename={activeTab?.name}
                     />
                   )}
+                  {sidePanel === "gitgraph"   && <GitGraphPanel />}
+                  {sidePanel === "templates"  && <EnvironmentTemplates />}
+                  {sidePanel === "vulnscan"   && <VulnerabilityScanner />}
+                  {sidePanel === "auditlogs"  && <AuditLogs />}
+                  {sidePanel === "deployment" && <DeploymentPanel />}
+                  {sidePanel === "presence"   && <MultiCursorPresence currentFile={activeTab?.path} />}
+                  {sidePanel === "keybindings"&& <KeybindingsPanel />}
+                  {sidePanel === "selfheal"   && <SelfHealingPanel currentFile={activeTab?.name} />}
                 </div>
               </Panel>
               <PanelResizeHandle className="w-px bg-[#21262d] hover:bg-[#58a6ff] transition-colors cursor-col-resize" />
@@ -982,6 +992,7 @@ export default function Editor() {
                           { id: "terminal" as const, icon: <Terminal className="h-3 w-3" />, label: "Terminal" },
                           { id: "preview" as const, icon: <Globe className="h-3 w-3" />, label: "Browser Preview" },
                           { id: "console" as const, icon: <Layers className="h-3 w-3" />, label: "Console" },
+                          { id: "logs" as const, icon: <ScrollText className="h-3 w-3" />, label: "Logs" },
                         ].map(p => (
                           <button key={p.id} onClick={() => setBottomPanel(p.id)}
                             className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs transition-colors ${bottomPanel === p.id ? "bg-[#0d1117] text-[#e6edf3]" : "text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"}`}>
@@ -1071,6 +1082,10 @@ export default function Editor() {
                                 placeholder="Run a command…" />
                             </div>
                           </div>
+                        )}
+
+                        {bottomPanel === "logs" && (
+                          <LogStreamingPanel projectName={projectName} />
                         )}
                       </div>
                     </div>
