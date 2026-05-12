@@ -8,6 +8,7 @@ import {
   Layers, Terminal, BookOpen, X, Filter, Copy
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ReplDetailSheet } from "@/components/ReplDetailSheet";
 
 type Category = "All" | "Web" | "Game" | "AI" | "Mobile" | "Backend" | "Art";
 
@@ -177,6 +178,7 @@ export default function Explore() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<Category>("All");
   const [community, setCommunity] = useState<CommunityProject[]>([]);
+  const [selectedRepl, setSelectedRepl] = useState<Repl | null>(null);
 
   useEffect(() => {
     fetch("/api/projects/explore", { credentials: "include" })
@@ -186,7 +188,12 @@ export default function Explore() {
   }, []);
 
   const handleOpen = (repl: Repl) => {
+    setSelectedRepl(repl);
+  };
+
+  const handleUseRepl = (repl: Repl) => {
     sessionStorage.setItem("chat_prompt", `I want to build something like "${repl.name}" — ${repl.desc}`);
+    setSelectedRepl(null);
     setLocation("/chat");
   };
 
@@ -377,6 +384,13 @@ export default function Explore() {
           )}
         </div>
       </div>
+
+      {/* Repl detail sheet */}
+      <ReplDetailSheet
+        repl={selectedRepl}
+        onClose={() => setSelectedRepl(null)}
+        onUse={handleUseRepl}
+      />
     </m.div>
   );
 }

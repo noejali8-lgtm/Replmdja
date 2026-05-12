@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, Zap, Layers, BookOpen, Compass, ChevronRight, Clock, Trash2, WifiOff, ShoppingBag, Video, Brain, Cloud, Bug, Smartphone, Shield, GraduationCap, DollarSign, Settings, Eye, Terminal, Users, Rocket, Mic, Cpu, RefreshCw, Bot, Network, Database, Package, Target, Plug, Sparkles } from "lucide-react";
+import { MoreVertical, Lock, Globe, Download, ChevronDown, X, CheckCircle2, Loader2, Zap, Layers, BookOpen, Compass, ChevronRight, Clock, Trash2, WifiOff, ShoppingBag, Video, Brain, Cloud, Bug, Smartphone, Shield, GraduationCap, DollarSign, Settings, Eye, Terminal, Users, Rocket, Mic, Cpu, RefreshCw, Bot, Network, Database, Package, Target, Plug, Sparkles, Search, TrendingUp, Heart, Play, Star, Trophy, Gamepad2, Code2, BarChart3, Server } from "lucide-react";
 import { SiGithub, SiReplit } from "react-icons/si";
 import { CategoryChips } from "@/components/CategoryChips";
 import { CreateInput } from "@/components/CreateInput";
+import { NotificationBell } from "@/components/NotificationBell";
+import { GlobalSearch } from "@/components/GlobalSearch";
 import { cn } from "@/lib/utils";
 import { useAuth, getInitials, getAvatarColor } from "@/contexts/AuthContext";
 
@@ -716,10 +718,113 @@ function RuFloSection() {
   );
 }
 
+function TrendingSection() {
+  const [likedIds, setLikedIds] = useState<Set<number>>(new Set());
+  const [, setLocation] = useLocation();
+
+  const TRENDING_REPLS = [
+    { id: 101, name: "AI Chat Interface", author: "sara_codes", authorColor: "bg-purple-500", authorInitial: "S", lang: "TypeScript", likes: 1943, views: "31K", icon: Bot, iconColor: "text-purple-400", iconBg: "bg-purple-500/15" },
+    { id: 102, name: "Flappy Bird Clone", author: "alex_dev", authorColor: "bg-blue-500", authorInitial: "A", lang: "JavaScript", likes: 2841, views: "48K", icon: Gamepad2, iconColor: "text-yellow-400", iconBg: "bg-yellow-500/15" },
+    { id: 103, name: "Data Dashboard", author: "data_viz", authorColor: "bg-teal-500", authorInitial: "D", lang: "Python", likes: 743, views: "12K", icon: BarChart3, iconColor: "text-teal-400", iconBg: "bg-teal-500/15" },
+    { id: 104, name: "REST API Kit", author: "backend_pro", authorColor: "bg-yellow-600", authorInitial: "B", lang: "TypeScript", likes: 987, views: "18K", icon: Server, iconColor: "text-cyan-400", iconBg: "bg-cyan-500/15" },
+    { id: 105, name: "Portfolio Gen", author: "mike_ui", authorColor: "bg-green-500", authorInitial: "M", lang: "TypeScript", likes: 1234, views: "22K", icon: Code2, iconColor: "text-pink-400", iconBg: "bg-pink-500/15" },
+  ];
+
+  const toggleLike = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLikedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1 }}
+      className="space-y-2"
+    >
+      <div className="flex items-center justify-between px-0.5">
+        <div className="flex items-center gap-2">
+          <TrendingUp size={12} className="text-orange-400" />
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-white/35">Trending Now</span>
+        </div>
+        <Link href="/explore">
+          <span className="text-[10px] text-white/30 hover:text-white/60 transition-colors flex items-center gap-0.5">
+            See all <ChevronRight size={9} />
+          </span>
+        </Link>
+      </div>
+      <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 pb-1">
+        {TRENDING_REPLS.map((repl, i) => {
+          const Icon = repl.icon;
+          const liked = likedIds.has(repl.id);
+          return (
+            <motion.div
+              key={repl.id}
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.05 }}
+              onClick={() => { sessionStorage.setItem("chat_prompt", `Build something like "${repl.name}"`); setLocation("/chat"); }}
+              className="shrink-0 w-[160px] bg-[#1a1a1a] border border-white/[0.07] rounded-2xl p-3 cursor-pointer hover:border-white/15 hover:bg-[#1e1e1e] transition-all active:scale-[0.98]"
+            >
+              <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center mb-2", repl.iconBg)}>
+                <Icon size={17} className={repl.iconColor} />
+              </div>
+              <p className="text-[12px] font-semibold text-white leading-tight truncate mb-0.5">{repl.name}</p>
+              <div className="flex items-center gap-1 mb-2">
+                <div className={cn("w-3 h-3 rounded-full flex items-center justify-center text-[6px] font-bold text-white shrink-0", repl.authorColor)}>
+                  {repl.authorInitial}
+                </div>
+                <span className="text-[10px] text-white/30 truncate">@{repl.author}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={e => toggleLike(repl.id, e)}
+                  className={cn("flex items-center gap-1 text-[10px] transition-colors", liked ? "text-red-400" : "text-white/25")}
+                >
+                  <Heart size={10} className={liked ? "fill-red-400" : ""} />
+                  {liked ? repl.likes + 1 : repl.likes}
+                </button>
+                <span className="text-[10px] text-white/20 flex items-center gap-0.5">
+                  <Eye size={9} /> {repl.views}
+                </span>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+}
+
+function AchievementsBar() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.05 }}
+      className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 pb-1"
+    >
+      {[
+        { icon: "🏆", label: "Top 1%", color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-400/20" },
+        { icon: "🔥", label: "30d streak", color: "text-orange-400", bg: "bg-orange-500/10", border: "border-orange-400/20" },
+        { icon: "⭐", label: "Trending", color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-400/20" },
+        { icon: "🚀", label: "Deployed", color: "text-green-400", bg: "bg-green-500/10", border: "border-green-400/20" },
+        { icon: "🧠", label: "AI Pioneer", color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-400/20" },
+      ].map((ach) => (
+        <div key={ach.label} className={cn("shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border", ach.bg, ach.border)}>
+          <span className="text-[11px]">{ach.icon}</span>
+          <span className={cn("text-[10px] font-semibold", ach.color)}>{ach.label}</span>
+        </div>
+      ))}
+    </motion.div>
+  );
+}
+
 export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [showMenu, setShowMenu] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
   const [, setLocation] = useLocation();
@@ -781,6 +886,10 @@ export default function Home() {
           >
             <MoreVertical size={22} />
           </button>
+          {/* Global search */}
+          <AnimatePresence>
+            {showSearch && <GlobalSearch onClose={() => setShowSearch(false)} />}
+          </AnimatePresence>
           <AnimatePresence>
             {showMenu && (
               <>
@@ -817,17 +926,27 @@ export default function Home() {
         <span className="text-sm font-medium text-white/60">
           {user ? `${user.username}'s workspace` : "My workspace"}
         </span>
-        <button
-          onClick={() => setLocation("/account")}
-          className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer overflow-hidden shrink-0"
-          style={{ backgroundColor: avatarColor }}
-          data-testid="avatar-user"
-        >
-          {user?.avatarUrl
-            ? <img src={user.avatarUrl} alt={displayName} className="w-full h-full object-cover" />
-            : <span className="text-sm font-bold text-white">{initials}</span>
-          }
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setShowSearch(true)}
+            className="w-8 h-8 flex items-center justify-center text-white/50 hover:text-white transition-colors rounded-xl hover:bg-white/6"
+            data-testid="button-search"
+          >
+            <Search size={17} />
+          </button>
+          <NotificationBell />
+          <button
+            onClick={() => setLocation("/account")}
+            className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer overflow-hidden shrink-0"
+            style={{ backgroundColor: avatarColor }}
+            data-testid="avatar-user"
+          >
+            {user?.avatarUrl
+              ? <img src={user.avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+              : <span className="text-sm font-bold text-white">{initials}</span>
+            }
+          </button>
+        </div>
       </header>
 
       {/* Body */}
@@ -865,59 +984,39 @@ export default function Home() {
             )}
           </AnimatePresence>
 
+          {/* Trending section */}
+          <TrendingSection />
+
+          {/* Achievements bar */}
+          <AchievementsBar />
+
           {/* Recent imports */}
           <RecentImportsSection key={historyVersion} onReimport={handleReimport} />
 
           {/* Quick links */}
           <div className="grid grid-cols-2 gap-2">
-            <Link href="/templates">
-              <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-white/4 border border-white/8 hover:bg-white/7 transition-colors cursor-pointer">
-                <div className="w-7 h-7 rounded-lg bg-blue-500/20 border border-blue-400/25 flex items-center justify-center shrink-0">
-                  <BookOpen size={13} className="text-blue-400" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-white leading-tight">Templates</p>
-                  <p className="text-[10px] text-white/35 truncate">Starter templates</p>
-                </div>
-                <ChevronRight size={12} className="text-white/20 ml-auto shrink-0" />
-              </div>
-            </Link>
-            <Link href="/explore">
-              <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-white/4 border border-white/8 hover:bg-white/7 transition-colors cursor-pointer">
-                <div className="w-7 h-7 rounded-lg bg-purple-500/20 border border-purple-400/25 flex items-center justify-center shrink-0">
-                  <Compass size={13} className="text-purple-400" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-white leading-tight">Explore</p>
-                  <p className="text-[10px] text-white/35 truncate">Community repls</p>
-                </div>
-                <ChevronRight size={12} className="text-white/20 ml-auto shrink-0" />
-              </div>
-            </Link>
-            <Link href="/replit-agent">
-              <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-white/4 border border-white/8 hover:bg-white/7 transition-colors cursor-pointer">
-                <div className="w-7 h-7 rounded-lg bg-purple-500/20 border border-purple-400/25 flex items-center justify-center shrink-0">
-                  <Zap size={13} className="text-purple-400" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-white leading-tight">AI Agent</p>
-                  <p className="text-[10px] text-white/35 truncate">بنّاء تلقائي</p>
-                </div>
-                <ChevronRight size={12} className="text-white/20 ml-auto shrink-0" />
-              </div>
-            </Link>
-            <Link href="/pro-features">
-              <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-white/4 border border-white/8 hover:bg-white/7 transition-colors cursor-pointer">
-                <div className="w-7 h-7 rounded-lg bg-cyan-500/20 border border-cyan-400/25 flex items-center justify-center shrink-0">
-                  <Layers size={13} className="text-cyan-400" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-white leading-tight">Pro Tools</p>
-                  <p className="text-[10px] text-white/35 truncate">Nix · DB · Deploy</p>
-                </div>
-                <ChevronRight size={12} className="text-white/20 ml-auto shrink-0" />
-              </div>
-            </Link>
+            {[
+              { href: "/templates", icon: BookOpen, iconColor: "text-blue-400", iconBg: "bg-blue-500/20 border-blue-400/25", label: "Templates", sub: "Starter templates" },
+              { href: "/explore", icon: Compass, iconColor: "text-purple-400", iconBg: "bg-purple-500/20 border-purple-400/25", label: "Explore", sub: "Community repls" },
+              { href: "/bounties", icon: Trophy, iconColor: "text-yellow-400", iconBg: "bg-yellow-500/20 border-yellow-400/25", label: "Bounties", sub: "Earn money building" },
+              { href: "/plans", icon: Zap, iconColor: "text-orange-400", iconBg: "bg-orange-500/20 border-orange-400/25", label: "Plans", sub: "Core · Cycles · Pro" },
+            ].map(link => {
+              const Icon = link.icon;
+              return (
+                <Link key={link.href} href={link.href}>
+                  <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-white/4 border border-white/8 hover:bg-white/7 transition-colors cursor-pointer">
+                    <div className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 ${link.iconBg}`}>
+                      <Icon size={13} className={link.iconColor} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white leading-tight">{link.label}</p>
+                      <p className="text-[10px] text-white/35 truncate">{link.sub}</p>
+                    </div>
+                    <ChevronRight size={12} className="text-white/20 ml-auto shrink-0" />
+                  </div>
+                </Link>
+              );
+            })}
           </div>
 
           {/* JARVIS AI Assistant */}

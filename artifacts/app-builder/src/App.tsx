@@ -39,6 +39,10 @@ import JarvisPage from "@/pages/jarvis";
 import OpenClawPage from "@/pages/openclaw";
 import LoginPage from "@/pages/login";
 import SettingsPage from "@/pages/settings";
+import NotificationsPage from "@/pages/notifications";
+import ProfilePage from "@/pages/profile";
+import PlansPage from "@/pages/plans";
+import BountiesPage from "@/pages/bounties";
 
 const queryClient = new QueryClient();
 
@@ -83,6 +87,11 @@ function Router() {
         <Route path="/openclaw" component={OpenClawPage} />
         <Route path="/login" component={LoginPage} />
         <Route path="/settings" component={SettingsPage} />
+        <Route path="/notifications" component={NotificationsPage} />
+        <Route path="/profile/:username" component={ProfilePage} />
+        <Route path="/profile" component={ProfilePage} />
+        <Route path="/plans" component={PlansPage} />
+        <Route path="/bounties" component={BountiesPage} />
 
         <Route component={NotFound} />
       </Switch>
@@ -96,6 +105,7 @@ function AppLayout() {
 
   const isChat = location === "/chat";
   const isRufloPage = RUFLO_PAGES.some(p => location === p || location.startsWith(p + "/"));
+  const isFullScreen = ["/notifications", "/profile", "/plans", "/bounties"].some(p => location === p || location.startsWith(p + "/"));
   const hideBottomNav = isChat || isRufloPage;
 
   // Show tour on first visit

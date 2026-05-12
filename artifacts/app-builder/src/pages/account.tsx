@@ -5,7 +5,7 @@ import {
   ChevronRight, ExternalLink, Pencil, Moon, Sun, Monitor,
   Users, Info, Sparkles, Bell, Shield, Trash2, Check, X,
   Copy, LogOut, Key, CreditCard, Globe, Code2, Star, Zap,
-  HelpCircle, BookOpen, MessageSquare, ChevronDown, Loader2, Settings
+  HelpCircle, BookOpen, MessageSquare, ChevronDown, Loader2, Settings, Trophy
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth, getInitials, getAvatarColor } from "@/contexts/AuthContext";
@@ -307,18 +307,26 @@ export default function Account() {
           <SectionHeader label="Profile" />
           <Section>
             <SettingsRow icon={<Pencil size={16} />} label="Edit Profile" onClick={() => setShowEditProfile(true)} />
-            <SettingsRow icon={<Globe size={16} />} label="Public Profile" value={`@${username}`} />
-            <SettingsRow icon={<Code2 size={16} />} label="My Repls" />
+            <SettingsRow icon={<Globe size={16} />} label="Public Profile" value={`@${username}`} onClick={() => setLocation("/profile")} />
+            <SettingsRow icon={<Code2 size={16} />} label="My Repls" onClick={() => setLocation("/projects")} />
           </Section>
         </>
       )}
 
       {/* SUBSCRIPTION */}
-      <SectionHeader label="Subscription" />
+      <SectionHeader label="Subscription & Cycles" />
       <Section>
-        <SettingsRow icon={<CreditCard size={16} />} label="Billing" value="Free" />
-        <SettingsRow icon={<Star size={16} />} label="Core Features" />
+        <SettingsRow icon={<CreditCard size={16} />} label="Plans & Pricing" value="Free" onClick={() => setLocation("/plans")} />
+        <SettingsRow icon={<Star size={16} />} label="Core Features" onClick={() => setLocation("/plans")} />
         <SettingsRow icon={<Zap size={16} />} label="AI Usage Limits" value="10 msgs/day" />
+      </Section>
+
+      {/* BOUNTIES */}
+      <SectionHeader label="Community" />
+      <Section>
+        <SettingsRow icon={<Trophy size={16} />} label="Bounties" value="Earn money" onClick={() => setLocation("/bounties")} />
+        <SettingsRow icon={<Users size={16} />} label="Community Forum" />
+        <SettingsRow icon={<Star size={16} />} label="Leaderboard" />
       </Section>
 
       {/* THEME */}
@@ -376,7 +384,7 @@ export default function Account() {
       {/* PREFERENCES */}
       <SectionHeader label="Preferences" />
       <Section>
-        <SettingsRow icon={<Bell size={16} />} label="Notifications" />
+        <SettingsRow icon={<Bell size={16} />} label="Notifications" onClick={() => setLocation("/notifications")} />
         <SettingsRow icon={<Key size={16} />} label="Connected Apps" />
         <SettingsRow icon={<Shield size={16} />} label="Privacy & Security" onClick={() => setLocation("/settings")} />
         <SettingsRow icon={<Settings size={16} />} label="App Settings" onClick={() => setLocation("/settings")} />

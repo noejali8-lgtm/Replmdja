@@ -40,6 +40,9 @@ A mobile-first Replit clone with two apps: **App Builder** (mobile UI matching t
 ## Product
 
 - **App Builder**: Mobile Replit-like UI — create projects via AI chat, browse projects, account page
+  - **New Pages (v2)**: Notifications (`/notifications`), Public Profile (`/profile/:username`), Plans & Pricing (`/plans`), Bounties (`/bounties`)
+  - **New Components**: `NotificationBell` (bell icon with unread badge in header), `GlobalSearch` (full-screen search overlay), `ReplDetailSheet` (slide-up detail view for repls in Explore), `TrendingSection` (home page horizontal scroll), `AchievementsBar`
+  - **Header**: Search icon + notification bell with live unread count badge + user avatar
   - **Agent 4 features**: Parallel Agents, App Monitoring, Design Canvas, Branching/Micro VMs, Turbo mode (2.5×), Build Together, Multi-Artifact (Web/Mobile/Slides/API/Desktop), Agent Memory (confidence-scored facts), Checkpoint Timeline (restore to any point), Agent Insights (tokens/cost/speed stats)
   - **Quick Suggestions**: Swipeable prompt chips appear after each AI reply (dismissed on tap or ×)
   - **More menu**: ··· button opens overlay with Memory / Checkpoints / Insights / Files / Deploy / Webview
