@@ -36,6 +36,54 @@ export function MonacoEditorPane({
 }: MonacoEditorProps) {
   const monaco = useMonaco();
   const editorRef = useRef<MonacoType.editor.IStandaloneCodeEditor | null>(null);
+  const completionDisposable = useRef<MonacoType.IDisposable | null>(null);
+
+  /* ── AI inline completions (Ctrl+Space triggers) ── */
+  useEffect(() => {
+    if (!monaco || readOnly) return;
+
+    completionDisposable.current?.dispose();
+
+    const ALL_LANGS = [
+      "typescript","javascript","python","java","cpp","c","csharp","go","rust",
+      "ruby","php","swift","kotlin","html","css","json","markdown","shell",
+      "sql","yaml","xml","plaintext",
+    ];
+
+    completionDisposable.current = monaco.languages.registerInlineCompletionsProvider(ALL_LANGS, {
+      provideInlineCompletions: async (model, position) => {
+        const prefix = model.getValueInRange({
+          startLineNumber: Math.max(1, position.lineNumber - 40),
+          startColumn: 1,
+          endLineNumber: position.lineNumber,
+          endColumn: position.column,
+        });
+        const suffix = model.getValueInRange({
+          startLineNumber: position.lineNumber,
+          startColumn: position.column,
+          endLineNumber: Math.min(model.getLineCount(), position.lineNumber + 10),
+          endColumn: model.getLineMaxColumn(Math.min(model.getLineCount(), position.lineNumber + 10)),
+        });
+        if (prefix.trim().length < 3) return { items: [] };
+        try {
+          const BASE = (window as Window & { __API_BASE__?: string }).__API_BASE__ ?? "";
+          const res = await fetch(`${BASE}/api/ide-agent/complete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ prefix, suffix, language, filename: "editor" }),
+          });
+          if (!res.ok) return { items: [] };
+          const { completion } = await res.json() as { completion?: string };
+          if (!completion) return { items: [] };
+          return { items: [{ insertText: completion, range: undefined }] };
+        } catch { return { items: [] }; }
+      },
+      freeInlineCompletions: () => {},
+    });
+
+    return () => { completionDisposable.current?.dispose(); };
+  }, [monaco, language, readOnly]);
 
   useEffect(() => {
     if (!monaco) return;

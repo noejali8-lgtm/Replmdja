@@ -77,6 +77,66 @@ function slugify(name: string) {
 /* ── Running processes: { proc, port } ── */
 const runningProcs = new Map<number, { proc: ReturnType<typeof spawn>; port: number }>();
 
+/* ── Public explore (MUST be before /:id) ── */
+router.get("/explore", async (req, res) => {
+  try {
+    const rows = await db.select().from(projects)
+      .where(eq(projects.isPublic, true))
+      .orderBy(projects.updatedAt)
+      .limit(60);
+    res.json(rows);
+  } catch {
+    res.status(500).json({ error: "Failed to fetch public projects" });
+  }
+});
+
+/* ── Import from GitHub (clone) ── */
+router.post("/import", async (req, res) => {
+  const { githubUrl, name, token } = req.body ?? {};
+  if (!githubUrl) { res.status(400).json({ error: "githubUrl required" }); return; }
+
+  const repoName = name ?? githubUrl.split("/").pop()?.replace(/\.git$/, "") ?? "imported-repo";
+  const slug     = slugify(repoName);
+  const dirPath  = path.join(PROJECTS_ROOT, slug);
+
+  try {
+    fs.mkdirSync(dirPath, { recursive: true });
+    const { default: simpleGit } = await import("simple-git");
+    const git = simpleGit();
+
+    let cloneUrl = githubUrl;
+    if (token && githubUrl.includes("github.com")) {
+      cloneUrl = githubUrl.replace("https://", `https://${token}@`);
+    }
+    await git.clone(cloneUrl, dirPath, ["--depth", "1"]);
+
+    const files = fs.existsSync(dirPath) ? fs.readdirSync(dirPath) : [];
+    let language = "node";
+    if (files.some(f => f === "requirements.txt" || f === "pyproject.toml")) language = "python";
+    else if (files.some(f => f === "index.html")) language = "html";
+
+    const PYTHON = "/nix/store/h097imm3w6dpx10qynrd2sz9fks2wbq8-python3-3.12.11/bin/python3";
+    const runMap: Record<string, string> = {
+      node: "node index.js", python: `${PYTHON} main.py`, html: "", react: "npm run dev",
+    };
+
+    const [project] = await db.insert(projects).values({
+      userId: req.session?.userId ?? null,
+      name: repoName, slug,
+      description: `Imported from ${githubUrl}`,
+      language, dirPath,
+      entryFile: language === "python" ? "main.py" : "index.js",
+      runCmd: runMap[language] ?? "node index.js",
+      isPublic: false,
+    }).returning();
+    res.status(201).json(project);
+  } catch (err) {
+    try { fs.rmSync(dirPath, { recursive: true, force: true }); } catch { /**/ }
+    console.error("Import error:", err);
+    res.status(500).json({ error: String((err as Error).message ?? "Failed to import repository") });
+  }
+});
+
 /* ── List projects ── */
 router.get("/", async (req, res) => {
   const userId = req.session?.userId;
@@ -150,6 +210,69 @@ router.patch("/:id", async (req, res) => {
   }).where(eq(projects.id, Number(req.params.id))).returning();
   res.json(p);
 });
+
+/* ── Toggle public/private ── */
+router.patch("/:id/visibility", async (req, res) => {
+  const { isPublic } = req.body ?? {};
+  try {
+    const [p] = await db.update(projects)
+      .set({ isPublic: Boolean(isPublic), updatedAt: new Date() })
+      .where(eq(projects.id, Number(req.params.id)))
+      .returning();
+    res.json(p);
+  } catch {
+    res.status(500).json({ error: "Failed to update visibility" });
+  }
+});
+
+/* ── Fork project ── */
+router.post("/:id/fork", async (req, res) => {
+  const [source] = await db.select().from(projects).where(eq(projects.id, Number(req.params.id))).limit(1);
+  if (!source) { res.status(404).json({ error: "Not found" }); return; }
+
+  const forkName = `${source.name}-fork`;
+  const slug     = slugify(forkName);
+  const dirPath  = path.join(PROJECTS_ROOT, slug);
+
+  try {
+    fs.mkdirSync(dirPath, { recursive: true });
+    copyDirRecursive(source.dirPath, dirPath);
+
+    const [forked] = await db.insert(projects).values({
+      userId:    req.session?.userId ?? null,
+      name:      forkName, slug,
+      description: `Forked from ${source.name}`,
+      language:  source.language,
+      template:  source.template,
+      dirPath,
+      entryFile: source.entryFile,
+      runCmd:    source.runCmd,
+      isPublic:  false,
+    }).returning();
+    res.status(201).json(forked);
+  } catch (err) {
+    try { fs.rmSync(dirPath, { recursive: true, force: true }); } catch { /**/ }
+    console.error("Fork error:", err);
+    res.status(500).json({ error: "Failed to fork project" });
+  }
+});
+
+function copyDirRecursive(src: string, dest: string) {
+  if (!fs.existsSync(src)) return;
+  const SKIP = new Set(["node_modules", ".git", "__pycache__", ".venv", "dist", ".next", "build"]);
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    if (SKIP.has(entry.name)) continue;
+    const srcPath  = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      fs.mkdirSync(destPath, { recursive: true });
+      copyDirRecursive(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
 
 /* ── Delete project ── */
 router.delete("/:id", async (req, res) => {

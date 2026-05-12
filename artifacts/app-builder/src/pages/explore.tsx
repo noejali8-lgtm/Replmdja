@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion as m, AnimatePresence } from "framer-motion";
 import {
   Search, TrendingUp, Star, Play, Heart, Globe, Lock,
   Code2, Bot, Gamepad2, BarChart3, Smartphone, Server,
   Palette, Globe2, ChevronRight, Zap, Users, Eye,
-  Layers, Terminal, BookOpen, X, Filter
+  Layers, Terminal, BookOpen, X, Filter, Copy
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -158,14 +158,49 @@ function ReplCard({ repl, onClick, i }: { repl: Repl; onClick: () => void; i: nu
   );
 }
 
+interface CommunityProject {
+  id: number; name: string; language: string; description: string;
+  isPublic: boolean; createdAt: string; updatedAt: string;
+}
+
+const LANG_COLORS: Record<string, string> = {
+  node: "text-green-400", python: "text-yellow-400", react: "text-blue-400",
+  html: "text-orange-400", flask: "text-purple-400",
+};
+const LANG_BG: Record<string, string> = {
+  node: "bg-green-500/15", python: "bg-yellow-500/15", react: "bg-blue-500/15",
+  html: "bg-orange-500/15", flask: "bg-purple-500/15",
+};
+
 export default function Explore() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<Category>("All");
+  const [community, setCommunity] = useState<CommunityProject[]>([]);
+
+  useEffect(() => {
+    fetch("/api/projects/explore", { credentials: "include" })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setCommunity(data); })
+      .catch(() => {});
+  }, []);
 
   const handleOpen = (repl: Repl) => {
     sessionStorage.setItem("chat_prompt", `I want to build something like "${repl.name}" — ${repl.desc}`);
     setLocation("/chat");
+  };
+
+  const handleOpenCommunity = (p: CommunityProject) => {
+    sessionStorage.setItem("chat_prompt", `I want to explore "${p.name}" — a ${p.language} project. ${p.description}`);
+    setLocation("/chat");
+  };
+
+  const handleFork = async (p: CommunityProject, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`/api/projects/${p.id}/fork`, { method: "POST", credentials: "include" });
+      if (res.ok) { const forked = await res.json(); alert(`Forked as "${forked.name}"!`); }
+    } catch { /**/ }
   };
 
   const featured = REPLS.filter(r => r.featured);
@@ -259,6 +294,45 @@ export default function Explore() {
           </m.div>
         )}
       </AnimatePresence>
+
+      {/* Community repls from API */}
+      {community.length > 0 && !search && (
+        <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-5">
+          <div className="flex items-center gap-2 px-4 mb-3">
+            <Globe size={14} className="text-blue-400" />
+            <span className="text-sm font-semibold text-white">Community Repls</span>
+            <span className="text-xs text-white/25 ml-auto">{community.length} public</span>
+          </div>
+          <div className="px-4 space-y-2.5">
+            {community.slice(0, 5).map((p, i) => (
+              <m.div
+                key={p.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+                onClick={() => handleOpenCommunity(p)}
+                className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#1a1a2e] border border-blue-500/20 hover:border-blue-400/40 cursor-pointer transition-all active:scale-[0.99]"
+              >
+                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0", LANG_BG[p.language] ?? "bg-white/10")}>
+                  <Code2 size={18} className={LANG_COLORS[p.language] ?? "text-white/50"} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{p.name}</p>
+                  <p className="text-[11px] text-white/40 truncate mt-0.5">{p.description || `A ${p.language} project`}</p>
+                  <span className="text-[10px] font-medium text-blue-400/70 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-400/20 mt-1 inline-block capitalize">{p.language}</span>
+                </div>
+                <button
+                  onClick={(e) => handleFork(p, e)}
+                  className="w-8 h-8 flex items-center justify-center text-white/25 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all shrink-0"
+                  title="Fork this repl"
+                >
+                  <Copy size={13} />
+                </button>
+              </m.div>
+            ))}
+          </div>
+        </m.div>
+      )}
 
       {/* Stats bar */}
       {!search && category === "All" && (

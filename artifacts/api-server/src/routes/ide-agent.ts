@@ -507,4 +507,34 @@ router.post("/approve", (req, res) => {
   }
 });
 
+/* ── AI code completion (inline autocomplete) ── */
+router.post("/complete", async (req, res) => {
+  const { code, language, filename, prefix, suffix } = req.body ?? {};
+  if (!code && !prefix) { res.status(400).json({ error: "code or prefix required" }); return; }
+
+  try {
+    const lang = language ?? "javascript";
+    const file = filename ?? "file";
+    const context = prefix ?? code ?? "";
+    const after   = suffix ?? "";
+
+    const prompt = after
+      ? `Complete this ${lang} code. File: ${file}\n\nCode before cursor:\n${context}\n\nCode after cursor:\n${after}\n\nReturn ONLY the text to insert at the cursor position. No explanation, no markdown.`
+      : `Continue this ${lang} code naturally. File: ${file}\n\n${context}\n\nReturn ONLY the next few tokens/lines to add. No explanation, no markdown, no repetition of existing code.`;
+
+    const msg = await anthropic.messages.create({
+      model: "claude-3-5-haiku-20241022",
+      max_tokens: 200,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const text = msg.content[0]?.type === "text" ? msg.content[0].text : "";
+    const clean = text.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trimEnd();
+    res.json({ completion: clean });
+  } catch (err) {
+    console.error("Autocomplete error:", err);
+    res.json({ completion: "" });
+  }
+});
+
 export default router;

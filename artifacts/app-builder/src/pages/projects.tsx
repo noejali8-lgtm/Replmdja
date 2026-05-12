@@ -5,7 +5,8 @@ import {
   Search, MonitorSmartphone, Layers, BarChart3, Presentation, Wand2,
   ChevronRight, Plus, MoreHorizontal, Star, StarOff, Trash2, Globe,
   Lock, Play, Code2, Bot, Terminal, Blocks, Smartphone, X, SortAsc,
-  List, Clock, LayoutGrid, RefreshCw, AlertCircle
+  List, Clock, LayoutGrid, RefreshCw, AlertCircle, GitBranch, Download,
+  Copy, Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -56,10 +57,95 @@ function timeAgo(iso: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-function ProjectMenu({ project, onStar, onDelete, onClose }: {
+function ImportModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
+  const [url, setUrl] = useState("");
+  const [token, setToken] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleImport = async () => {
+    if (!url.trim()) { setError("Please enter a GitHub URL"); return; }
+    setError(""); setLoading(true);
+    try {
+      const res = await fetch("/api/projects/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ githubUrl: url.trim(), token: token.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Import failed"); return; }
+      onImported();
+      onClose();
+    } catch { setError("Network error — check the API server"); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <m.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end justify-center"
+      onClick={onClose}
+    >
+      <m.div
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", stiffness: 400, damping: 40 }}
+        className="w-full max-w-[480px] bg-[#161b22] border border-white/[0.1] rounded-t-3xl p-6 pb-10"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2.5">
+            <GitBranch size={18} className="text-[#58a6ff]" />
+            <h2 className="text-base font-semibold text-white">Import from GitHub</h2>
+          </div>
+          <button onClick={onClose} className="text-white/40 hover:text-white transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="block text-xs text-white/50 mb-1.5">Repository URL</label>
+            <input
+              value={url} onChange={e => setUrl(e.target.value)}
+              placeholder="https://github.com/owner/repo"
+              className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 h-11 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#58a6ff]/60 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1.5">GitHub Token <span className="text-white/25">(optional, for private repos)</span></label>
+            <input
+              value={token} onChange={e => setToken(e.target.value)} type="password"
+              placeholder="ghp_..."
+              className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 h-11 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#58a6ff]/60 transition-colors"
+            />
+          </div>
+          {error && (
+            <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">{error}</p>
+          )}
+          <button
+            onClick={handleImport}
+            disabled={loading || !url.trim()}
+            className="w-full h-11 rounded-xl bg-[#238636] hover:bg-[#2ea043] disabled:opacity-50 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+          >
+            {loading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+            {loading ? "Cloning repository..." : "Import Repository"}
+          </button>
+        </div>
+      </m.div>
+    </m.div>
+  );
+}
+
+function ProjectMenu({ project, onStar, onDelete, onFork, onClose }: {
   project: Project;
   onStar: () => void;
   onDelete: () => void;
+  onFork: () => void;
   onClose: () => void;
 }) {
   return (
@@ -80,6 +166,10 @@ function ProjectMenu({ project, onStar, onDelete, onClose }: {
       <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left">
         <Code2 size={14} className="text-white/50" />
         <span className="text-sm text-white">Open in IDE</span>
+      </button>
+      <button onClick={onFork} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left">
+        <Copy size={14} className="text-white/50" />
+        <span className="text-sm text-white">Fork</span>
       </button>
       <div className="h-px bg-white/6 mx-3" />
       <button onClick={onDelete} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-500/10 transition-colors text-left">
@@ -170,6 +260,16 @@ export default function Projects() {
     { id: "starred", label: "⭐ Starred" },
   ];
 
+  const [showImport, setShowImport] = useState(false);
+
+  const handleFork = async (id: number) => {
+    setOpenMenu(null);
+    try {
+      const res = await fetch(`${API}/${id}/fork`, { method: "POST", credentials: "include" });
+      if (res.ok) { await fetchProjects(); }
+    } catch { /**/ }
+  };
+
   return (
     <m.div
       initial={{ opacity: 0 }}
@@ -178,10 +278,22 @@ export default function Projects() {
       className="flex flex-col h-full min-h-[100dvh] max-w-[480px] mx-auto w-full"
       onClick={() => { setOpenMenu(null); setShowSort(false); }}
     >
+      {/* Import modal */}
+      <AnimatePresence>
+        {showImport && <ImportModal onClose={() => setShowImport(false)} onImported={fetchProjects} />}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-12 pb-3">
         <h1 className="text-2xl font-bold text-white">My Repls</h1>
         <div className="flex items-center gap-2">
+          <button
+            onClick={e => { e.stopPropagation(); setShowImport(true); }}
+            className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/8 rounded-lg transition-colors"
+            title="Import from GitHub"
+          >
+            <GitBranch size={15} />
+          </button>
           <button
             onClick={e => { e.stopPropagation(); fetchProjects(); }}
             className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/8 rounded-lg transition-colors"
@@ -356,6 +468,7 @@ export default function Projects() {
                           project={project}
                           onStar={() => handleStar(project.id)}
                           onDelete={() => handleDelete(project.id)}
+                          onFork={() => handleFork(project.id)}
                           onClose={() => setOpenMenu(null)}
                         />
                       )}

@@ -212,6 +212,22 @@ export default function Account() {
           </button>
         </div>
         {user?.email && <p className="text-sm text-white/25 mt-0.5">{user.email}</p>}
+        {user && (
+          <div className="flex items-center gap-2 mt-2">
+            {user.plan === "free" || !user.plan ? (
+              <span className="text-[11px] font-semibold text-white/50 bg-white/8 border border-white/15 px-2.5 py-1 rounded-full">Free</span>
+            ) : user.plan === "starter" ? (
+              <span className="text-[11px] font-semibold text-blue-300 bg-blue-500/15 border border-blue-400/30 px-2.5 py-1 rounded-full">⚡ Hacker</span>
+            ) : user.plan === "pro" ? (
+              <span className="text-[11px] font-semibold text-purple-300 bg-purple-500/15 border border-purple-400/30 px-2.5 py-1 rounded-full">✦ Pro</span>
+            ) : (
+              <span className="text-[11px] font-semibold text-yellow-300 bg-yellow-500/15 border border-yellow-400/30 px-2.5 py-1 rounded-full">👥 Teams</span>
+            )}
+            {user.provider && user.provider !== "local" && (
+              <span className="text-[11px] text-white/30 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full capitalize">via {user.provider}</span>
+            )}
+          </div>
+        )}
         {user?.createdAt && (
           <p className="text-xs text-white/20 mt-1">
             Member since {new Date(user.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })}

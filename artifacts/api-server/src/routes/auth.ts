@@ -200,6 +200,110 @@ function getCallbackUrl(req: import("express").Request): string {
   return `${req.protocol}://${req.get("host")}/api/auth/github/callback`;
 }
 
+/* ─── Google OAuth ──────────────────────────────────── */
+router.get("/google", async (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    res.status(503).send("Google OAuth not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to your secrets.");
+    return;
+  }
+  const redirectUri = encodeURIComponent(getGoogleCallbackUrl(req));
+  const scope       = encodeURIComponent("openid email profile");
+  res.redirect(
+    `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=select_account`
+  );
+});
+
+router.get("/google/callback", async (req, res) => {
+  const { code }     = req.query;
+  const clientId     = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret || !code) {
+    res.redirect("/login?error=oauth_failed");
+    return;
+  }
+
+  try {
+    const redirectUri = getGoogleCallbackUrl(req);
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code: String(code),
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+    const tokenData = await tokenRes.json() as { access_token?: string; error?: string };
+    if (!tokenData.access_token) { res.redirect("/login?error=no_token"); return; }
+
+    const profileRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const profile = await profileRes.json() as {
+      id: string; email?: string; name?: string; picture?: string; given_name?: string;
+    };
+
+    const googleId = profile.id;
+    const email    = profile.email ?? null;
+
+    let [existing] = await db.select().from(users).where(
+      or(eq(users.googleId, googleId), ...(email ? [eq(users.email, email)] : []))
+    ).limit(1);
+
+    if (existing) {
+      const [updated] = await db.update(users).set({
+        googleId,
+        avatarUrl: profile.picture ?? existing.avatarUrl,
+        updatedAt: new Date(),
+      }).where(eq(users.id, existing.id)).returning();
+      existing = updated;
+    } else {
+      const baseName = (
+        profile.name ?? profile.given_name ?? email?.split("@")[0] ?? "user"
+      ).toLowerCase().replace(/[^a-z0-9_]/g, "_");
+      let username = baseName;
+      let suffix = 0;
+      while (true) {
+        const [taken] = await db.select({ id: users.id }).from(users).where(eq(users.username, username)).limit(1);
+        if (!taken) break;
+        username = `${baseName}${++suffix}`;
+      }
+      const [created] = await db.insert(users).values({
+        username,
+        email,
+        displayName: profile.name ?? username,
+        passwordHash: "",
+        avatarUrl: profile.picture ?? null,
+        googleId,
+        provider: "google",
+        plan: "free",
+      }).returning();
+      existing = created;
+    }
+
+    req.session.userId   = existing.id;
+    req.session.username = existing.username;
+
+    const origin = process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : "http://localhost:5000";
+    res.redirect(`${origin}/`);
+  } catch (err) {
+    console.error("Google OAuth error:", err);
+    res.redirect("/login?error=oauth_error");
+  }
+});
+
+function getGoogleCallbackUrl(req: import("express").Request): string {
+  const devDomain = process.env.REPLIT_DEV_DOMAIN;
+  if (devDomain) return `https://${devDomain}/api/auth/google/callback`;
+  return `${req.protocol}://${req.get("host")}/api/auth/google/callback`;
+}
+
 /* ─── Profile update ───────────────────────────────── */
 router.patch("/profile", async (req, res) => {
   if (!req.session.userId) {
