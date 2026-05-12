@@ -21,6 +21,8 @@ import projectsRouter from "./projects";
 import systemRouter from "./system";
 import dbGuiRouter from "./db-gui";
 import ideAgentRouter from "./ide-agent";
+import gitRouter from "./git";
+import billingRouter from "./billing";
 
 const router: IRouter = Router();
 
@@ -43,6 +45,8 @@ router.use("/run", runRouter);
 router.use("/files", filesRouter);
 router.use("/auth", authRouter);
 router.use("/projects", projectsRouter);
+router.use("/projects", gitRouter);
+router.use("/billing", billingRouter);
 router.use("/system", systemRouter);
 router.use("/db-gui", dbGuiRouter);
 router.use("/ide-agent", ideAgentRouter);

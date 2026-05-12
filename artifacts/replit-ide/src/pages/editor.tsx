@@ -8,7 +8,7 @@ import {
   Database, Lock, RefreshCw, ExternalLink, ChevronRight, Plus,
   Layers, Code2, Globe, AlertTriangle, Bug, Box, BarChart2, Camera,
   Shield, Mic, ScrollText, GitGraph, Zap, Keyboard, Users, Activity,
-  Network, GitMerge, Server
+  Network, GitMerge, Server, CreditCard
 } from "lucide-react";
 import { useProjectFiles } from "@/hooks/useProjectFiles";
 import { SecretsPanel } from "@/components/editor/SecretsPanel";
@@ -39,10 +39,11 @@ import { MultiCursorPresence } from "@/components/editor/MultiCursorPresence";
 import { KeybindingsPanel } from "@/components/editor/KeybindingsPanel";
 import { GitEnhancedPanel } from "@/components/editor/GitEnhancedPanel";
 import { SelfHealingPanel } from "@/components/editor/SelfHealingPanel";
+import { BillingPanel } from "@/components/editor/BillingPanel";
 import { sound } from "@/lib/soundSystem";
 
 /* ─── Types ─────────────────────────────────────────── */
-type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database" | "debug" | "packages" | "analytics" | "snapshots" | "review" | "gitgraph" | "templates" | "vulnscan" | "auditlogs" | "deployment" | "presence" | "keybindings" | "selfheal";
+type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database" | "debug" | "packages" | "analytics" | "snapshots" | "review" | "gitgraph" | "templates" | "vulnscan" | "auditlogs" | "deployment" | "presence" | "keybindings" | "selfheal" | "billing";
 type BottomPanel = "terminal" | "preview" | "console" | "logs";
 
 interface Tab {
@@ -858,6 +859,7 @@ export default function Editor() {
           <SideBtn icon={<Rocket className="h-4 w-4" />} id="deployment" title="Deployment" />
           <SideBtn icon={<Lock className="h-4 w-4" />} id="secrets" title="Secrets" />
           <SideBtn icon={<Database className="h-4 w-4" />} id="database" title="Database GUI" />
+          <SideBtn icon={<CreditCard className="h-4 w-4" />} id="billing" title="Billing & Plans" />
         </div>
 
         <PanelGroup direction="horizontal" className="flex-1 overflow-hidden">
@@ -884,7 +886,7 @@ export default function Editor() {
                     <SearchPanel files={filesForSearch} onFileSelect={(f) => openFile(f)} />
                   )}
                   {sidePanel === "git" && (
-                    <GitEnhancedPanel dirtyPaths={dirtyPaths} projectName={projectName} />
+                    <GitEnhancedPanel projectId={projectId ?? undefined} projectName={projectName} />
                   )}
                   {sidePanel === "extensions" && (
                     <div className="flex flex-col h-full p-3 gap-2 overflow-y-auto">
@@ -940,6 +942,7 @@ export default function Editor() {
                   {sidePanel === "presence"   && <MultiCursorPresence currentFile={activeTab?.path} projectId={projectName} />}
                   {sidePanel === "keybindings"&& <KeybindingsPanel />}
                   {sidePanel === "selfheal"   && <SelfHealingPanel currentFile={activeTab?.name} />}
+                  {sidePanel === "billing"    && <BillingPanel />}
                 </div>
               </Panel>
               <PanelResizeHandle className="w-px bg-[#21262d] hover:bg-[#58a6ff] transition-colors cursor-col-resize" />

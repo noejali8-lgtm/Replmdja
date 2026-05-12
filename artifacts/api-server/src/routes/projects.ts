@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, projects } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, projects, projectSecrets } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
@@ -24,11 +24,14 @@ function allocatePort(): number {
 
 function releasePort(port: number) { usedPorts.delete(port); }
 
-/* ─── Secret env vars store (in-memory) ──────────────── */
-const secretsStore = new Map<number, Map<string, string>>();
-
-export function getProjectEnv(projectId: number): Record<string, string> {
-  return Object.fromEntries(secretsStore.get(projectId)?.entries() ?? []);
+/* ─── Secret env vars — DB-persisted ─────────────────── */
+export async function getProjectEnv(projectId: number): Promise<Record<string, string>> {
+  try {
+    const rows = await db.select().from(projectSecrets).where(eq(projectSecrets.projectId, projectId));
+    return Object.fromEntries(rows.map(r => [r.key, r.value]));
+  } catch {
+    return {};
+  }
 }
 
 /* ─── Templates ──────────────────────────────────────── */
@@ -287,7 +290,7 @@ router.post("/:id/run", async (req, res) => {
   send("info", `🔌 Port: ${port}`);
 
   /* Inject project secrets as env vars */
-  const secrets = getProjectEnv(p.id);
+  const secrets = await getProjectEnv(p.id);
 
   const proc = spawn(parts[0], parts.slice(1), {
     cwd: p.dirPath,
@@ -408,15 +411,16 @@ router.get("/:id/status", async (req, res) => {
   res.json({ running: !!entry, port: entry?.port ?? null });
 });
 
-/* ── Secrets routes ── */
+/* ── Secrets routes (DB-persisted) ── */
 router.get("/:id/secrets", async (req, res) => {
   const id = Number(req.params.id);
   const [p] = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
   if (!p) { res.status(404).json({ error: "Not found" }); return; }
-  const store = secretsStore.get(id) ?? new Map();
-  const secrets = Array.from(store.keys()).map(key => ({
-    key, hasValue: (store.get(key) ?? "") !== "",
-    preview: ((store.get(key) ?? "").slice(0, 3) || "•••") + "***",
+  const rows = await db.select().from(projectSecrets).where(eq(projectSecrets.projectId, id));
+  const secrets = rows.map(r => ({
+    key: r.key,
+    hasValue: r.value !== "",
+    preview: (r.value.slice(0, 3) || "•••") + "***",
   }));
   res.json({ secrets });
 });
@@ -425,10 +429,10 @@ router.get("/:id/secrets/:key", async (req, res) => {
   const id = Number(req.params.id);
   const [p] = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
   if (!p) { res.status(404).json({ error: "Not found" }); return; }
-  const store = secretsStore.get(id);
-  const value = store?.get(req.params.key);
-  if (value === undefined) { res.status(404).json({ error: "Secret not found" }); return; }
-  res.json({ key: req.params.key, value });
+  const [row] = await db.select().from(projectSecrets)
+    .where(and(eq(projectSecrets.projectId, id), eq(projectSecrets.key, req.params.key))).limit(1);
+  if (!row) { res.status(404).json({ error: "Secret not found" }); return; }
+  res.json({ key: row.key, value: row.value });
 });
 
 router.put("/:id/secrets/:key", async (req, res) => {
@@ -437,14 +441,21 @@ router.put("/:id/secrets/:key", async (req, res) => {
   if (!p) { res.status(404).json({ error: "Not found" }); return; }
   const { value = "" } = req.body ?? {};
   const key = req.params.key.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
-  if (!secretsStore.has(id)) secretsStore.set(id, new Map());
-  secretsStore.get(id)!.set(key, String(value));
+  const [existing] = await db.select().from(projectSecrets)
+    .where(and(eq(projectSecrets.projectId, id), eq(projectSecrets.key, key))).limit(1);
+  if (existing) {
+    await db.update(projectSecrets).set({ value: String(value), updatedAt: new Date() })
+      .where(and(eq(projectSecrets.projectId, id), eq(projectSecrets.key, key)));
+  } else {
+    await db.insert(projectSecrets).values({ projectId: id, key, value: String(value) });
+  }
   res.json({ ok: true, key });
 });
 
 router.delete("/:id/secrets/:key", async (req, res) => {
   const id = Number(req.params.id);
-  secretsStore.get(id)?.delete(req.params.key);
+  await db.delete(projectSecrets)
+    .where(and(eq(projectSecrets.projectId, id), eq(projectSecrets.key, req.params.key)));
   res.json({ ok: true });
 });
 

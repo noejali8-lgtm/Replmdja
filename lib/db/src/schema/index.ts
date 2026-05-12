@@ -27,3 +27,5 @@ export * from "./plugins";
 export * from "./godmode";
 export * from "./users";
 export * from "./projects";
+export * from "./project_secrets";
+export * from "./subscriptions";
