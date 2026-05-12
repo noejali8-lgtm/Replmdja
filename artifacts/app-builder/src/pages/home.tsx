@@ -672,6 +672,95 @@ const RUFLO_LINKS = [
   { path: "/openclaw",  icon: Globe,    color: "text-red-400",    bg: "bg-red-500/10",    border: "border-red-400/20",    label: "OpenClaw",     sub: "AI gateway · All chats", badge: "NEW" },
 ];
 
+function LiveActivityFeed() {
+  const [stats, setStats] = useState({ repls: 142381, users: 9473, deploys: 3821 });
+  const [feed, setFeed] = useState([
+    { id: 1, user: "sofia_m", action: "deployed", project: "AI Recipe Generator", time: "2s ago", color: "text-green-400" },
+    { id: 2, user: "kai.dev", action: "forked", project: "Discord Bot Starter", time: "8s ago", color: "text-blue-400" },
+    { id: 3, user: "priya_codes", action: "built", project: "Portfolio v3", time: "14s ago", color: "text-purple-400" },
+    { id: 4, user: "marcos99", action: "published", project: "Expense Tracker", time: "21s ago", color: "text-yellow-400" },
+  ]);
+
+  useEffect(() => {
+    const actions = ["deployed", "built", "published", "forked", "starred"];
+    const projects = ["Snake AI", "Blog Platform", "Chat App", "Todo API", "Music Player", "Weather Widget", "Crypto Tracker"];
+    const users = ["alex_r", "luna.js", "bytebreaker", "dev_nico", "zara.build", "rustam_k", "mia.codes"];
+    const colors = ["text-green-400", "text-blue-400", "text-purple-400", "text-yellow-400", "text-orange-400", "text-cyan-400"];
+
+    const interval = setInterval(() => {
+      // Animate counters
+      setStats(prev => ({
+        repls: prev.repls + Math.floor(Math.random() * 3),
+        users: prev.users + Math.floor(Math.random() * 2),
+        deploys: prev.deploys + Math.floor(Math.random() * 1),
+      }));
+      // Add new feed item
+      const newItem = {
+        id: Date.now(),
+        user: users[Math.floor(Math.random() * users.length)],
+        action: actions[Math.floor(Math.random() * actions.length)],
+        project: projects[Math.floor(Math.random() * projects.length)],
+        time: "just now",
+        color: colors[Math.floor(Math.random() * colors.length)],
+      };
+      setFeed(prev => [newItem, ...prev.slice(0, 3)]);
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+      className="rounded-2xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+        <div className="flex items-center gap-2">
+          <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
+            className="w-1.5 h-1.5 rounded-full bg-green-400" />
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-white/40">Live Activity</span>
+        </div>
+        <span className="text-[10px] text-white/25">Community</span>
+      </div>
+      {/* Stats row */}
+      <div className="grid grid-cols-3 divide-x divide-white/[0.06] border-b border-white/[0.06]">
+        {[
+          { label: "Repls", value: stats.repls.toLocaleString() },
+          { label: "Online", value: stats.users.toLocaleString() },
+          { label: "Deploys", value: stats.deploys.toLocaleString() },
+        ].map(stat => (
+          <div key={stat.label} className="flex flex-col items-center py-3">
+            <span className="text-[15px] font-bold text-white tabular-nums">{stat.value}</span>
+            <span className="text-[9px] text-white/30 mt-0.5">{stat.label}</span>
+          </div>
+        ))}
+      </div>
+      {/* Live feed */}
+      <div className="divide-y divide-white/[0.04]">
+        <AnimatePresence initial={false}>
+          {feed.map(item => (
+            <motion.div key={item.id}
+              initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+              className="flex items-center gap-2.5 px-4 py-2.5">
+              <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                <span className="text-[9px] font-bold text-white/60">{item.user[0].toUpperCase()}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] text-white/70 truncate">
+                  <span className="font-semibold text-white/90">{item.user}</span>
+                  {" "}<span className={cn("font-medium", item.color)}>{item.action}</span>
+                  {" "}<span className="text-white/50">{item.project}</span>
+                </p>
+              </div>
+              <span className="text-[9px] text-white/25 shrink-0">{item.time}</span>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
+
 function RuFloSection() {
   return (
     <motion.div
@@ -1062,6 +1151,9 @@ export default function Home() {
               </div>
             </div>
           </Link>
+
+          {/* Live Activity Feed */}
+          <LiveActivityFeed />
 
           {/* RuFlo Agent System */}
           <RuFloSection />

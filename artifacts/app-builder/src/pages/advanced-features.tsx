@@ -8,7 +8,7 @@ import {
   User, Lock, Eye, EyeOff, Globe, Zap, Server, Database,
   Settings, Star, Download, UploadCloud, Timer,
   Network, FileText, Code2, Sparkles, Rocket, Key, Users,
-  ChevronRight, Monitor, Terminal
+  ChevronRight, Monitor, Terminal, Search
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
@@ -363,7 +363,7 @@ function DebuggerSection() {
   const [running, setRunning] = useState(false);
   const [currentLine, setCurrentLine] = useState(-1);
   const [history, setHistory] = useState<number[]>([]);
-  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const codeLines = [
     "function processOrders(orders) {",
     "  let total = 0;",
@@ -397,8 +397,8 @@ function DebuggerSection() {
         setCpuHistory(h => [...h.slice(1), Math.floor(Math.random() * 50) + 10]);
         setRamHistory(h => [...h.slice(1), Math.floor(Math.random() * 30) + 45]);
       }, 800);
-    } else clearInterval(intervalRef.current);
-    return () => clearInterval(intervalRef.current);
+    } else if (intervalRef.current !== null) clearInterval(intervalRef.current);
+    return () => { if (intervalRef.current !== null) clearInterval(intervalRef.current); };
   }, [running]);
 
   const maxCpu = Math.max(...cpuHistory);

@@ -7,6 +7,8 @@ export interface AuthUser {
   avatarUrl: string | null;
   email: string | null;
   createdAt: string;
+  plan?: "free" | "starter" | "pro" | "teams";
+  provider?: string;
 }
 
 interface AuthContextValue {

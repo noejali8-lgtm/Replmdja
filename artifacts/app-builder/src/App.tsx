@@ -115,6 +115,7 @@ function AppLayout() {
       const timer = setTimeout(() => setShowTour(true), 1200);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, []);
 
   function closeTour() {

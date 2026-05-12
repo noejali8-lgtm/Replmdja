@@ -99,9 +99,9 @@ export default function GoalPlannerPage() {
           <div className="flex-1">
             <span className="text-[12px] text-white/80">{node.goal as string}</span>
             <div className="flex gap-2 mt-0.5">
-              {node.agentType && <span className="text-[9px] bg-white/5 px-1.5 py-0.5 rounded text-white/40">{node.agentType as string}</span>}
-              {node.estimatedMinutes && <span className="text-[9px] text-white/30">~{node.estimatedMinutes as number}min</span>}
-              {node.priority && <span className={cn("text-[9px]", priorityColors[(node.priority as string)])}>{node.priority as string}</span>}
+              {!!node.agentType && <span className="text-[9px] bg-white/5 px-1.5 py-0.5 rounded text-white/40">{node.agentType as string}</span>}
+              {!!node.estimatedMinutes && <span className="text-[9px] text-white/30">~{node.estimatedMinutes as number}min</span>}
+              {!!node.priority && <span className={cn("text-[9px]", priorityColors[(node.priority as string)])}>{node.priority as string}</span>}
             </div>
           </div>
         </div>

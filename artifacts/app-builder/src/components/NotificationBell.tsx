@@ -22,6 +22,7 @@ export function NotificationBell() {
       const t = setTimeout(() => setPulse(false), 1200);
       return () => clearTimeout(t);
     }
+    return undefined;
   }, [count]);
 
   const handleClick = () => {

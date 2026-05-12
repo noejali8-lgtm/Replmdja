@@ -15,7 +15,8 @@ import {
   Cpu, Activity, Layers, Zap, Users, Network, Sparkles,
   GitMerge, Code2, Palette, BarChart3, TrendingUp,
   Github, Download, Settings, Globe2,
-  ThumbsUp, ThumbsDown, Pin, Copy, Check, ChevronsDown, Gauge
+  ThumbsUp, ThumbsDown, Pin, Copy, Check, ChevronsDown, Gauge,
+  Mic, MicOff, Image, Package, ListTodo
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -2350,7 +2351,7 @@ function FilesPanel({ onClose }: { onClose: () => void }) {
               <div className="px-2">
                 <RealFileTree
                   nodes={tree} onSelect={setSelectedFile}
-                  selectedPath={selectedFile?.path ?? ""}
+                  selectedPath={(selectedFile as FsNode | null)?.path ?? ""}
                   openDirs={openDirs} toggleDir={toggleDir} search=""
                 />
               </div>
@@ -4657,6 +4658,334 @@ function MessageBubble({ msg, isLast, onQuickReply }: { msg: Message; isLast?: b
   );
 }
 
+/* ─────────────────────────────────────────────────────────
+   CODE DIFF CARD — before/after changes
+   ───────────────────────────────────────────────────────── */
+interface DiffLine { type: "add" | "remove" | "context"; content: string }
+function CodeDiffCard({ filename, lines, language = "tsx" }: { filename: string; lines: DiffLine[]; language?: string }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const adds = lines.filter(l => l.type === "add").length;
+  const removes = lines.filter(l => l.type === "remove").length;
+  return (
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+      className="rounded-2xl border border-white/[0.08] overflow-hidden bg-[#0d1117] my-2 w-full">
+      <button onClick={() => setCollapsed(v => !v)}
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white/[0.04] hover:bg-white/[0.07] transition-colors text-left">
+        <FileText size={13} className="text-blue-400 shrink-0" />
+        <span className="text-xs font-semibold text-white/80 flex-1 truncate font-mono">{filename}</span>
+        <span className="text-[10px] text-green-400 font-semibold">+{adds}</span>
+        <span className="text-[10px] text-red-400 font-semibold ml-1">−{removes}</span>
+        <span className="text-[10px] text-white/30 ml-1 font-mono">{language}</span>
+        <ChevronDown size={12} className={cn("text-white/30 transition-transform shrink-0", collapsed && "-rotate-90")} />
+      </button>
+      {!collapsed && (
+        <div className="overflow-x-auto">
+          <div className="min-w-0 font-mono text-[11px] leading-5">
+            {lines.map((l, i) => (
+              <div key={i} className={cn("flex px-3 py-0",
+                l.type === "add" ? "bg-green-500/[0.08] border-l-2 border-green-500/60" :
+                l.type === "remove" ? "bg-red-500/[0.08] border-l-2 border-red-500/60" :
+                "border-l-2 border-transparent"
+              )}>
+                <span className={cn("shrink-0 w-4 mr-2 select-none",
+                  l.type === "add" ? "text-green-400" : l.type === "remove" ? "text-red-400" : "text-white/20"
+                )}>
+                  {l.type === "add" ? "+" : l.type === "remove" ? "−" : " "}
+                </span>
+                <span className={cn(
+                  l.type === "add" ? "text-green-300" : l.type === "remove" ? "text-red-300" : "text-white/55"
+                )}>{l.content}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   PACKAGE INSTALL CARD — npm/pip install progress
+   ───────────────────────────────────────────────────────── */
+interface PackageInstall { name: string; version: string; status: "installing" | "done" | "error" }
+function PackageInstallCard({ packages }: { packages: PackageInstall[] }) {
+  const done = packages.filter(p => p.status === "done").length;
+  const pct = packages.length > 0 ? (done / packages.length) * 100 : 0;
+  return (
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+      className="rounded-2xl border border-cyan-400/15 bg-cyan-500/[0.05] px-3 py-2.5 my-2 w-full">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-5 h-5 rounded-md bg-cyan-500/15 flex items-center justify-center shrink-0">
+          <Package size={11} className="text-cyan-400" />
+        </div>
+        <span className="text-xs font-semibold text-cyan-300">Installing packages</span>
+        <span className="text-[10px] text-cyan-400/50 ml-auto">{done}/{packages.length}</span>
+      </div>
+      <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden mb-2">
+        <motion.div className="h-full bg-cyan-400/70 rounded-full" animate={{ width: `${pct}%` }} transition={{ duration: 0.5 }} />
+      </div>
+      <div className="space-y-1">
+        {packages.map(pkg => (
+          <div key={pkg.name} className="flex items-center gap-2">
+            {pkg.status === "done" ? <CheckCircle2 size={11} className="text-green-400 shrink-0" /> :
+             pkg.status === "error" ? <AlertCircle size={11} className="text-red-400 shrink-0" /> :
+             <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}>
+               <Loader2 size={11} className="text-cyan-400 shrink-0" />
+             </motion.div>}
+            <span className="text-[11px] font-mono text-white/70 flex-1">{pkg.name}</span>
+            <span className="text-[10px] text-white/25 font-mono">{pkg.version}</span>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   CODE REVIEW CARD — AI-generated code review
+   ───────────────────────────────────────────────────────── */
+interface ReviewComment { type: "error" | "warning" | "suggestion" | "praise"; line?: number; message: string }
+function CodeReviewCard({ file, comments, score }: { file: string; comments: ReviewComment[]; score: number }) {
+  const [open, setOpen] = useState(true);
+  const scoreColor = score >= 90 ? "text-green-400" : score >= 70 ? "text-yellow-400" : "text-red-400";
+  const typeIcon = (t: ReviewComment["type"]) => {
+    if (t === "error") return <AlertCircle size={11} className="text-red-400" />;
+    if (t === "warning") return <AlertCircle size={11} className="text-amber-400" />;
+    if (t === "praise") return <Star size={11} className="text-yellow-400" />;
+    return <Sparkles size={11} className="text-blue-400" />;
+  };
+  return (
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+      className="rounded-2xl border border-white/[0.08] bg-[#0f1420] my-2 overflow-hidden w-full">
+      <button onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/[0.03] transition-colors">
+        <div className="w-5 h-5 rounded-md bg-blue-500/15 flex items-center justify-center shrink-0">
+          <Eye size={11} className="text-blue-400" />
+        </div>
+        <span className="text-xs font-semibold text-white/80 flex-1 truncate">Code Review: {file}</span>
+        <span className={cn("text-sm font-bold font-mono", scoreColor)}>{score}</span>
+        <span className="text-[10px] text-white/20">/100</span>
+        <ChevronDown size={12} className={cn("text-white/30 shrink-0 transition-transform", open && "rotate-180")} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden border-t border-white/[0.05]">
+            <div className="px-3 py-2 space-y-2">
+              {comments.map((c, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="shrink-0 mt-0.5">{typeIcon(c.type)}</span>
+                  <div className="flex-1 min-w-0">
+                    {c.line && <span className="text-[9px] text-white/20 font-mono mr-1">L{c.line}</span>}
+                    <span className="text-[11px] text-white/60 leading-relaxed">{c.message}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   AGENT TASK QUEUE PANEL
+   ───────────────────────────────────────────────────────── */
+interface AgentTask { id: string; label: string; category: string; status: "queued" | "running" | "done" | "failed"; priority: "high" | "normal" | "low"; eta?: string }
+
+const DEMO_TASKS: AgentTask[] = [
+  { id: "tq1", label: "Scaffold React component tree", category: "Build", status: "done", priority: "high" },
+  { id: "tq2", label: "Write Drizzle ORM schema", category: "Database", status: "done", priority: "high" },
+  { id: "tq3", label: "Generate API routes (CRUD)", category: "API", status: "running", priority: "high", eta: "~30s" },
+  { id: "tq4", label: "Add authentication middleware", category: "Auth", status: "queued", priority: "normal" },
+  { id: "tq5", label: "Write unit tests for utils", category: "Tests", status: "queued", priority: "low", eta: "after #4" },
+  { id: "tq6", label: "Optimise bundle size", category: "Perf", status: "queued", priority: "low" },
+];
+
+function AgentTaskQueuePanel({ onClose }: { onClose: () => void }) {
+  const [tasks, setTasks] = useState<AgentTask[]>(DEMO_TASKS);
+  const [filter, setFilter] = useState<"all" | "running" | "queued" | "done">("all");
+  const done = tasks.filter(t => t.status === "done").length;
+  const pct = Math.round((done / tasks.length) * 100);
+
+  const addTask = () => {
+    const newTask: AgentTask = { id: `tq${Date.now()}`, label: "New task (tap to edit)", category: "Custom", status: "queued", priority: "normal" };
+    setTasks(prev => [...prev, newTask]);
+  };
+
+  const catColor: Record<string, string> = {
+    Build: "text-blue-400 bg-blue-500/10 border-blue-400/20",
+    Database: "text-purple-400 bg-purple-500/10 border-purple-400/20",
+    API: "text-green-400 bg-green-500/10 border-green-400/20",
+    Auth: "text-orange-400 bg-orange-500/10 border-orange-400/20",
+    Tests: "text-pink-400 bg-pink-500/10 border-pink-400/20",
+    Perf: "text-yellow-400 bg-yellow-500/10 border-yellow-400/20",
+    Custom: "text-cyan-400 bg-cyan-500/10 border-cyan-400/20",
+  };
+
+  const filtered = filter === "all" ? tasks : tasks.filter(t => t.status === filter);
+
+  return (
+    <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 36 }}
+      className="absolute inset-0 z-50 flex flex-col bg-[#0d1117]">
+      <div className="flex items-center gap-2 px-3 pt-10 pb-3 border-b border-white/[0.07] shrink-0">
+        <button onClick={onClose} className="w-9 h-9 flex items-center justify-center text-white/50 hover:text-white rounded-xl hover:bg-white/8 transition-colors">
+          <ArrowLeft size={20} />
+        </button>
+        <div className="flex-1 flex items-center justify-center gap-2">
+          <AlignJustify size={15} className="text-purple-400" />
+          <span className="text-base font-semibold text-white">Task Queue</span>
+        </div>
+        <button onClick={addTask} className="w-9 h-9 flex items-center justify-center text-white/50 hover:text-white rounded-xl hover:bg-white/8 transition-colors">
+          <Plus size={18} />
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      <div className="px-4 py-3 border-b border-white/[0.05] shrink-0">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[11px] text-white/40 font-semibold">Overall progress</span>
+          <span className="text-[11px] font-bold text-white/70 font-mono">{done}/{tasks.length} done · {pct}%</span>
+        </div>
+        <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+          <motion.div className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full"
+            animate={{ width: `${pct}%` }} transition={{ duration: 0.6 }} />
+        </div>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex border-b border-white/[0.06] shrink-0">
+        {(["all", "running", "queued", "done"] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={cn("flex-1 py-2 text-[11px] font-semibold capitalize transition-colors border-b-2",
+              filter === f ? "text-white border-white/50" : "text-white/30 border-transparent hover:text-white/50"
+            )}>{f}</button>
+        ))}
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 no-scrollbar">
+        {filtered.map((task, i) => (
+          <motion.div key={task.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+            className="flex items-center gap-3 bg-white/[0.04] border border-white/[0.07] rounded-xl px-3 py-3">
+            {task.status === "done" ? <CheckCircle2 size={15} className="text-green-400 shrink-0" /> :
+             task.status === "running" ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}><Loader2 size={15} className="text-purple-400 shrink-0" /></motion.div> :
+             task.status === "failed" ? <AlertCircle size={15} className="text-red-400 shrink-0" /> :
+             <Circle size={15} className="text-white/20 shrink-0" />}
+            <div className="flex-1 min-w-0">
+              <p className={cn("text-xs font-medium leading-snug", task.status === "done" ? "text-white/40 line-through" : "text-white/80")}>{task.label}</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className={cn("text-[9px] font-semibold px-1.5 py-0.5 rounded-full border", catColor[task.category] ?? catColor.Custom)}>{task.category}</span>
+                {task.eta && <span className="text-[10px] text-white/25">{task.eta}</span>}
+              </div>
+            </div>
+            <div className={cn("w-1.5 h-1.5 rounded-full shrink-0",
+              task.priority === "high" ? "bg-red-400" : task.priority === "normal" ? "bg-yellow-400/60" : "bg-white/20"
+            )} />
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   PROMPT TEMPLATES PANEL
+   ───────────────────────────────────────────────────────── */
+interface PromptTemplate { id: string; label: string; prompt: string; category: string; icon: string }
+
+const PROMPT_TEMPLATES: PromptTemplate[] = [
+  // Build
+  { id: "pt1", label: "Full-stack SaaS", category: "Build", icon: "🚀", prompt: "Build a full-stack SaaS app with authentication, subscription plans (free/pro), a dashboard with charts, and a REST API" },
+  { id: "pt2", label: "E-commerce store", category: "Build", icon: "🛒", prompt: "Create a fully functional e-commerce store with product listings, cart, checkout, Stripe payments, and an admin panel" },
+  { id: "pt3", label: "Real-time chat", category: "Build", icon: "💬", prompt: "Build a real-time chat application with rooms, online status indicators, typing indicators, and message history" },
+  { id: "pt4", label: "AI chatbot", category: "Build", icon: "🤖", prompt: "Create a production-quality AI chatbot with streaming responses, conversation history, code highlighting, and file upload" },
+  { id: "pt5", label: "Dashboard app", category: "Build", icon: "📊", prompt: "Build a modern analytics dashboard with real-time charts, KPI cards, filterable tables, and CSV export" },
+  // Enhance
+  { id: "pt6", label: "Add dark mode", category: "Enhance", icon: "🌙", prompt: "Add a polished dark/light mode toggle with smooth CSS transitions, persistent preference, and system default detection" },
+  { id: "pt7", label: "Add PWA support", category: "Enhance", icon: "📱", prompt: "Convert the app to a Progressive Web App with offline support, service worker, install prompt, and push notifications" },
+  { id: "pt8", label: "Add i18n", category: "Enhance", icon: "🌐", prompt: "Add multi-language support with Arabic, English, French, and Spanish using i18next with lazy-loaded translation files" },
+  { id: "pt9", label: "Performance audit", category: "Enhance", icon: "⚡", prompt: "Audit and optimize the app for performance: code splitting, lazy loading, image optimization, caching, and Core Web Vitals" },
+  // Fix
+  { id: "pt10", label: "Security audit", category: "Fix", icon: "🛡️", prompt: "Perform a security audit: check for XSS, CSRF, SQL injection, authentication bypasses, and fix all vulnerabilities found" },
+  { id: "pt11", label: "Fix mobile UI", category: "Fix", icon: "📱", prompt: "Make the entire UI fully responsive and mobile-friendly with proper touch targets, no horizontal scroll, and fluid typography" },
+  { id: "pt12", label: "Add error handling", category: "Fix", icon: "🔧", prompt: "Add comprehensive error handling: try/catch everywhere, user-friendly error messages, error boundaries, and retry logic" },
+  // Test
+  { id: "pt13", label: "Write unit tests", category: "Test", icon: "🧪", prompt: "Write comprehensive unit tests for all utility functions and React components using Vitest and Testing Library" },
+  { id: "pt14", label: "Add E2E tests", category: "Test", icon: "🎯", prompt: "Add end-to-end tests with Playwright covering all critical user flows: auth, CRUD operations, and payment flows" },
+  // Data
+  { id: "pt15", label: "Add DB schema", category: "Data", icon: "🗄️", prompt: "Design and implement a PostgreSQL database schema with Drizzle ORM for the current app, including relations, indexes, and migrations" },
+  { id: "pt16", label: "Add Redis cache", category: "Data", icon: "⚡", prompt: "Integrate Redis caching for API responses, session storage, and rate limiting to dramatically improve performance" },
+];
+
+const TEMPLATE_CATS = ["All", "Build", "Enhance", "Fix", "Test", "Data"];
+
+function PromptTemplatesPanel({ onClose, onUseTemplate }: { onClose: () => void; onUseTemplate: (prompt: string) => void }) {
+  const [activeCat, setActiveCat] = useState("All");
+  const [search, setSearch] = useState("");
+
+  const filtered = PROMPT_TEMPLATES.filter(t =>
+    (activeCat === "All" || t.category === activeCat) &&
+    (!search || t.label.toLowerCase().includes(search.toLowerCase()) || t.prompt.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  return (
+    <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 36 }}
+      className="absolute inset-0 z-50 flex flex-col bg-[#0d1117]">
+      <div className="flex items-center gap-2 px-3 pt-10 pb-3 border-b border-white/[0.07] shrink-0">
+        <button onClick={onClose} className="w-9 h-9 flex items-center justify-center text-white/50 hover:text-white rounded-xl hover:bg-white/8 transition-colors">
+          <ArrowLeft size={20} />
+        </button>
+        <div className="flex-1 flex items-center justify-center gap-2">
+          <BookOpen size={15} className="text-green-400" />
+          <span className="text-base font-semibold text-white">Prompt Templates</span>
+        </div>
+        <button onClick={onClose} className="w-9 h-9 flex items-center justify-center text-white/40 hover:text-white rounded-xl hover:bg-white/8 transition-colors">
+          <X size={18} />
+        </button>
+      </div>
+
+      {/* Search */}
+      <div className="px-3 py-2.5 border-b border-white/[0.05] shrink-0">
+        <div className="flex items-center gap-2 bg-white/[0.05] border border-white/[0.09] rounded-xl px-3 h-9">
+          <Search size={13} className="text-white/30 shrink-0" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search templates..."
+            className="flex-1 bg-transparent text-sm text-white/80 placeholder:text-white/25 outline-none" />
+        </div>
+      </div>
+
+      {/* Category tabs */}
+      <div className="flex gap-1.5 overflow-x-auto no-scrollbar px-3 py-2 border-b border-white/[0.05] shrink-0">
+        {TEMPLATE_CATS.map(cat => (
+          <button key={cat} onClick={() => setActiveCat(cat)}
+            className={cn("px-3 py-1.5 rounded-full text-[11px] font-semibold shrink-0 transition-all border",
+              activeCat === cat ? "bg-white/10 border-white/20 text-white" : "border-transparent text-white/40 hover:text-white/70"
+            )}>{cat}</button>
+        ))}
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 no-scrollbar">
+        {filtered.map((t, i) => (
+          <motion.button key={t.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
+            onClick={() => { onUseTemplate(t.prompt); onClose(); }}
+            className="w-full text-left bg-white/[0.04] border border-white/[0.07] rounded-2xl px-4 py-3.5 hover:bg-white/[0.08] hover:border-white/[0.12] transition-all">
+            <div className="flex items-center gap-2.5 mb-1.5">
+              <span className="text-base">{t.icon}</span>
+              <span className="text-sm font-semibold text-white/85">{t.label}</span>
+              <span className="ml-auto text-[9px] text-white/30 font-semibold uppercase tracking-wide bg-white/[0.05] px-1.5 py-0.5 rounded-md">{t.category}</span>
+            </div>
+            <p className="text-[11px] text-white/40 leading-relaxed line-clamp-2">{t.prompt}</p>
+          </motion.button>
+        ))}
+        {filtered.length === 0 && (
+          <div className="text-center py-12 text-white/25 text-sm">No templates match "{search}"</div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 /* ─────────────────── Artifact Preview Panel ─────────────────── */
 const PREVIEW_ARTIFACTS = [
   { id: "web", label: "Web App", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-400/20", status: "ready" as const, url: "/" as string | null },
@@ -4937,6 +5266,15 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasInitialized = useRef(false);
+  // New AI feature state
+  const [attachedImages, setAttachedImages] = useState<{ id: string; dataUrl: string; name: string }[]>([]);
+  const [showTaskQueue, setShowTaskQueue] = useState(false);
+  const [showPromptTemplates, setShowPromptTemplates] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [showDemoCodeDiff, setShowDemoCodeDiff] = useState(false);
+  const [showDemoPackages, setShowDemoPackages] = useState(false);
+  const [showDemoReview, setShowDemoReview] = useState(false);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -5567,6 +5905,8 @@ export default function Chat() {
                 { icon: <Sparkles size={14} className="text-yellow-400" />, label: "Agent Memory", action: () => { setShowMemory(true); setShowMoreTools(false); } },
                 { icon: <Clock size={14} className="text-cyan-400" />, label: "Checkpoints", action: () => { setShowCheckpoints(true); setShowMoreTools(false); } },
                 { icon: <BarChart3 size={14} className="text-orange-400" />, label: "Agent Insights", action: () => { setShowInsights(true); setShowMoreTools(false); } },
+                { icon: <ListTodo size={14} className="text-purple-400" />, label: "Task Queue", action: () => { setShowTaskQueue(true); setShowMoreTools(false); } },
+                { icon: <BookOpen size={14} className="text-green-400" />, label: "Prompt Templates", action: () => { setShowPromptTemplates(true); setShowMoreTools(false); } },
                 { icon: <AlignJustify size={14} className="text-muted-foreground" />, label: "Files", action: () => { setShowFiles(true); setShowMoreTools(false); } },
                 { icon: <Terminal size={14} className="text-green-400" />, label: "Terminal", action: () => { setShowTerminal(true); setShowMoreTools(false); } },
                 { icon: <Globe size={14} className="text-blue-400" />, label: "Publishing", action: () => { setShowPublishing(true); setShowMoreTools(false); } },
@@ -5587,6 +5927,63 @@ export default function Chat() {
 
       {/* ── Input Area ── */}
       <div className="shrink-0 px-3 pb-2 pt-2 bg-[#141414] relative">
+        {/* Hidden file input for image attachment */}
+        <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
+          onChange={e => {
+            const files = Array.from(e.target.files ?? []);
+            files.forEach(file => {
+              const reader = new FileReader();
+              reader.onload = ev => {
+                setAttachedImages(prev => [...prev, { id: `img-${Date.now()}-${Math.random()}`, dataUrl: ev.target?.result as string, name: file.name }]);
+              };
+              reader.readAsDataURL(file);
+            });
+            if (fileInputRef.current) fileInputRef.current.value = "";
+          }}
+        />
+
+        {/* Attached images preview strip */}
+        <AnimatePresence>
+          {attachedImages.length > 0 && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+              className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+              {attachedImages.map(img => (
+                <motion.div key={img.id} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                  className="relative shrink-0">
+                  <img src={img.dataUrl} alt={img.name}
+                    className="w-14 h-14 rounded-xl object-cover border border-white/[0.12]" />
+                  <button onClick={() => setAttachedImages(prev => prev.filter(i => i.id !== img.id))}
+                    className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                    <X size={8} className="text-white" />
+                  </button>
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* @mention autocomplete */}
+        <AnimatePresence>
+          {mentionQuery !== null && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setMentionQuery(null)} />
+              <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
+                className="absolute bottom-full mb-1 left-3 right-3 z-40 bg-card border border-border rounded-2xl shadow-2xl overflow-hidden">
+                <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider px-3 pt-2.5 pb-1">Mention a file</p>
+                {["src/pages/home.tsx", "src/pages/chat.tsx", "src/components/AIModelsPanel.tsx", "src/App.tsx", "vite.config.ts"].filter(f => !mentionQuery || f.toLowerCase().includes(mentionQuery.toLowerCase())).map(f => (
+                  <button key={f} onClick={() => {
+                    setInput(prev => prev.replace(/@\w*$/, `@${f} `));
+                    setMentionQuery(null);
+                  }} className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/[0.06] transition-colors text-left">
+                    <FileText size={13} className="text-blue-400 shrink-0" />
+                    <span className="text-xs text-white/80 font-mono truncate">{f}</span>
+                  </button>
+                ))}
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+
         {/* Agent Modes Panel */}
         <AnimatePresence>
           {showModes && (
@@ -5674,12 +6071,34 @@ export default function Chat() {
             ref={textareaRef}
             value={input}
             onChange={(e) => {
-              setInput(e.target.value);
+              const val = e.target.value;
+              setInput(val);
               e.target.style.height = "auto";
               e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+              // @mention detection
+              const match = val.match(/@(\w*)$/);
+              if (match) { setMentionQuery(match[1]); }
+              else { setMentionQuery(null); }
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Make, test, iterate..."
+            onPaste={e => {
+              // Image paste from clipboard
+              const items = Array.from(e.clipboardData?.items ?? []);
+              const imageItems = items.filter(item => item.type.startsWith("image/"));
+              if (imageItems.length > 0) {
+                e.preventDefault();
+                imageItems.forEach(item => {
+                  const file = item.getAsFile();
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = ev => {
+                    setAttachedImages(prev => [...prev, { id: `img-paste-${Date.now()}`, dataUrl: ev.target?.result as string, name: "pasted-image.png" }]);
+                  };
+                  reader.readAsDataURL(file);
+                });
+              }
+            }}
+            placeholder="Make, test, iterate... (@ to mention a file)"
             className="w-full bg-transparent resize-none outline-none text-white placeholder:text-white/35 min-h-[40px] max-h-[120px] text-[15px] px-4 pt-3.5 pb-1"
             data-testid="input-chat"
             rows={1}
@@ -5695,19 +6114,30 @@ export default function Chat() {
             </div>
           )}
           <div className="flex items-center gap-2 px-3 pb-3">
-            {/* + attach */}
+            {/* + attach menu */}
             <motion.button
               whileTap={{ scale: 0.9 }}
+              onClick={() => fileInputRef.current?.click()}
               className="w-7 h-7 rounded-full bg-white/8 flex items-center justify-center text-white/50 hover:text-white transition-colors border border-white/10 shrink-0"
               data-testid="button-attach"
+              title="Attach image"
             >
-              <Plus size={14} />
+              <Image size={13} />
             </motion.button>
 
             {/* Voice / Record button */}
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={() => setIsRecording(v => !v)}
+              onClick={() => {
+                setIsRecording(v => !v);
+                if (!isRecording) {
+                  // Simulate voice recording → fill input after 2s
+                  setTimeout(() => {
+                    setIsRecording(false);
+                    setInput(prev => prev + (prev ? " " : "") + "Add user authentication with email/password login");
+                  }, 2000);
+                }
+              }}
               className={cn(
                 "w-7 h-7 rounded-full flex items-center justify-center border transition-all shrink-0",
                 isRecording
@@ -5715,11 +6145,13 @@ export default function Chat() {
                   : "bg-white/8 border-white/10 text-white/50 hover:text-white"
               )}
               data-testid="button-record"
-              title="Voice input"
+              title={isRecording ? "Stop recording" : "Voice input"}
             >
               {isRecording
-                ? <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.8, repeat: Infinity }}><Square size={8} fill="currentColor" className="text-red-400" /></motion.div>
-                : <div className="w-2.5 h-2.5 rounded-full bg-current" />
+                ? <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 0.7, repeat: Infinity }}>
+                    <MicOff size={12} className="text-red-400" />
+                  </motion.div>
+                : <Mic size={12} />
               }
             </motion.button>
 
@@ -5794,8 +6226,9 @@ export default function Chat() {
             { icon: <Key size={13} />, label: "Secrets", action: () => setShowSecrets(true) },
             { icon: <Database size={13} />, label: "Database", action: () => setShowDatabase(true) },
             { icon: <ShieldCheck size={13} />, label: "Auth", action: () => setShowAuth(true) },
-            { icon: <Plus size={13} />, label: "New Tab", action: () => setShowToolsSearch(true) },
-          ] as const).map(item => (
+            { icon: <ListTodo size={13} />, label: "Tasks", action: () => setShowTaskQueue(true) },
+            { icon: <BookOpen size={13} />, label: "Templates", action: () => setShowPromptTemplates(true) },
+          ]).map(item => (
             <button key={item.label} onClick={item.action}
               className="flex-1 flex flex-col items-center gap-0.5 py-2 text-white/35 hover:text-white/80 transition-colors">
               {item.icon}
@@ -5933,6 +6366,24 @@ export default function Chat() {
             onOpenDatabase={() => { setShowDatabase(true); setShowToolsSearch(false); }}
             onOpenAuth={() => { setShowAuth(true); setShowToolsSearch(false); }}
             onOpenPublishing={() => { setShowPublishing(true); setShowToolsSearch(false); }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Agent Task Queue Panel ── */}
+      <AnimatePresence>
+        {showTaskQueue && <AgentTaskQueuePanel onClose={() => setShowTaskQueue(false)} />}
+      </AnimatePresence>
+
+      {/* ── Prompt Templates Panel ── */}
+      <AnimatePresence>
+        {showPromptTemplates && (
+          <PromptTemplatesPanel
+            onClose={() => setShowPromptTemplates(false)}
+            onUseTemplate={(prompt) => {
+              setInput(prompt);
+              setTimeout(() => textareaRef.current?.focus(), 100);
+            }}
           />
         )}
       </AnimatePresence>
