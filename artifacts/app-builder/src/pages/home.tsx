@@ -6,6 +6,7 @@ import { SiGithub, SiReplit } from "react-icons/si";
 import { CategoryChips } from "@/components/CategoryChips";
 import { CreateInput } from "@/components/CreateInput";
 import { cn } from "@/lib/utils";
+import { useAuth, getInitials, getAvatarColor } from "@/contexts/AuthContext";
 
 type ImportSource = "github" | "replit";
 
@@ -722,6 +723,11 @@ export default function Home() {
   const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+
+  const displayName = user?.displayName || user?.username || "there";
+  const initials = user ? getInitials(user) : "?";
+  const avatarColor = getAvatarColor(user);
 
   const detected = detectImport(prompt);
 
@@ -808,17 +814,27 @@ export default function Home() {
             )}
           </AnimatePresence>
         </div>
-        <span className="text-sm font-medium text-white/60">jnar7804's workspace</span>
-        <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center cursor-pointer" data-testid="avatar-user">
-          <span className="text-sm font-bold text-white">N</span>
-        </div>
+        <span className="text-sm font-medium text-white/60">
+          {user ? `${user.username}'s workspace` : "My workspace"}
+        </span>
+        <button
+          onClick={() => setLocation("/account")}
+          className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer overflow-hidden shrink-0"
+          style={{ backgroundColor: avatarColor }}
+          data-testid="avatar-user"
+        >
+          {user?.avatarUrl
+            ? <img src={user.avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+            : <span className="text-sm font-bold text-white">{initials}</span>
+          }
+        </button>
       </header>
 
       {/* Body */}
       <div className="flex-1 flex flex-col overflow-y-auto">
         <div className="flex-1 flex flex-col items-center justify-center px-4 pb-4">
           <h1 className="text-[28px] font-semibold text-white text-center leading-snug tracking-tight mb-6">
-            Hi jnar7804,<br />
+            Hi {displayName},<br />
             what do you want to make?
           </h1>
           <div className="w-full overflow-x-auto no-scrollbar -mx-4 px-4">

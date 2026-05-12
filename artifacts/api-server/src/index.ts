@@ -2,6 +2,7 @@ import { createServer } from "http";
 import { WebSocketServer } from "ws";
 import app from "./app";
 import { setupTerminalWs } from "./routes/terminal";
+import { setupPresenceWs } from "./routes/presence";
 import { logger } from "./lib/logger";
 
 const rawPort = process.env["PORT"];
@@ -19,8 +20,12 @@ if (Number.isNaN(port) || port <= 0) {
 const httpServer = createServer(app);
 
 /* ── WebSocket terminal at /api/terminal/ws ── */
-const wss = new WebSocketServer({ server: httpServer, path: "/api/terminal/ws" });
-setupTerminalWs(wss);
+const termWss = new WebSocketServer({ server: httpServer, path: "/api/terminal/ws" });
+setupTerminalWs(termWss);
+
+/* ── WebSocket presence/collaboration at /api/presence/ws ── */
+const presenceWss = new WebSocketServer({ server: httpServer, path: "/api/presence/ws" });
+setupPresenceWs(presenceWss);
 
 httpServer.listen(port, () => {
   logger.info({ port }, "Server listening");

@@ -68,6 +68,28 @@ router.post("/login", async (req, res) => {
   }
 });
 
+router.patch("/profile", async (req, res) => {
+  if (!req.session.userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const { displayName, email } = req.body ?? {};
+  try {
+    const updates: Partial<typeof users.$inferInsert> = {};
+    if (displayName !== undefined) updates.displayName = displayName;
+    if (email !== undefined) updates.email = email || null;
+    await db.update(users).set(updates).where(eq(users.id, req.session.userId));
+    const [updated] = await db.select({
+      id: users.id, username: users.username,
+      displayName: users.displayName, avatarUrl: users.avatarUrl,
+      email: users.email, createdAt: users.createdAt,
+    }).from(users).where(eq(users.id, req.session.userId)).limit(1);
+    res.json({ user: updated });
+  } catch {
+    res.status(500).json({ error: "Failed to update profile" });
+  }
+});
+
 router.post("/logout", (req, res) => {
   req.session.destroy(() => {
     res.clearCookie("sid");

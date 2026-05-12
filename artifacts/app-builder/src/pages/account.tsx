@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useLocation } from "wouter";
 import {
   ChevronRight, ExternalLink, Pencil, Moon, Sun, Monitor,
   Users, Info, Sparkles, Bell, Shield, Trash2, Check, X,
   Copy, LogOut, Key, CreditCard, Globe, Code2, Star, Zap,
-  HelpCircle, BookOpen, MessageSquare, ChevronDown
+  HelpCircle, BookOpen, MessageSquare, ChevronDown, Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth, getInitials, getAvatarColor } from "@/contexts/AuthContext";
 
 type ThemeOption = "Dark" | "Light" | "System";
 
@@ -69,10 +71,34 @@ function Section({ children }: { children: React.ReactNode }) {
   );
 }
 
-function EditProfileSheet({ onClose }: { onClose: () => void }) {
-  const [name, setName] = useState("N");
-  const [username, setUsername] = useState("n_builder");
-  const [bio, setBio] = useState("");
+function EditProfileSheet({ onClose, currentDisplayName, onSaved }: { onClose: () => void; currentDisplayName: string; onSaved?: (name: string) => void }) {
+  const [name, setName] = useState(currentDisplayName);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ displayName: name }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setError(d.error ?? "Failed to save");
+        return;
+      }
+      onSaved?.(name);
+      onClose();
+    } catch {
+      setError("Network error");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <motion.div className="fixed inset-0 z-50 flex items-end justify-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -87,30 +113,24 @@ function EditProfileSheet({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-between px-5 pt-2 pb-4">
           <button onClick={onClose} className="text-white/40 hover:text-white transition-colors text-sm">Cancel</button>
           <h2 className="text-base font-semibold text-white">Edit Profile</h2>
-          <button onClick={onClose} className="text-blue-400 hover:text-blue-300 transition-colors text-sm font-semibold">Save</button>
+          <button onClick={handleSave} disabled={saving} className="text-blue-400 hover:text-blue-300 transition-colors text-sm font-semibold flex items-center gap-1.5">
+            {saving ? <Loader2 size={12} className="animate-spin" /> : null}
+            Save
+          </button>
         </div>
         <div className="px-5 pb-8 space-y-4">
-          <div className="flex flex-col items-center gap-3 pb-2">
-            <div className="w-20 h-20 rounded-full bg-orange-500 flex items-center justify-center">
-              <span className="text-white text-3xl font-bold">N</span>
-            </div>
-            <button className="text-sm text-blue-400 hover:text-blue-300 transition-colors font-medium">Change photo</button>
+          <div>
+            <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-1.5">Display Name</label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Your name"
+              className="w-full bg-[#252525] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-white/25 transition-colors"
+            />
           </div>
-          {[
-            { label: "Display Name", value: name, setValue: setName, placeholder: "Your name" },
-            { label: "Username", value: username, setValue: setUsername, placeholder: "@username" },
-            { label: "Bio", value: bio, setValue: setBio, placeholder: "Tell us about yourself..." },
-          ].map(field => (
-            <div key={field.label}>
-              <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-1.5">{field.label}</label>
-              <input
-                value={field.value}
-                onChange={e => field.setValue(e.target.value)}
-                placeholder={field.placeholder}
-                className="w-full bg-[#252525] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-white/25 transition-colors"
-              />
-            </div>
-          ))}
+          {error && (
+            <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">{error}</p>
+          )}
         </div>
       </motion.div>
     </motion.div>
@@ -118,16 +138,34 @@ function EditProfileSheet({ onClose }: { onClose: () => void }) {
 }
 
 export default function Account() {
+  const { user, loading, logout, refetch } = useAuth();
+  const [, setLocation] = useLocation();
   const [theme, setTheme] = useState<ThemeOption>("Dark");
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const initials = getInitials(user);
+  const avatarColor = getAvatarColor(user);
+  const displayName = user?.displayName || user?.username || "Guest";
+  const username = user?.username || "guest";
+
+  const handleProfileSaved = async () => {
+    await refetch();
+  };
 
   const handleCopyUsername = () => {
-    navigator.clipboard.writeText("@n_builder").catch(() => {});
+    navigator.clipboard.writeText(`@${username}`).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    await logout();
+    setLocation("/login");
   };
 
   const themeOptions: { label: ThemeOption; icon: React.ReactNode }[] = [
@@ -135,6 +173,14 @@ export default function Account() {
     { label: "Light", icon: <Sun size={15} /> },
     { label: "System", icon: <Monitor size={15} /> },
   ];
+
+  if (loading) {
+    return (
+      <div className="flex flex-col min-h-full items-center justify-center">
+        <Loader2 className="animate-spin text-white/30" size={28} />
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -146,33 +192,49 @@ export default function Account() {
       {/* Profile header */}
       <div className="flex flex-col items-center pt-14 pb-5 px-4">
         <div className="relative mb-4">
-          <div className="w-[84px] h-[84px] rounded-full bg-orange-500 flex items-center justify-center shadow-lg">
-            <span className="text-white text-3xl font-bold">N</span>
+          <div
+            className="w-[84px] h-[84px] rounded-full flex items-center justify-center shadow-lg"
+            style={{ backgroundColor: avatarColor }}
+          >
+            {user?.avatarUrl ? (
+              <img src={user.avatarUrl} alt={displayName} className="w-full h-full rounded-full object-cover" />
+            ) : (
+              <span className="text-white text-3xl font-bold">{initials}</span>
+            )}
           </div>
           <div className="absolute bottom-0 right-0 w-6 h-6 bg-green-400 rounded-full border-2 border-[#141414]" />
         </div>
-        <h2 className="text-xl font-bold text-white leading-tight">N</h2>
+        <h2 className="text-xl font-bold text-white leading-tight">{displayName}</h2>
         <div className="flex items-center gap-1.5 mt-1">
-          <p className="text-sm text-white/45">@n_builder</p>
+          <p className="text-sm text-white/45">@{username}</p>
           <button onClick={handleCopyUsername} className="text-white/25 hover:text-white/60 transition-colors">
             {copied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
           </button>
         </div>
-        <p className="text-sm text-white/25 mt-0.5">n_builder@gmail.com</p>
-        <p className="text-sm text-white/25 mt-2 italic">You don't have a bio yet...</p>
+        {user?.email && <p className="text-sm text-white/25 mt-0.5">{user.email}</p>}
+        {user?.createdAt && (
+          <p className="text-xs text-white/20 mt-1">
+            Member since {new Date(user.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+          </p>
+        )}
+        {!user && (
+          <p className="text-sm text-white/30 mt-2 italic">
+            <button onClick={() => setLocation("/login")} className="text-blue-400 hover:underline">Sign in</button> to save your work
+          </p>
+        )}
       </div>
 
-      <div className="px-4 mb-4">
-        {/* Core CTA */}
-        <button
-          className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-blue-500/20"
-          data-testid="button-join-core"
-        >
-          <Sparkles size={16} className="text-yellow-300" />
-          Join Replit Core
-          <span className="ml-1 text-[11px] bg-white/20 px-1.5 py-0.5 rounded-full font-bold">PRO</span>
-        </button>
-      </div>
+      {user && (
+        <div className="px-4 mb-4">
+          <button
+            className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-blue-500/20"
+          >
+            <Sparkles size={16} className="text-yellow-300" />
+            Join Replit Core
+            <span className="ml-1 text-[11px] bg-white/20 px-1.5 py-0.5 rounded-full font-bold">PRO</span>
+          </button>
+        </div>
+      )}
 
       {/* USAGE */}
       <SectionHeader label="Usage" />
@@ -180,7 +242,6 @@ export default function Account() {
         <button
           onClick={() => setShowUsage(!showUsage)}
           className="w-full flex items-center gap-3 px-4 py-[13px] hover:bg-white/4 transition-colors"
-          data-testid="button-usage"
         >
           <Info size={16} className="text-white/45 shrink-0" />
           <span className="flex-1 text-[15px] font-[450] text-white">Storage & Compute</span>
@@ -225,12 +286,16 @@ export default function Account() {
       </div>
 
       {/* PROFILE */}
-      <SectionHeader label="Profile" />
-      <Section>
-        <SettingsRow icon={<Pencil size={16} />} label="Edit Profile" onClick={() => setShowEditProfile(true)} />
-        <SettingsRow icon={<Globe size={16} />} label="Public Profile" value="replit.com/@n_builder" />
-        <SettingsRow icon={<Code2 size={16} />} label="My Repls" />
-      </Section>
+      {user && (
+        <>
+          <SectionHeader label="Profile" />
+          <Section>
+            <SettingsRow icon={<Pencil size={16} />} label="Edit Profile" onClick={() => setShowEditProfile(true)} />
+            <SettingsRow icon={<Globe size={16} />} label="Public Profile" value={`@${username}`} />
+            <SettingsRow icon={<Code2 size={16} />} label="My Repls" />
+          </Section>
+        </>
+      )}
 
       {/* SUBSCRIPTION */}
       <SectionHeader label="Subscription" />
@@ -246,7 +311,6 @@ export default function Account() {
         <button
           onClick={() => setShowThemePicker(!showThemePicker)}
           className="w-full flex items-center gap-3 px-4 py-[13px] hover:bg-white/4 transition-colors"
-          data-testid="button-theme"
         >
           <Moon size={16} className="text-white/45 shrink-0" />
           <span className="flex-1 text-[15px] font-[450] text-white">Theme</span>
@@ -274,7 +338,6 @@ export default function Account() {
                         ? "bg-white/10 border-white/25 text-white"
                         : "border-white/6 text-white/40 hover:text-white/70 hover:bg-white/5"
                     )}
-                    data-testid={`theme-option-${opt.label.toLowerCase()}`}
                   >
                     {opt.icon}
                     <span className="text-xs font-medium">{opt.label}</span>
@@ -294,7 +357,7 @@ export default function Account() {
         <SettingsRow icon={<Users size={16} />} label="Join a Team" />
       </Section>
 
-      {/* NOTIFICATIONS & PRIVACY */}
+      {/* PREFERENCES */}
       <SectionHeader label="Preferences" />
       <Section>
         <SettingsRow icon={<Bell size={16} />} label="Notifications" />
@@ -310,18 +373,39 @@ export default function Account() {
         <SettingsRow icon={<MessageSquare size={16} />} label="Community Forum" />
       </Section>
 
-      {/* ACCOUNT DANGER ZONE */}
+      {/* ACCOUNT */}
       <SectionHeader label="Account" />
       <Section>
-        <SettingsRow icon={<LogOut size={16} />} label="Log Out" chevron={false} />
-        <SettingsRow icon={<Trash2 size={16} />} label="Delete Account" danger chevron={false} />
+        {user ? (
+          <>
+            <SettingsRow
+              icon={loggingOut ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
+              label={loggingOut ? "Signing out…" : "Sign Out"}
+              chevron={false}
+              onClick={handleLogout}
+            />
+            <SettingsRow icon={<Trash2 size={16} />} label="Delete Account" danger chevron={false} />
+          </>
+        ) : (
+          <SettingsRow
+            icon={<LogOut size={16} />}
+            label="Sign In"
+            chevron={false}
+            onClick={() => setLocation("/login")}
+          />
+        )}
       </Section>
 
-      <p className="text-center text-[11px] text-white/15 mt-6">Replit v4.2.0 · iOS 17.4</p>
+      <p className="text-center text-[11px] text-white/15 mt-6 mb-2">Replit v4.2.0</p>
 
-      {/* Edit Profile Sheet */}
       <AnimatePresence>
-        {showEditProfile && <EditProfileSheet onClose={() => setShowEditProfile(false)} />}
+        {showEditProfile && (
+          <EditProfileSheet
+            onClose={() => setShowEditProfile(false)}
+            currentDisplayName={displayName}
+            onSaved={handleProfileSaved}
+          />
+        )}
       </AnimatePresence>
     </motion.div>
   );

@@ -228,4 +228,68 @@ router.delete("/:id/run", async (req, res) => {
   res.json({ ok: true });
 });
 
+/* ── Install packages (npm / pip) via SSE stream ── */
+router.post("/:id/install", async (req, res) => {
+  const [p] = await db.select().from(projects).where(eq(projects.id, Number(req.params.id))).limit(1);
+  if (!p) { res.status(404).json({ error: "Not found" }); return; }
+
+  const { packages = [], manager = "npm" } = req.body ?? {};
+  if (!packages.length) { res.status(400).json({ error: "packages array required" }); return; }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (type: string, data: string) =>
+    res.write(`data: ${JSON.stringify({ type, data, ts: Date.now() })}\n\n`);
+
+  let cmd: string;
+  let args: string[];
+
+  if (manager === "pip") {
+    const PYTHON = "/nix/store/h097imm3w6dpx10qynrd2sz9fks2wbq8-python3-3.12.11/bin/python3";
+    cmd = PYTHON;
+    args = ["-m", "pip", "install", "--user", ...packages];
+    send("info", `📦 Installing Python packages: ${packages.join(", ")}`);
+  } else {
+    cmd = "npm";
+    args = ["install", ...packages];
+    send("info", `📦 Installing npm packages: ${packages.join(", ")}`);
+  }
+
+  send("info", `$ ${cmd} ${args.join(" ")}`);
+
+  const proc = spawn(cmd, args, {
+    cwd: p.dirPath,
+    env: { ...process.env },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  proc.stdout.on("data", d => send("stdout", d.toString()));
+  proc.stderr.on("data", d => send("stderr", d.toString()));
+  proc.on("close", code => {
+    if (code === 0) {
+      send("success", `✓ Packages installed successfully`);
+    } else {
+      send("error", `✗ Installation failed with code ${code}`);
+    }
+    res.end();
+  });
+  proc.on("error", err => {
+    send("error", `Failed to run installer: ${err.message}`);
+    res.end();
+  });
+
+  req.on("close", () => { try { proc.kill("SIGTERM"); } catch { /**/ } });
+});
+
+/* ── Get project run status ── */
+router.get("/:id/status", async (req, res) => {
+  const id = Number(req.params.id);
+  const isRunning = runningProcs.has(id);
+  res.json({ running: isRunning });
+});
+
 export default router;

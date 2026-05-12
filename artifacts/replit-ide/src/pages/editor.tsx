@@ -822,7 +822,7 @@ export default function Editor() {
                   )}
                   {sidePanel === "database" && <DatabaseGUI />}
                   {sidePanel === "debug"    && <DebugPanel currentFile={activeTab?.name} currentLine={cursorPos.line} />}
-                  {sidePanel === "packages" && <PackageManager />}
+                  {sidePanel === "packages" && <PackageManager projectId={undefined} />}
                   {sidePanel === "analytics"&& <AnalyticsPanel />}
                   {sidePanel === "snapshots" && (
                     <SnapshotPanel
@@ -843,7 +843,7 @@ export default function Editor() {
                   {sidePanel === "vulnscan"   && <VulnerabilityScanner />}
                   {sidePanel === "auditlogs"  && <AuditLogs />}
                   {sidePanel === "deployment" && <DeploymentPanel />}
-                  {sidePanel === "presence"   && <MultiCursorPresence currentFile={activeTab?.path} />}
+                  {sidePanel === "presence"   && <MultiCursorPresence currentFile={activeTab?.path} projectId={projectName} />}
                   {sidePanel === "keybindings"&& <KeybindingsPanel />}
                   {sidePanel === "selfheal"   && <SelfHealingPanel currentFile={activeTab?.name} />}
                 </div>
