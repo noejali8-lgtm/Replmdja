@@ -8,8 +8,10 @@ import {
   Database, Lock, RefreshCw, ExternalLink, ChevronRight, Plus,
   Layers, Code2, Globe, AlertTriangle, Bug, Box, BarChart2, Camera,
   Shield, Mic, ScrollText, GitGraph, Zap, Keyboard, Users, Activity,
-  Network, GitMerge
+  Network, GitMerge, Server
 } from "lucide-react";
+import { useProjectFiles } from "@/hooks/useProjectFiles";
+import { SecretsPanel } from "@/components/editor/SecretsPanel";
 import { useToast } from "@/hooks/use-toast";
 import { MonacoEditorPane, getLanguage, type CursorPosition } from "@/components/editor/MonacoEditor";
 import { TerminalPane } from "@/components/editor/TerminalPane";
@@ -352,6 +354,14 @@ export default function Editor() {
   const search = useSearch();
   const params = new URLSearchParams(search);
   const projectName = params.get("project") ?? "my-web-app";
+  const projectId = params.get("id") ? Number(params.get("id")) : null;
+  const initialIdea = params.get("idea") ?? "";
+  const initialPlan = params.get("plan") === "1";
+
+  /* ─── Real file API hook ─── */
+  const fileApi = useProjectFiles(projectId);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const stopRunRef = useRef<(() => void) | null>(null);
 
   const { toast } = useToast();
 
@@ -374,7 +384,7 @@ export default function Editor() {
   const [splitTabIdx, setSplitTabIdx] = useState(1);
   const [tree, setTree] = useState<FileNode[]>([]);
   const [cursorPos, setCursorPos] = useState<CursorPosition>({ line: 1, column: 1 });
-  const [aiPrompt, setAiPrompt] = useState<string | undefined>();
+  const [aiPrompt, setAiPrompt] = useState<string | undefined>(initialIdea || undefined);
 
   /* Runtime */
   const [isRunning, setIsRunning] = useState(false);
@@ -388,36 +398,67 @@ export default function Editor() {
   const activeTab = tabs[activeTabIdx] ?? null;
   const splitTab = tabs[splitTabIdx] ?? null;
 
-  /* ─── Init: load tree + open tabs from localStorage ─── */
+  /* ─── Init: load tree + first file ─── */
   useEffect(() => {
-    const savedTree = loadTree(projectName) ?? DEFAULT_TREE;
-    setTree(savedTree);
-
-    const allFiles = flattenTree(savedTree);
-    const savedTabPaths = loadOpenTabs(projectName);
-    if (savedTabPaths && savedTabPaths.length > 0) {
-      const restored = savedTabPaths
-        .map(p => allFiles.find(f => f.path === p))
-        .filter(Boolean)
-        .map(f => nodeToTab(projectName, f!));
-      if (restored.length > 0) {
-        setTabs(restored);
-        return;
+    if (projectId) {
+      /* Real project — load from filesystem via API */
+      fileApi.loadProject(projectId).then(({ tree: apiTree, firstFile }) => {
+        setTree(apiTree);
+        if (firstFile) {
+          fileApi.readFile(firstFile.path).then(content => {
+            const tab: Tab = {
+              path: firstFile.path, name: firstFile.name,
+              ext: firstFile.ext ?? firstFile.name.split(".").pop() ?? "",
+              content, savedContent: content,
+              language: getLanguage(firstFile.ext ?? firstFile.name.split(".").pop() ?? ""),
+            };
+            setTabs([tab]);
+          });
+        }
+      }).catch(() => {
+        /* Fallback to localStorage on error */
+        const savedTree = loadTree(projectName) ?? DEFAULT_TREE;
+        setTree(savedTree);
+        const def = flattenTree(savedTree)[0];
+        if (def) setTabs([nodeToTab(projectName, def)]);
+      });
+    } else {
+      /* Demo mode — use localStorage */
+      const savedTree = loadTree(projectName) ?? DEFAULT_TREE;
+      setTree(savedTree);
+      const allFiles = flattenTree(savedTree);
+      const savedTabPaths = loadOpenTabs(projectName);
+      if (savedTabPaths?.length) {
+        const restored = savedTabPaths
+          .map(p => allFiles.find(f => f.path === p))
+          .filter(Boolean)
+          .map(f => nodeToTab(projectName, f!));
+        if (restored.length > 0) { setTabs(restored); return; }
       }
+      const def = allFiles[0];
+      if (def) setTabs([nodeToTab(projectName, def)]);
     }
-    const def = allFiles[0];
-    if (def) setTabs([nodeToTab(projectName, def)]);
-  }, [projectName]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, projectName]);
 
-  /* Persist open tab list */
+  /* Persist open tab list (localStorage only in demo mode) */
   useEffect(() => {
-    if (tabs.length > 0) saveOpenTabs(projectName, tabs.map(t => t.path));
-  }, [tabs, projectName]);
+    if (!projectId && tabs.length > 0) saveOpenTabs(projectName, tabs.map(t => t.path));
+  }, [tabs, projectName, projectId]);
 
-  /* Persist tree structure */
+  /* Persist tree structure (localStorage only in demo mode) */
   useEffect(() => {
-    if (tree.length > 0) saveTree(projectName, tree);
-  }, [tree, projectName]);
+    if (!projectId && tree.length > 0) saveTree(projectName, tree);
+  }, [tree, projectName, projectId]);
+
+  /* ─── Auto-open AI panel if launched with an idea ─── */
+  useEffect(() => {
+    if (initialIdea) {
+      setShowAI(true);
+      setBottomPanel("terminal");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ─── Keyboard shortcuts ─── */
   useEffect(() => {
@@ -440,13 +481,18 @@ export default function Editor() {
     if (node.type !== "file") return;
     const existing = tabs.findIndex(t => t.path === node.path);
     if (existing >= 0) { setActiveTabIdx(existing); return; }
-    const tab = nodeToTab(projectName, node);
-    setTabs(prev => {
-      const next = [...prev, tab];
-      setActiveTabIdx(next.length - 1);
-      return next;
-    });
-  }, [tabs, projectName]);
+    if (projectId) {
+      /* Load content from real API */
+      fileApi.readFile(node.path).then(content => {
+        const ext = node.ext ?? node.name.split(".").pop() ?? "";
+        const tab: Tab = { path: node.path, name: node.name, ext, content, savedContent: content, language: getLanguage(ext) };
+        setTabs(prev => { const next = [...prev, tab]; setActiveTabIdx(next.length - 1); return next; });
+      });
+    } else {
+      const tab = nodeToTab(projectName, node);
+      setTabs(prev => { const next = [...prev, tab]; setActiveTabIdx(next.length - 1); return next; });
+    }
+  }, [tabs, projectName, projectId, fileApi]);
 
   const closeTab = (e: React.MouseEvent, idx: number) => {
     e.stopPropagation();
@@ -466,70 +512,88 @@ export default function Editor() {
   const saveActiveFile = useCallback(async () => {
     if (!activeTab) return;
     setTabs(prev => prev.map((t, i) => i === activeTabIdx ? { ...t, savedContent: t.content } : t));
-    /* 1. Persist to localStorage (instant, always works) */
-    saveContent(projectName, activeTab.path, activeTab.content);
     sound.play("save");
     toast({ title: "Saved", description: activeTab.name });
-    /* 2. Best-effort write to disk */
-    try {
-      await fetch(`/api/files/write?path=${encodeURIComponent(activeTab.path)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: activeTab.content }),
-      });
-    } catch { /**/ }
-  }, [activeTab, activeTabIdx, projectName, toast]);
+    if (projectId) {
+      /* Real project — save to filesystem */
+      await fileApi.writeFile(activeTab.path, activeTab.content).catch(() => {});
+    } else {
+      /* Demo mode — save to localStorage */
+      saveContent(projectName, activeTab.path, activeTab.content);
+    }
+  }, [activeTab, activeTabIdx, projectName, projectId, fileApi, toast]);
 
   const handleNewFile = useCallback((parentPath: string) => {
     const name = window.prompt("File name (e.g. utils.ts):");
     if (!name?.trim()) return;
     const trimmed = name.trim();
-    const path = parentPath ? `${parentPath}/${trimmed}` : trimmed;
+    const filePath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
     const ext = trimmed.split(".").pop() ?? "";
-    const newNode: FileNode = { name: trimmed, path, type: "file", ext };
-    saveContent(projectName, path, "");
-    setTree(prev => addToTree(prev, parentPath, newNode));
-    openFile(newNode);
-  }, [openFile, projectName]);
+    const newNode: FileNode = { name: trimmed, path: filePath, type: "file", ext };
+    if (projectId) {
+      fileApi.createFile(filePath, "").then(() => {
+        setTree(prev => addToTree(prev, parentPath, newNode));
+        openFile(newNode);
+      });
+    } else {
+      saveContent(projectName, filePath, "");
+      setTree(prev => addToTree(prev, parentPath, newNode));
+      openFile(newNode);
+    }
+  }, [openFile, projectName, projectId, fileApi]);
 
   const handleNewFolder = useCallback((parentPath: string) => {
     const name = window.prompt("Folder name:");
     if (!name?.trim()) return;
     const trimmed = name.trim();
-    const path = parentPath ? `${parentPath}/${trimmed}` : trimmed;
-    const newNode: FileNode = { name: trimmed, path, type: "dir", children: [] };
-    setTree(prev => addToTree(prev, parentPath, newNode));
-  }, []);
+    const dirPath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
+    const newNode: FileNode = { name: trimmed, path: dirPath, type: "dir", children: [] };
+    if (projectId) {
+      fileApi.createDir(dirPath).then(() => setTree(prev => addToTree(prev, parentPath, newNode)));
+    } else {
+      setTree(prev => addToTree(prev, parentPath, newNode));
+    }
+  }, [projectId, fileApi]);
 
   const handleDelete = useCallback((node: FileNode) => {
     if (!window.confirm(`Delete "${node.name}"?`)) return;
     setTree(prev => removeFromTree(prev, node.path));
     setTabs(prev => prev.filter(t => !t.path.startsWith(node.path)));
-    flattenTree([node]).forEach(f => deleteContent(projectName, f.path));
-  }, [projectName]);
+    if (projectId) {
+      fileApi.deleteFile(node.path).catch(() => {});
+    } else {
+      flattenTree([node]).forEach(f => deleteContent(projectName, f.path));
+    }
+  }, [projectName, projectId, fileApi]);
 
   const handleRename = useCallback((node: FileNode, newName: string) => {
     const newPath = node.path.replace(/[^/]+$/, newName);
-    const oldContent = loadContent(projectName, node.path) ?? resolveContent(projectName, node.path);
-    saveContent(projectName, newPath, oldContent);
-    deleteContent(projectName, node.path);
     setTree(prev => renameInTree(prev, node.path, newName, newPath));
     setTabs(prev => prev.map(t =>
       t.path === node.path
         ? { ...t, name: newName, path: newPath, ext: newName.split(".").pop() ?? "", language: getLanguage(newName.split(".").pop() ?? "") }
         : t
     ));
-  }, [projectName]);
+    if (projectId) {
+      const tab = tabs.find(t => t.path === node.path);
+      const content = tab?.content ?? "";
+      fileApi.renameFile(node.path, newPath, content).catch(() => {});
+    } else {
+      const oldContent = loadContent(projectName, node.path) ?? resolveContent(projectName, node.path);
+      saveContent(projectName, newPath, oldContent);
+      deleteContent(projectName, node.path);
+    }
+  }, [tabs, projectName, projectId, fileApi]);
 
   const handleDownload = useCallback((node: FileNode) => {
     const tab = tabs.find(t => t.path === node.path);
-    const content = tab?.content ?? resolveContent(projectName, node.path);
+    const content = tab?.content ?? (projectId ? "" : resolveContent(projectName, node.path));
     const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = node.name; a.click();
     URL.revokeObjectURL(url);
-  }, [tabs, projectName]);
+  }, [tabs, projectName, projectId]);
 
   /* ─── AI code apply → diff viewer ─── */
   const handleApplyCode = useCallback((code: string, lang: string) => {
@@ -564,34 +628,66 @@ export default function Editor() {
     content: tabs.find(t => t.path === f.path)?.content ?? resolveContent(projectName, f.path),
   }));
 
-  const handleRun = useCallback(() => {
-    setIsRunning(true);
-    setPreviewHtml(buildPreviewHtml(allFilesForPreview));
-    setBottomPanel("preview");
-    setShowBottom(true);
-    sound.play("success");
-    const ts = new Date().toLocaleTimeString();
-    setConsoleLines([
-      { text: "⚠  Browser Preview — runs via in-browser Babel (no Node.js)", level: "warn", ts },
-      { text: "Transpiling React/TypeScript with Babel standalone…", level: "info", ts },
-      { text: "✓ Preview ready — CSS + React rendered in iframe", level: "success", ts },
-    ]);
-    toast({ title: "Preview running", description: "Browser Preview (Babel) — not a real dev server" });
-  }, [allFilesForPreview, toast]);
+  const handleRun = useCallback(async () => {
+    if (projectId) {
+      /* Real project — save first, then run via API with SSE streaming */
+      if (activeTab) await fileApi.writeFile(activeTab.path, activeTab.content).catch(() => {});
+      setIsRunning(true);
+      setBottomPanel("console");
+      setShowBottom(true);
+      sound.play("success");
+      const startTs = new Date().toLocaleTimeString();
+      setConsoleLines([{ text: "▶  Starting your project…", level: "info", ts: startTs }]);
+      const stopFn = await fileApi.runProject((type, data) => {
+        const ts = new Date().toLocaleTimeString();
+        const level: ConsoleLine["level"] =
+          type === "error" ? "error" : type === "stderr" ? "warn" :
+          type === "exit" ? "warn" : type === "ready" || type === "success" ? "success" : "info";
+        setConsoleLines(prev => [...prev, { text: data, level, ts }]);
+        if (type === "url") {
+          setPreviewUrl(data);
+          setBottomPanel("preview");
+        }
+      });
+      stopRunRef.current = stopFn;
+    } else {
+      /* Demo mode — in-browser Babel */
+      setIsRunning(true);
+      setPreviewHtml(buildPreviewHtml(allFilesForPreview));
+      setBottomPanel("preview");
+      setShowBottom(true);
+      sound.play("success");
+      const ts = new Date().toLocaleTimeString();
+      setConsoleLines([
+        { text: "⚠  Browser Preview — in-browser Babel (no real server)", level: "warn", ts },
+        { text: "✓ Preview ready", level: "success", ts },
+      ]);
+      toast({ title: "Preview running", description: "In-browser Babel preview" });
+    }
+  }, [projectId, activeTab, fileApi, allFilesForPreview, toast]);
 
-  const handleStop = useCallback(() => {
+  const handleStop = useCallback(async () => {
     setIsRunning(false);
     setPreviewHtml(null);
+    setPreviewUrl(null);
     sound.play("close");
-    setConsoleLines(prev => [...prev, { text: "Preview stopped.", level: "error", ts: new Date().toLocaleTimeString() }]);
+    setConsoleLines(prev => [...prev, { text: "■ Stopped.", level: "error", ts: new Date().toLocaleTimeString() }]);
+    if (projectId) {
+      stopRunRef.current?.();
+      stopRunRef.current = null;
+      await fileApi.stopProject().catch(() => {});
+    }
     toast({ title: "Stopped" });
-  }, [toast]);
+  }, [projectId, fileApi, toast]);
 
   const handleDeploy = useCallback(() => {
     sound.play("deploy");
-    toast({ title: "Deploying…", description: "Building for production." });
-    setTimeout(() => { sound.play("success"); toast({ title: "Deployed!", description: "Live at https://my-web-app.replit.app" }); }, 2500);
-  }, [toast]);
+    toast({ title: "Deploying…", description: "Building and deploying your project." });
+    setTimeout(() => {
+      sound.play("success");
+      toast({ title: "Deployed!", description: `Live at https://${fileApi.projectInfo?.slug ?? projectName}.replit.app` });
+    }, 2500);
+  }, [fileApi.projectInfo, projectName, toast]);
 
   /* ─── Voice command handler ─── */
   const handleVoiceCommand = useCallback((action: VoiceCommandAction, _raw: string) => {
@@ -613,13 +709,17 @@ export default function Editor() {
 
   /* ─── Snapshot restore handler ─── */
   const handleSnapshotRestore = useCallback((files: { path: string; content: string }[]) => {
-    files.forEach(f => saveContent(projectName, f.path, f.content));
+    if (projectId) {
+      Promise.all(files.map(f => fileApi.writeFile(f.path, f.content))).catch(() => {});
+    } else {
+      files.forEach(f => saveContent(projectName, f.path, f.content));
+    }
     setTabs(prev => prev.map(t => {
       const restored = files.find(f => f.path === t.path);
       return restored ? { ...t, content: restored.content, savedContent: restored.content } : t;
     }));
-    toast({ title: "Snapshot restored", description: `${files.length} files restored from snapshot.` });
-  }, [projectName, toast]);
+    toast({ title: "Snapshot restored", description: `${files.length} files restored.` });
+  }, [projectName, projectId, fileApi, toast]);
 
   const handleShare = useCallback(() => {
     navigator.clipboard.writeText(window.location.href).catch(() => {});
@@ -812,17 +912,11 @@ export default function Editor() {
                     </div>
                   )}
                   {sidePanel === "secrets" && (
-                    <div className="flex flex-col h-full p-3">
-                      <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest mb-3">Secrets</p>
-                      <p className="text-[10px] text-[#8b949e] mb-3">Environment variables for this project</p>
-                      <button className="flex items-center gap-2 px-3 py-2 rounded border border-dashed border-[#30363d] text-xs text-[#8b949e] hover:text-[#e6edf3] hover:border-[#484f58] transition-colors w-full">
-                        <Plus className="h-3.5 w-3.5" /> Add secret
-                      </button>
-                    </div>
+                    <SecretsPanel projectId={projectId ?? undefined} />
                   )}
                   {sidePanel === "database" && <DatabaseGUI />}
                   {sidePanel === "debug"    && <DebugPanel currentFile={activeTab?.name} currentLine={cursorPos.line} />}
-                  {sidePanel === "packages" && <PackageManager projectId={undefined} />}
+                  {sidePanel === "packages" && <PackageManager projectId={projectId ?? undefined} />}
                   {sidePanel === "analytics"&& <AnalyticsPanel />}
                   {sidePanel === "snapshots" && (
                     <SnapshotPanel
@@ -1025,24 +1119,42 @@ export default function Editor() {
                                 <div className="h-2.5 w-2.5 rounded-full bg-[#3fb950]" />
                               </div>
                               <div className="flex-1 flex items-center gap-2 bg-[#0d1117] border border-[#30363d] rounded px-2 py-0.5 text-[10px] text-[#8b949e]">
-                                <Globe className="h-2.5 w-2.5" />
-                                <span className="truncate">Browser Preview (Babel)</span>
+                                <Globe className="h-2.5 w-2.5 shrink-0" />
+                                <span className="truncate">{previewUrl ?? "Browser Preview"}</span>
                               </div>
-                              {/* Babel badge */}
-                              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#d29922]/10 border border-[#d29922]/20 text-[9px] text-[#d29922] shrink-0">
-                                <AlertTriangle className="h-2.5 w-2.5" />
-                                <span>In-browser only</span>
-                              </div>
+                              {!previewUrl && (
+                                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#d29922]/10 border border-[#d29922]/20 text-[9px] text-[#d29922] shrink-0">
+                                  <AlertTriangle className="h-2.5 w-2.5" />
+                                  <span>In-browser</span>
+                                </div>
+                              )}
+                              {previewUrl && (
+                                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#3fb950]/10 border border-[#3fb950]/20 text-[9px] text-[#3fb950] shrink-0">
+                                  <Server className="h-2.5 w-2.5" />
+                                  <span>Live server</span>
+                                </div>
+                              )}
                               <button
-                                onClick={() => setPreviewHtml(buildPreviewHtml(allFilesForPreview))}
+                                onClick={() => {
+                                  if (previewUrl) {
+                                    const iframe = document.querySelector<HTMLIFrameElement>("#preview-iframe");
+                                    if (iframe) iframe.src = iframe.src;
+                                  } else {
+                                    setPreviewHtml(buildPreviewHtml(allFilesForPreview));
+                                  }
+                                }}
                                 className="h-5 w-5 flex items-center justify-center rounded text-[#484f58] hover:text-[#8b949e] hover:bg-[#21262d] transition-colors">
                                 <RefreshCw className="h-3 w-3" />
                               </button>
-                              <button className="h-5 w-5 flex items-center justify-center rounded text-[#484f58] hover:text-[#8b949e] hover:bg-[#21262d] transition-colors">
+                              <button onClick={() => previewUrl && window.open(previewUrl, "_blank")}
+                                className="h-5 w-5 flex items-center justify-center rounded text-[#484f58] hover:text-[#8b949e] hover:bg-[#21262d] transition-colors">
                                 <ExternalLink className="h-3 w-3" />
                               </button>
                             </div>
-                            {previewHtml ? (
+                            {previewUrl ? (
+                              <iframe id="preview-iframe" src={previewUrl}
+                                title="Live Preview" className="flex-1 border-none bg-white" />
+                            ) : previewHtml ? (
                               <iframe ref={iframeRef} srcDoc={previewHtml}
                                 title="Browser Preview" className="flex-1 border-none bg-white"
                                 sandbox="allow-scripts allow-same-origin" />
@@ -1051,10 +1163,12 @@ export default function Editor() {
                                 <Monitor className="h-10 w-10 opacity-20" />
                                 <div className="text-center">
                                   <p className="text-xs font-medium text-[#8b949e] mb-1">Preview not running</p>
-                                  <p className="text-[10px] text-[#484f58] mb-3">Renders React/HTML via in-browser Babel (no Node.js)</p>
+                                  <p className="text-[10px] text-[#484f58] mb-3">
+                                    {projectId ? "Press Run to start a real dev server" : "In-browser Babel preview (React/HTML)"}
+                                  </p>
                                   <button onClick={handleRun}
                                     className="flex items-center gap-1.5 mx-auto px-3 py-1.5 rounded bg-[#238636] hover:bg-[#2ea043] text-white text-xs transition-colors">
-                                    <Play className="h-3.5 w-3.5" /> Run Preview
+                                    <Play className="h-3.5 w-3.5" /> Run
                                   </button>
                                 </div>
                               </div>
@@ -1132,7 +1246,12 @@ export default function Editor() {
                         const newTab: Tab = { path: filePath, name, ext, content, savedContent: content, language: lang };
                         setTabs(prev => { const n = [...prev, newTab]; setActiveTabIdx(n.length - 1); return n; });
                       }
-                      saveContent(projectName, filePath, content);
+                      /* Save to real filesystem if projectId, else localStorage */
+                      if (projectId) {
+                        fileApi.writeFile(filePath, content).catch(() => {});
+                      } else {
+                        saveContent(projectName, filePath, content);
+                      }
                       const parts = filePath.split("/");
                       const newNode: FileNode = { name: parts[parts.length - 1] ?? filePath, path: filePath, type: "file", ext };
                       setTree(prev => {

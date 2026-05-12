@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, projects } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
@@ -10,24 +10,59 @@ const router = Router();
 const PROJECTS_ROOT = path.resolve("/home/runner/workspace/projects");
 if (!fs.existsSync(PROJECTS_ROOT)) fs.mkdirSync(PROJECTS_ROOT, { recursive: true });
 
+/* ─── Dynamic port allocator ─────────────────────────── */
+const PORT_BASE = 4000;
+const PORT_MAX  = 4999;
+const usedPorts = new Set<number>();
+
+function allocatePort(): number {
+  for (let p = PORT_BASE; p <= PORT_MAX; p++) {
+    if (!usedPorts.has(p)) { usedPorts.add(p); return p; }
+  }
+  return PORT_BASE + Math.floor(Math.random() * (PORT_MAX - PORT_BASE));
+}
+
+function releasePort(port: number) { usedPorts.delete(port); }
+
+/* ─── Secret env vars store (in-memory) ──────────────── */
+const secretsStore = new Map<number, Map<string, string>>();
+
+export function getProjectEnv(projectId: number): Record<string, string> {
+  return Object.fromEntries(secretsStore.get(projectId)?.entries() ?? []);
+}
+
+/* ─── Templates ──────────────────────────────────────── */
 const TEMPLATES: Record<string, Record<string, string>> = {
   node: {
-    "index.js":    `const http = require("http");\nconst PORT = process.env.PORT || 3000;\nhttp.createServer((req, res) => {\n  res.end("Hello from Node.js!");\n}).listen(PORT, () => console.log(\`Server on port \${PORT}\`));\n`,
-    "package.json": `{\n  "name": "my-app",\n  "version": "1.0.0",\n  "main": "index.js",\n  "scripts": { "start": "node index.js" }\n}\n`,
-    "README.md":   `# My Node.js App\n\nRun: \`node index.js\`\n`,
+    "index.js":     `const http = require("http");\nconst PORT = process.env.PORT || 3000;\nhttp.createServer((req, res) => {\n  res.setHeader("Content-Type", "text/html");\n  res.end(\`<h1 style="font-family:sans-serif;padding:2rem">Hello from Node.js! 🚀</h1><p>Running on port \${PORT}</p>\`);\n}).listen(PORT, () => console.log(\`✅ Server on http://localhost:\${PORT}\`));\n`,
+    "package.json": `{\n  "name": "my-node-app",\n  "version": "1.0.0",\n  "main": "index.js",\n  "scripts": { "start": "node index.js", "dev": "node --watch index.js" }\n}\n`,
+    "README.md":    `# My Node.js App\n\n\`\`\`bash\nnpm start\n\`\`\`\n`,
   },
   python: {
-    "main.py":     `def greet(name):\n    return f"Hello, {name}!"\n\nif __name__ == "__main__":\n    print(greet("World"))\n`,
-    "README.md":   `# My Python App\n\nRun: \`python3 main.py\`\n`,
+    "main.py":      `from http.server import HTTPServer, BaseHTTPRequestHandler\nimport os\n\nPORT = int(os.environ.get("PORT", 3000))\n\nclass Handler(BaseHTTPRequestHandler):\n    def do_GET(self):\n        self.send_response(200)\n        self.send_header("Content-type", "text/html")\n        self.end_headers()\n        self.wfile.write(b"<h1 style='font-family:sans-serif;padding:2rem'>Hello from Python! 🐍</h1>")\n    def log_message(self, *a): pass\n\nprint(f"✅ Server on http://localhost:{PORT}")\nHTTPServer(("", PORT), Handler).serve_forever()\n`,
+    "requirements.txt": `# Add your dependencies here\n`,
+    "README.md":    `# My Python App\n\n\`\`\`bash\npython3 main.py\n\`\`\`\n`,
   },
   html: {
-    "index.html":  `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>My App</title>\n  <style>body { font-family: sans-serif; padding: 2rem; }</style>\n</head>\n<body>\n  <h1>Hello World!</h1>\n  <p>Welcome to my app.</p>\n  <script>\n    console.log("App loaded");\n  </script>\n</body>\n</html>\n`,
-    "style.css":   `body { margin: 0; font-family: sans-serif; background: #f5f5f5; }\n`,
+    "index.html":   `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>My App</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <h1>Hello World! 🌍</h1>\n  <p>Welcome to my web app.</p>\n  <script src="app.js"></script>\n</body>\n</html>\n`,
+    "style.css":    `* { box-sizing: border-box; margin: 0; padding: 0; }\nbody { font-family: system-ui, sans-serif; background: #0d1117; color: #e6edf3; padding: 2rem; }\nh1 { font-size: 2rem; margin-bottom: 1rem; color: #58a6ff; }\n`,
+    "app.js":       `console.log("App loaded! 🚀");\n`,
+    "README.md":    `# My HTML App\n\nOpen \`index.html\` in your browser.\n`,
   },
   react: {
-    "index.html":  `<!DOCTYPE html>\n<html><head><meta charset="UTF-8"><title>React App</title></head><body><div id="root"></div><script src="https://unpkg.com/react@18/umd/react.development.js"></script><script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script><script src="https://unpkg.com/@babel/standalone/babel.min.js"></script><script type="text/babel" src="App.jsx"></script></body></html>\n`,
-    "App.jsx":     `function App() {\n  const [count, setCount] = React.useState(0);\n  return (\n    <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>\n      <h1>React App</h1>\n      <button onClick={() => setCount(c => c + 1)}>Count: {count}</button>\n    </div>\n  );\n}\nReactDOM.createRoot(document.getElementById("root")).render(<App />);\n`,
-    "style.css":   `body { margin: 0; background: #0d1117; color: #c9d1d9; font-family: sans-serif; }\n`,
+    "src/App.tsx":  `import { useState } from "react";\n\nexport default function App() {\n  const [count, setCount] = useState(0);\n  return (\n    <div style={{ minHeight: "100vh", background: "#0d1117", color: "#e6edf3", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>\n      <h1 style={{ fontSize: "2.5rem", fontWeight: "bold", marginBottom: "2rem" }}>⚡ React App</h1>\n      <button\n        onClick={() => setCount(c => c + 1)}\n        style={{ padding: "0.75rem 2rem", background: "#238636", border: "none", borderRadius: "8px", color: "white", fontSize: "1rem", cursor: "pointer", fontWeight: "bold" }}\n      >\n        Count: {count}\n      </button>\n    </div>\n  );\n}\n`,
+    "src/main.tsx": `import React from "react";\nimport ReactDOM from "react-dom/client";\nimport App from "./App";\nimport "./index.css";\n\nReactDOM.createRoot(document.getElementById("root")!).render(\n  <React.StrictMode><App /></React.StrictMode>\n);\n`,
+    "src/index.css": `*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }\nbody { background: #0d1117; color: #e6edf3; font-family: system-ui, sans-serif; }\n`,
+    "index.html":   `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>React App</title>\n</head>\n<body>\n  <div id="root"></div>\n  <script type="module" src="/src/main.tsx"></script>\n</body>\n</html>\n`,
+    "package.json": `{\n  "name": "my-react-app",\n  "version": "0.0.0",\n  "type": "module",\n  "scripts": {\n    "dev": "vite",\n    "build": "tsc -b && vite build",\n    "preview": "vite preview"\n  },\n  "dependencies": {\n    "react": "^19.0.0",\n    "react-dom": "^19.0.0"\n  },\n  "devDependencies": {\n    "@types/react": "^19.0.0",\n    "@types/react-dom": "^19.0.0",\n    "@vitejs/plugin-react": "^4.4.1",\n    "typescript": "~5.7.2",\n    "vite": "^6.3.1"\n  }\n}\n`,
+    "vite.config.ts": `import { defineConfig } from "vite";\nimport react from "@vitejs/plugin-react";\n\nexport default defineConfig({\n  plugins: [react()],\n  server: { host: "0.0.0.0", strictPort: false },\n});\n`,
+    "tsconfig.json": `{\n  "compilerOptions": {\n    "target": "ES2020",\n    "useDefineForClassFields": true,\n    "lib": ["ES2020", "DOM", "DOM.Iterable"],\n    "module": "ESNext",\n    "skipLibCheck": true,\n    "moduleResolution": "bundler",\n    "allowImportingTsExtensions": true,\n    "isolatedModules": true,\n    "moduleDetection": "force",\n    "noEmit": true,\n    "jsx": "react-jsx",\n    "strict": true\n  },\n  "include": ["src"]\n}\n`,
+    "README.md":    `# My React App\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
+  },
+  flask: {
+    "app.py":       `from flask import Flask, jsonify, render_template_string\nimport os\n\napp = Flask(__name__)\nPORT = int(os.environ.get("PORT", 3000))\n\nHTML = """\n<!DOCTYPE html>\n<html><body style="font-family:sans-serif;padding:2rem;background:#0d1117;color:#e6edf3">\n  <h1>🐍 Flask App</h1>\n  <p>Running on port {{ port }}</p>\n</body></html>\n"""\n\n@app.route("/")\ndef index():\n    return render_template_string(HTML, port=PORT)\n\n@app.route("/api/hello")\ndef hello():\n    return jsonify({"message": "Hello from Flask!", "port": PORT})\n\nif __name__ == "__main__":\n    print(f"✅ Flask on http://localhost:{PORT}")\n    app.run(host="0.0.0.0", port=PORT, debug=True)\n`,
+    "requirements.txt": `flask>=3.0.0\n`,
+    "README.md":    `# Flask App\n\n\`\`\`bash\npip install -r requirements.txt\npython app.py\n\`\`\`\n`,
   },
 };
 
@@ -35,6 +70,9 @@ function slugify(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") +
     "-" + Math.random().toString(36).slice(2, 7);
 }
+
+/* ── Running processes: { proc, port } ── */
+const runningProcs = new Map<number, { proc: ReturnType<typeof spawn>; port: number }>();
 
 /* ── List projects ── */
 router.get("/", async (req, res) => {
@@ -59,11 +97,22 @@ router.post("/", async (req, res) => {
     fs.mkdirSync(dirPath, { recursive: true });
     const files = TEMPLATES[language] ?? TEMPLATES.node;
     for (const [fname, content] of Object.entries(files)) {
-      fs.writeFileSync(path.join(dirPath, fname), content, "utf-8");
+      const fullPath = path.join(dirPath, fname);
+      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+      fs.writeFileSync(fullPath, content, "utf-8");
     }
-    const entryMap: Record<string, string> = { node: "index.js", python: "main.py", html: "index.html", react: "index.html" };
     const PYTHON = "/nix/store/h097imm3w6dpx10qynrd2sz9fks2wbq8-python3-3.12.11/bin/python3";
-    const runMap: Record<string, string> = { node: "node index.js", python: `${PYTHON} main.py`, html: "", react: "" };
+    const runMap: Record<string, string> = {
+      node:   "node index.js",
+      python: `${PYTHON} main.py`,
+      html:   "",
+      react:  "npm run dev",
+      flask:  `${PYTHON} app.py`,
+    };
+    const entryMap: Record<string, string> = {
+      node: "index.js", python: "main.py", html: "index.html",
+      react: "src/App.tsx", flask: "app.py",
+    };
     const [project] = await db.insert(projects).values({
       userId:    req.session?.userId ?? null,
       name, slug, description: description ?? "", language,
@@ -73,6 +122,7 @@ router.post("/", async (req, res) => {
     }).returning();
     res.status(201).json(project);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Failed to create project" });
   }
 });
@@ -81,7 +131,8 @@ router.post("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   const [p] = await db.select().from(projects).where(eq(projects.id, Number(req.params.id))).limit(1);
   if (!p) { res.status(404).json({ error: "Not found" }); return; }
-  res.json(p);
+  const running = runningProcs.get(p.id);
+  res.json({ ...p, running: !!running, port: running?.port ?? null });
 });
 
 /* ── Update project metadata ── */
@@ -110,19 +161,23 @@ router.delete("/:id", async (req, res) => {
 router.get("/:id/files", async (req, res) => {
   const [p] = await db.select().from(projects).where(eq(projects.id, Number(req.params.id))).limit(1);
   if (!p) { res.status(404).json({ error: "Not found" }); return; }
+  const SKIP = new Set(["node_modules", ".git", "__pycache__", ".venv", "dist", ".next", "build"]);
   function walk(dir: string, base = ""): object[] {
+    if (!fs.existsSync(dir)) return [];
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     return entries.flatMap(e => {
+      if (SKIP.has(e.name) || e.name.startsWith(".") && e.name !== ".env") return [];
       const relPath = base ? `${base}/${e.name}` : e.name;
       if (e.isDirectory()) return [{ name: e.name, path: relPath, type: "dir", children: walk(path.join(dir, e.name), relPath) }];
       const size = fs.statSync(path.join(dir, e.name)).size;
-      return [{ name: e.name, path: relPath, type: "file", size }];
+      const ext = e.name.split(".").pop() ?? "";
+      return [{ name: e.name, path: relPath, type: "file", size, ext }];
     });
   }
   res.json(walk(p.dirPath));
 });
 
-/* ── Read file  GET /api/projects/:id/file?path=src/App.tsx ── */
+/* ── Read file ── */
 router.get("/:id/file", async (req, res) => {
   const [p] = await db.select().from(projects).where(eq(projects.id, Number(req.params.id))).limit(1);
   if (!p) { res.status(404).json({ error: "Not found" }); return; }
@@ -135,7 +190,7 @@ router.get("/:id/file", async (req, res) => {
   res.json({ content, path: rel, name: path.basename(filePath) });
 });
 
-/* ── Write file  PUT /api/projects/:id/file?path=src/App.tsx ── */
+/* ── Write file ── */
 router.put("/:id/file", async (req, res) => {
   const [p] = await db.select().from(projects).where(eq(projects.id, Number(req.params.id))).limit(1);
   if (!p) { res.status(404).json({ error: "Not found" }); return; }
@@ -149,7 +204,7 @@ router.put("/:id/file", async (req, res) => {
   res.json({ ok: true });
 });
 
-/* ── Delete file  DELETE /api/projects/:id/file?path=src/App.tsx ── */
+/* ── Delete file ── */
 router.delete("/:id/file", async (req, res) => {
   const [p] = await db.select().from(projects).where(eq(projects.id, Number(req.params.id))).limit(1);
   if (!p) { res.status(404).json({ error: "Not found" }); return; }
@@ -157,11 +212,11 @@ router.delete("/:id/file", async (req, res) => {
   if (!rel)      { res.status(400).json({ error: "path required" }); return; }
   const filePath = path.resolve(p.dirPath, rel);
   if (!filePath.startsWith(p.dirPath)) { res.status(403).json({ error: "Forbidden" }); return; }
-  if (fs.existsSync(filePath)) fs.rmSync(filePath);
+  if (fs.existsSync(filePath)) fs.rmSync(filePath, { recursive: true, force: true });
   res.json({ ok: true });
 });
 
-/* ── Create new file  POST /api/projects/:id/file?path=src/newFile.ts ── */
+/* ── Create file ── */
 router.post("/:id/file", async (req, res) => {
   const [p] = await db.select().from(projects).where(eq(projects.id, Number(req.params.id))).limit(1);
   if (!p) { res.status(404).json({ error: "Not found" }); return; }
@@ -174,15 +229,30 @@ router.post("/:id/file", async (req, res) => {
   res.status(201).json({ ok: true, path: rel });
 });
 
-/* ── Run project (SSE stream) ── */
-const runningProcs = new Map<number, ReturnType<typeof spawn>>();
+/* ── Make directory ── */
+router.post("/:id/mkdir", async (req, res) => {
+  const [p] = await db.select().from(projects).where(eq(projects.id, Number(req.params.id))).limit(1);
+  if (!p) { res.status(404).json({ error: "Not found" }); return; }
+  const rel      = String(req.query.path ?? "");
+  if (!rel)      { res.status(400).json({ error: "path required" }); return; }
+  const dirPath = path.resolve(p.dirPath, rel);
+  if (!dirPath.startsWith(p.dirPath)) { res.status(403).json({ error: "Forbidden" }); return; }
+  fs.mkdirSync(dirPath, { recursive: true });
+  res.json({ ok: true });
+});
 
+/* ── Run project (SSE stream) with real dynamic ports ── */
 router.post("/:id/run", async (req, res) => {
   const [p] = await db.select().from(projects).where(eq(projects.id, Number(req.params.id))).limit(1);
   if (!p) { res.status(404).json({ error: "Not found" }); return; }
 
+  /* Kill existing process */
   const prev = runningProcs.get(p.id);
-  if (prev) { try { prev.kill("SIGTERM"); } catch { /**/ } }
+  if (prev) {
+    try { prev.proc.kill("SIGTERM"); } catch { /**/ }
+    releasePort(prev.port);
+    runningProcs.delete(p.id);
+  }
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -193,27 +263,86 @@ router.post("/:id/run", async (req, res) => {
   const send = (type: string, data: string) =>
     res.write(`data: ${JSON.stringify({ type, data, ts: Date.now() })}\n\n`);
 
-  const cmd   = p.runCmd || (p.language === "python" ? "python3 main.py" : "node index.js");
+  const port  = allocatePort();
+  const PYTHON = "/nix/store/h097imm3w6dpx10qynrd2sz9fks2wbq8-python3-3.12.11/bin/python3";
+
+  /* Determine run command */
+  let cmd = p.runCmd ?? "";
+  if (!cmd) {
+    if (p.language === "python" || p.language === "flask") cmd = `${PYTHON} ${p.entryFile ?? "main.py"}`;
+    else if (p.language === "node") cmd = `node ${p.entryFile ?? "index.js"}`;
+    else if (p.language === "react") cmd = "npm run dev";
+    else cmd = `node ${p.entryFile ?? "index.js"}`;
+  }
+
+  /* For React/Vite, patch the port into vite config */
+  if (p.language === "react" || cmd.includes("vite")) {
+    cmd = `npx vite --port ${port} --host 0.0.0.0`;
+  }
+
   const parts = cmd.split(" ");
-  send("info", `▶ Running: ${cmd}`);
+
+  send("info", `▶  Running: ${cmd}`);
   send("info", `📁 Directory: ${p.dirPath}`);
+  send("info", `🔌 Port: ${port}`);
+
+  /* Inject project secrets as env vars */
+  const secrets = getProjectEnv(p.id);
 
   const proc = spawn(parts[0], parts.slice(1), {
     cwd: p.dirPath,
-    env: { ...process.env, PORT: "3001" },
+    env: {
+      ...process.env,
+      ...secrets,
+      PORT: String(port),
+      HOST: "0.0.0.0",
+      VITE_PORT: String(port),
+    },
     stdio: ["pipe", "pipe", "pipe"],
   });
 
-  runningProcs.set(p.id, proc);
+  runningProcs.set(p.id, { proc, port });
 
-  proc.stdout.on("data", d => send("stdout", d.toString()));
-  proc.stderr.on("data", d => send("stderr", d.toString()));
+  let started = false;
+  const tryDetectStart = (data: string) => {
+    if (started) return;
+    const lower = data.toLowerCase();
+    if (
+      lower.includes("localhost:") || lower.includes(`port ${port}`) ||
+      lower.includes("listening on") || lower.includes("ready in") ||
+      lower.includes("server running") || lower.includes("➜") ||
+      lower.includes("✅")
+    ) {
+      started = true;
+      const devDomain = process.env.REPLIT_DEV_DOMAIN ?? process.env.REPLIT_DOMAINS?.split(",")[0] ?? "";
+      const previewUrl = devDomain
+        ? `https://${devDomain.replace(/^[^.]+/, `repl-${port}`)}`
+        : `http://localhost:${port}`;
+      send("url", previewUrl);
+      send("port", String(port));
+      send("ready", `✅ App running at port ${port}`);
+    }
+  };
+
+  proc.stdout.on("data", d => {
+    const text = d.toString();
+    send("stdout", text);
+    tryDetectStart(text);
+  });
+  proc.stderr.on("data", d => {
+    const text = d.toString();
+    send("stderr", text);
+    tryDetectStart(text);
+  });
   proc.on("close", code => {
-    send("exit", `Process exited with code ${code}`);
+    releasePort(port);
     runningProcs.delete(p.id);
+    send("exit", `Process exited with code ${code}`);
     res.end();
   });
   proc.on("error", err => {
+    releasePort(port);
+    runningProcs.delete(p.id);
     send("error", `Failed to start: ${err.message}`);
     res.end();
   });
@@ -223,8 +352,12 @@ router.post("/:id/run", async (req, res) => {
 
 /* ── Stop running project ── */
 router.delete("/:id/run", async (req, res) => {
-  const proc = runningProcs.get(Number(req.params.id));
-  if (proc) { proc.kill("SIGTERM"); runningProcs.delete(Number(req.params.id)); }
+  const entry = runningProcs.get(Number(req.params.id));
+  if (entry) {
+    try { entry.proc.kill("SIGTERM"); } catch { /**/ }
+    releasePort(entry.port);
+    runningProcs.delete(Number(req.params.id));
+  }
   res.json({ ok: true });
 });
 
@@ -245,21 +378,12 @@ router.post("/:id/install", async (req, res) => {
   const send = (type: string, data: string) =>
     res.write(`data: ${JSON.stringify({ type, data, ts: Date.now() })}\n\n`);
 
-  let cmd: string;
-  let args: string[];
+  const PYTHON = "/nix/store/h097imm3w6dpx10qynrd2sz9fks2wbq8-python3-3.12.11/bin/python3";
+  const [cmd, ...args] = manager === "pip"
+    ? [PYTHON, "-m", "pip", "install", "--user", ...packages]
+    : ["npm", "install", ...packages];
 
-  if (manager === "pip") {
-    const PYTHON = "/nix/store/h097imm3w6dpx10qynrd2sz9fks2wbq8-python3-3.12.11/bin/python3";
-    cmd = PYTHON;
-    args = ["-m", "pip", "install", "--user", ...packages];
-    send("info", `📦 Installing Python packages: ${packages.join(", ")}`);
-  } else {
-    cmd = "npm";
-    args = ["install", ...packages];
-    send("info", `📦 Installing npm packages: ${packages.join(", ")}`);
-  }
-
-  send("info", `$ ${cmd} ${args.join(" ")}`);
+  send("info", `📦 ${manager === "pip" ? "pip" : "npm"} install ${packages.join(" ")}`);
 
   const proc = spawn(cmd, args, {
     cwd: p.dirPath,
@@ -270,26 +394,58 @@ router.post("/:id/install", async (req, res) => {
   proc.stdout.on("data", d => send("stdout", d.toString()));
   proc.stderr.on("data", d => send("stderr", d.toString()));
   proc.on("close", code => {
-    if (code === 0) {
-      send("success", `✓ Packages installed successfully`);
-    } else {
-      send("error", `✗ Installation failed with code ${code}`);
-    }
+    if (code === 0) send("success", "✓ Packages installed successfully");
+    else send("error", `✗ Installation failed (code ${code})`);
     res.end();
   });
-  proc.on("error", err => {
-    send("error", `Failed to run installer: ${err.message}`);
-    res.end();
-  });
-
+  proc.on("error", err => { send("error", `Failed: ${err.message}`); res.end(); });
   req.on("close", () => { try { proc.kill("SIGTERM"); } catch { /**/ } });
 });
 
 /* ── Get project run status ── */
 router.get("/:id/status", async (req, res) => {
+  const entry = runningProcs.get(Number(req.params.id));
+  res.json({ running: !!entry, port: entry?.port ?? null });
+});
+
+/* ── Secrets routes ── */
+router.get("/:id/secrets", async (req, res) => {
   const id = Number(req.params.id);
-  const isRunning = runningProcs.has(id);
-  res.json({ running: isRunning });
+  const [p] = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
+  if (!p) { res.status(404).json({ error: "Not found" }); return; }
+  const store = secretsStore.get(id) ?? new Map();
+  const secrets = Array.from(store.keys()).map(key => ({
+    key, hasValue: (store.get(key) ?? "") !== "",
+    preview: ((store.get(key) ?? "").slice(0, 3) || "•••") + "***",
+  }));
+  res.json({ secrets });
+});
+
+router.get("/:id/secrets/:key", async (req, res) => {
+  const id = Number(req.params.id);
+  const [p] = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
+  if (!p) { res.status(404).json({ error: "Not found" }); return; }
+  const store = secretsStore.get(id);
+  const value = store?.get(req.params.key);
+  if (value === undefined) { res.status(404).json({ error: "Secret not found" }); return; }
+  res.json({ key: req.params.key, value });
+});
+
+router.put("/:id/secrets/:key", async (req, res) => {
+  const id = Number(req.params.id);
+  const [p] = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
+  if (!p) { res.status(404).json({ error: "Not found" }); return; }
+  const { value = "" } = req.body ?? {};
+  const key = req.params.key.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+  if (!secretsStore.has(id)) secretsStore.set(id, new Map());
+  secretsStore.get(id)!.set(key, String(value));
+  res.json({ ok: true, key });
+});
+
+router.delete("/:id/secrets/:key", async (req, res) => {
+  const id = Number(req.params.id);
+  secretsStore.get(id)?.delete(req.params.key);
+  res.json({ ok: true });
 });
 
 export default router;

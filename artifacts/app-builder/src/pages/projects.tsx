@@ -1,44 +1,60 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion as m, AnimatePresence } from "framer-motion";
 import {
   Search, MonitorSmartphone, Layers, BarChart3, Presentation, Wand2,
   ChevronRight, Plus, MoreHorizontal, Star, StarOff, Trash2, Globe,
-  Lock, Play, Code2, Bot, Terminal, Blocks, Smartphone, X, Filter,
-  Grid3X3, List, Clock, SortAsc, LayoutGrid
+  Lock, Play, Code2, Bot, Terminal, Blocks, Smartphone, X, SortAsc,
+  List, Clock, LayoutGrid, RefreshCw, AlertCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type FilterTab = "all" | "recent" | "starred" | "shared";
+const API = "/api/projects";
+
+type FilterTab = "all" | "recent" | "starred";
 type ViewMode = "list" | "grid";
 type SortMode = "recent" | "name" | "lang";
 
 interface Project {
   id: number;
   name: string;
-  type: string;
-  lang: string;
-  time: string;
-  timeMs: number;
-  icon: React.ElementType;
-  color: string;
-  bg: string;
-  privacy: "public" | "private";
-  starred: boolean;
-  shared: boolean;
-  runs: number;
+  language: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+  running?: boolean;
+  starred?: boolean;
 }
 
-const INITIAL_PROJECTS: Project[] = [
-  { id: 1, name: "Portfolio Website", type: "Web App", lang: "TypeScript", time: "2h ago", timeMs: Date.now() - 7200000, icon: MonitorSmartphone, color: "text-blue-400", bg: "bg-blue-500/15", privacy: "public", starred: true, shared: false, runs: 142 },
-  { id: 2, name: "Data Dashboard", type: "React", lang: "JavaScript", time: "5h ago", timeMs: Date.now() - 18000000, icon: BarChart3, color: "text-green-400", bg: "bg-green-500/15", privacy: "public", starred: false, shared: true, runs: 57 },
-  { id: 3, name: "API Server", type: "Backend", lang: "Python", time: "1d ago", timeMs: Date.now() - 86400000, icon: Layers, color: "text-yellow-400", bg: "bg-yellow-500/15", privacy: "private", starred: false, shared: false, runs: 23 },
-  { id: 4, name: "Pitch Deck", type: "Slides", lang: "HTML", time: "2d ago", timeMs: Date.now() - 172800000, icon: Presentation, color: "text-purple-400", bg: "bg-purple-500/15", privacy: "public", starred: true, shared: true, runs: 8 },
-  { id: 5, name: "Logo Generator", type: "AI App", lang: "Python", time: "3d ago", timeMs: Date.now() - 259200000, icon: Wand2, color: "text-pink-400", bg: "bg-pink-500/15", privacy: "private", starred: false, shared: false, runs: 31 },
-  { id: 6, name: "Discord Bot", type: "Bot", lang: "JavaScript", time: "5d ago", timeMs: Date.now() - 432000000, icon: Bot, color: "text-indigo-400", bg: "bg-indigo-500/15", privacy: "private", starred: false, shared: false, runs: 204 },
-  { id: 7, name: "Mobile App", type: "Mobile", lang: "TypeScript", time: "1w ago", timeMs: Date.now() - 604800000, icon: Smartphone, color: "text-cyan-400", bg: "bg-cyan-500/15", privacy: "public", starred: true, shared: false, runs: 18 },
-  { id: 8, name: "CLI Tool", type: "Terminal", lang: "Rust", time: "2w ago", timeMs: Date.now() - 1209600000, icon: Terminal, color: "text-orange-400", bg: "bg-orange-500/15", privacy: "private", starred: false, shared: false, runs: 76 },
-];
+function langIcon(lang: string) {
+  switch (lang) {
+    case "react": return MonitorSmartphone;
+    case "python": case "flask": return Terminal;
+    case "node": return Blocks;
+    default: return Layers;
+  }
+}
+
+function langColor(lang: string) {
+  switch (lang) {
+    case "react": return { color: "text-blue-400",    bg: "bg-blue-500/15" };
+    case "node":  return { color: "text-green-400",   bg: "bg-green-500/15" };
+    case "python":return { color: "text-yellow-400",  bg: "bg-yellow-500/15" };
+    case "flask": return { color: "text-orange-400",  bg: "bg-orange-500/15" };
+    case "html":  return { color: "text-purple-400",  bg: "bg-purple-500/15" };
+    default:      return { color: "text-white/40",    bg: "bg-white/10" };
+  }
+}
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
 
 function ProjectMenu({ project, onStar, onDelete, onClose }: {
   project: Project;
@@ -56,18 +72,14 @@ function ProjectMenu({ project, onStar, onDelete, onClose }: {
       onClick={e => e.stopPropagation()}
     >
       <button onClick={onStar} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left">
-        {project.starred ? <StarOff size={14} className="text-yellow-400" /> : <Star size={14} className="text-white/50" />}
+        {project.starred
+          ? <StarOff size={14} className="text-yellow-400" />
+          : <Star size={14} className="text-white/50" />}
         <span className="text-sm text-white">{project.starred ? "Unstar" : "Star"}</span>
       </button>
       <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left">
         <Code2 size={14} className="text-white/50" />
         <span className="text-sm text-white">Open in IDE</span>
-      </button>
-      <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left">
-        {project.privacy === "public"
-          ? <Lock size={14} className="text-white/50" />
-          : <Globe size={14} className="text-white/50" />}
-        <span className="text-sm text-white">Make {project.privacy === "public" ? "Private" : "Public"}</span>
       </button>
       <div className="h-px bg-white/6 mx-3" />
       <button onClick={onDelete} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-500/10 transition-colors text-left">
@@ -79,53 +91,83 @@ function ProjectMenu({ project, onStar, onDelete, onClose }: {
 }
 
 export default function Projects() {
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<FilterTab>("all");
-  const [view, setView] = useState<ViewMode>("list");
-  const [sort, setSort] = useState<SortMode>("recent");
-  const [showSort, setShowSort] = useState(false);
-  const [openMenu, setOpenMenu] = useState<number | null>(null);
-  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
   const [, setLocation] = useLocation();
+  const [search, setSearch]       = useState("");
+  const [filter, setFilter]       = useState<FilterTab>("all");
+  const [view, setView]           = useState<ViewMode>("list");
+  const [sort, setSort]           = useState<SortMode>("recent");
+  const [showSort, setShowSort]   = useState(false);
+  const [openMenu, setOpenMenu]   = useState<number | null>(null);
+
+  const [projects, setProjects]   = useState<Project[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState("");
+  const [starred, setStarred]     = useState<Set<number>>(new Set());
+
+  async function fetchProjects() {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(API, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      setProjects(await res.json());
+    } catch {
+      setError("Could not load projects");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchProjects();
+    try {
+      const saved = JSON.parse(localStorage.getItem("starred_projects") ?? "[]");
+      setStarred(new Set(saved));
+    } catch { /**/ }
+  }, []);
 
   const handleOpenProject = (project: Project) => {
     if (openMenu) return;
-    sessionStorage.setItem("chat_prompt", `Open project: ${project.name} — a ${project.type} project built with ${project.lang}. Let's continue working on it.`);
+    sessionStorage.setItem("chat_prompt", `Continue working on "${project.name}": a ${project.language} project. ${project.description || "Let's keep building it."}`);
     setLocation("/chat");
   };
 
   const handleStar = (id: number) => {
-    setProjects(ps => ps.map(p => p.id === id ? { ...p, starred: !p.starred } : p));
+    setStarred(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem("starred_projects", JSON.stringify([...next]));
+      return next;
+    });
     setOpenMenu(null);
   };
 
-  const handleDelete = (id: number) => {
-    setProjects(ps => ps.filter(p => p.id !== id));
+  const handleDelete = async (id: number) => {
     setOpenMenu(null);
+    try {
+      await fetch(`${API}/${id}`, { method: "DELETE", credentials: "include" });
+      setProjects(ps => ps.filter(p => p.id !== id));
+    } catch { /**/ }
   };
 
   const visible = projects
+    .map(p => ({ ...p, starred: starred.has(p.id) }))
     .filter(p => {
-      const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.lang.toLowerCase().includes(search.toLowerCase()) || p.type.toLowerCase().includes(search.toLowerCase());
-      const matchFilter =
-        filter === "all" ? true :
-        filter === "recent" ? true :
-        filter === "starred" ? p.starred :
-        filter === "shared" ? p.shared :
-        true;
-      return matchSearch && matchFilter;
+      if (search && !p.name.toLowerCase().includes(search.toLowerCase()) &&
+          !p.language.toLowerCase().includes(search.toLowerCase())) return false;
+      if (filter === "starred") return p.starred;
+      return true;
     })
     .sort((a, b) =>
       sort === "name" ? a.name.localeCompare(b.name) :
-      sort === "lang" ? a.lang.localeCompare(b.lang) :
-      b.timeMs - a.timeMs
+      sort === "lang" ? a.language.localeCompare(b.language) :
+      new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime()
     );
 
   const TABS: { id: FilterTab; label: string }[] = [
-    { id: "all", label: "All" },
-    { id: "recent", label: "Recent" },
-    { id: "starred", label: "Starred" },
-    { id: "shared", label: "Shared" },
+    { id: "all",     label: "All" },
+    { id: "recent",  label: "Recent" },
+    { id: "starred", label: "⭐ Starred" },
   ];
 
   return (
@@ -139,13 +181,21 @@ export default function Projects() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-12 pb-3">
         <h1 className="text-2xl font-bold text-white">My Repls</h1>
-        <button
-          onClick={() => setLocation("/")}
-          className="w-9 h-9 flex items-center justify-center bg-blue-600 hover:bg-blue-500 rounded-xl transition-colors active:scale-95"
-          data-testid="button-new-repl"
-        >
-          <Plus size={20} className="text-white" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={e => { e.stopPropagation(); fetchProjects(); }}
+            className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/8 rounded-lg transition-colors"
+          >
+            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+          </button>
+          <button
+            onClick={() => setLocation("/")}
+            className="w-9 h-9 flex items-center justify-center bg-blue-600 hover:bg-blue-500 rounded-xl transition-colors active:scale-95"
+            data-testid="button-new-repl"
+          >
+            <Plus size={20} className="text-white" />
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -183,7 +233,7 @@ export default function Projects() {
               )}
               data-testid={`filter-${tab.id}`}
             >
-              {tab.id === "starred" ? <span className="flex items-center gap-1"><Star size={10} />{tab.label}</span> : tab.label}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -230,11 +280,33 @@ export default function Projects() {
         </button>
       </div>
 
+      {/* Error */}
+      {error && (
+        <div className="mx-4 mb-3 flex items-center gap-2 text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2.5">
+          <AlertCircle size={14} className="shrink-0" />
+          <span className="text-xs flex-1">{error}</span>
+          <button onClick={fetchProjects} className="text-xs text-red-300 underline">Retry</button>
+        </div>
+      )}
+
       {/* Project list */}
-      <div className={cn("flex-1 overflow-y-auto no-scrollbar pb-28 px-4", view === "grid" ? "grid grid-cols-2 gap-3 content-start" : "flex flex-col gap-2.5")}>
+      <div className={cn(
+        "flex-1 overflow-y-auto no-scrollbar pb-28 px-4",
+        view === "grid" ? "grid grid-cols-2 gap-3 content-start" : "flex flex-col gap-2.5"
+      )}>
+
+        {/* Loading skeleton */}
+        {loading && [...Array(5)].map((_, i) => (
+          <div key={i} className={cn(
+            "animate-pulse bg-[#1a1a1a] rounded-2xl border border-white/[0.08]",
+            view === "list" ? "h-16" : "h-28"
+          )} />
+        ))}
+
         <AnimatePresence>
-          {visible.map((project, i) => {
-            const Icon = project.icon;
+          {!loading && visible.map((project, i) => {
+            const Icon = langIcon(project.language);
+            const { color, bg } = langColor(project.language);
             return view === "list" ? (
               <m.div
                 key={project.id}
@@ -246,27 +318,26 @@ export default function Projects() {
                 className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#1a1a1a] border border-white/[0.08] hover:border-white/15 hover:bg-[#1e1e1e] active:scale-[0.99] cursor-pointer transition-all relative"
                 data-testid={`card-project-${project.id}`}
               >
-                <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center shrink-0", project.bg)}>
-                  <Icon size={21} className={project.color} />
+                <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center shrink-0", bg)}>
+                  <Icon size={21} className={color} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-semibold text-white truncate">{project.name}</span>
                     {project.starred && <Star size={11} className="text-yellow-400 shrink-0 fill-yellow-400" />}
-                    {project.privacy === "private"
-                      ? <Lock size={10} className="text-white/25 shrink-0" />
-                      : <Globe size={10} className="text-white/25 shrink-0" />}
+                    {project.running && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                    )}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[11px] text-white/35">{project.time}</span>
+                    <span className="text-[11px] text-white/35">{timeAgo(project.updatedAt ?? project.createdAt)}</span>
                     <span className="text-white/20">·</span>
-                    <span className="text-[11px] font-medium text-white/40 bg-white/5 px-1.5 py-0.5 rounded-md border border-white/6">{project.lang}</span>
-                    {project.shared && <span className="text-[10px] font-semibold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-md border border-blue-400/20">Shared</span>}
+                    <span className="text-[11px] font-medium text-white/40 bg-white/5 px-1.5 py-0.5 rounded-md border border-white/6 capitalize">{project.language}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
-                    onClick={e => { e.stopPropagation(); sessionStorage.setItem("chat_prompt", `Run ${project.name}`); setLocation("/chat"); }}
+                    onClick={e => { e.stopPropagation(); handleOpenProject(project); }}
                     className="w-8 h-8 flex items-center justify-center text-white/25 hover:text-green-400 hover:bg-green-500/10 rounded-lg transition-all"
                   >
                     <Play size={13} />
@@ -303,25 +374,22 @@ export default function Projects() {
                 className="flex flex-col p-3.5 rounded-2xl bg-[#1a1a1a] border border-white/[0.08] hover:border-white/15 hover:bg-[#1e1e1e] active:scale-[0.98] cursor-pointer transition-all relative"
               >
                 <div className="flex items-center justify-between mb-3">
-                  <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", project.bg)}>
-                    <Icon size={18} className={project.color} />
+                  <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", bg)}>
+                    <Icon size={18} className={color} />
                   </div>
                   {project.starred && <Star size={11} className="text-yellow-400 fill-yellow-400" />}
                 </div>
                 <p className="text-sm font-semibold text-white leading-tight truncate">{project.name}</p>
-                <p className="text-[11px] text-white/35 mt-0.5">{project.time}</p>
+                <p className="text-[11px] text-white/35 mt-0.5">{timeAgo(project.updatedAt ?? project.createdAt)}</p>
                 <div className="flex items-center gap-1.5 mt-2">
-                  <span className="text-[10px] font-medium text-white/35 bg-white/5 px-1.5 py-0.5 rounded border border-white/6">{project.lang}</span>
-                  {project.privacy === "private"
-                    ? <Lock size={9} className="text-white/20" />
-                    : <Globe size={9} className="text-white/25" />}
+                  <span className="text-[10px] font-medium text-white/35 bg-white/5 px-1.5 py-0.5 rounded border border-white/6 capitalize">{project.language}</span>
                 </div>
               </m.div>
             );
           })}
         </AnimatePresence>
 
-        {visible.length === 0 && (
+        {!loading && visible.length === 0 && (
           <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
