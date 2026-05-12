@@ -11,10 +11,18 @@ interface MonacoEditorProps {
   onSave?: () => void;
   onCursorChange?: (pos: CursorPosition) => void;
   onInlineAssist?: (selection: string) => void;
+  onEditorMount?: (editor: MonacoType.editor.IStandaloneCodeEditor) => void;
   readOnly?: boolean;
   fontSize?: number;
+  fontFamily?: string;
   minimap?: boolean;
   wordWrap?: boolean;
+  tabSize?: number;
+  lineNumbers?: boolean;
+  bracketColorization?: boolean;
+  renderWhitespace?: boolean;
+  smoothScrolling?: boolean;
+  cursorStyle?: "line" | "block" | "underline";
 }
 
 export function getLanguage(ext: string): string {
@@ -31,8 +39,10 @@ export function getLanguage(ext: string): string {
 }
 
 export function MonacoEditorPane({
-  value, language, onChange, onSave, onCursorChange, onInlineAssist,
-  readOnly = false, fontSize = 14, minimap = true, wordWrap = false,
+  value, language, onChange, onSave, onCursorChange, onInlineAssist, onEditorMount,
+  readOnly = false, fontSize = 14, fontFamily = "JetBrains Mono", minimap = true,
+  wordWrap = false, tabSize = 2, lineNumbers = true, bracketColorization = true,
+  renderWhitespace = false, smoothScrolling = true, cursorStyle = "line",
 }: MonacoEditorProps) {
   const monaco = useMonaco();
   const editorRef = useRef<MonacoType.editor.IStandaloneCodeEditor | null>(null);
@@ -147,6 +157,7 @@ export function MonacoEditorPane({
 
   const handleMount = (editor: MonacoType.editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
+    onEditorMount?.(editor);
 
     editor.onDidChangeCursorPosition((e) => {
       onCursorChange?.({
@@ -186,7 +197,7 @@ export function MonacoEditorPane({
       onMount={handleMount}
       options={{
         fontSize,
-        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+        fontFamily: `'${fontFamily}', 'JetBrains Mono', 'Fira Code', monospace`,
         fontLigatures: true,
         lineHeight: 1.6,
         minimap: { enabled: minimap, scale: 1, showSlider: "mouseover" },
@@ -194,15 +205,16 @@ export function MonacoEditorPane({
         readOnly,
         scrollBeyondLastLine: false,
         automaticLayout: true,
-        tabSize: 2,
+        tabSize,
         insertSpaces: true,
-        detectIndentation: true,
-        smoothScrolling: true,
+        detectIndentation: false,
+        smoothScrolling,
         cursorBlinking: "smooth",
         cursorSmoothCaretAnimation: "on",
-        renderWhitespace: "selection",
-        bracketPairColorization: { enabled: true },
-        guides: { bracketPairs: true, indentation: true },
+        cursorStyle,
+        renderWhitespace: renderWhitespace ? "all" : "selection",
+        bracketPairColorization: { enabled: bracketColorization },
+        guides: { bracketPairs: bracketColorization, indentation: true },
         suggestOnTriggerCharacters: true,
         quickSuggestions: { other: true, comments: false, strings: false },
         parameterHints: { enabled: true },
@@ -220,7 +232,7 @@ export function MonacoEditorPane({
           horizontalScrollbarSize: 8,
           useShadows: false,
         },
-        lineNumbers: "on",
+        lineNumbers: lineNumbers ? "on" : "off",
         glyphMargin: true,
         folding: true,
         foldingHighlight: true,

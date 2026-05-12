@@ -47,10 +47,17 @@ import { I18nManagerPanel } from "@/components/editor/I18nManagerPanel";
 import { CoveragePanel } from "@/components/editor/CoveragePanel";
 import { ProcessLogPanel } from "@/components/editor/ProcessLogPanel";
 import { ExtensionsPanel } from "@/components/editor/ExtensionsPanel";
+import { SettingsPanel, loadSettings } from "@/components/editor/SettingsPanel";
+import { ProblemsPanel } from "@/components/editor/ProblemsPanel";
+import { OutlinePanel } from "@/components/editor/OutlinePanel";
+import { PortForwardingPanel } from "@/components/editor/PortForwardingPanel";
+import { NotificationsCenter } from "@/components/editor/NotificationsCenter";
+import { useCollaboration } from "@/hooks/useCollaboration";
+import { notify } from "@/lib/notifications";
 import { sound } from "@/lib/soundSystem";
 
 /* ─── Types ─────────────────────────────────────────── */
-type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database" | "debug" | "packages" | "analytics" | "snapshots" | "review" | "gitgraph" | "templates" | "vulnscan" | "auditlogs" | "deployment" | "presence" | "keybindings" | "selfheal" | "billing" | "testing" | "bundle" | "loadtest" | "i18n" | "coverage" | "logtail";
+type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database" | "debug" | "packages" | "analytics" | "snapshots" | "review" | "gitgraph" | "templates" | "vulnscan" | "auditlogs" | "deployment" | "presence" | "keybindings" | "selfheal" | "billing" | "testing" | "bundle" | "loadtest" | "i18n" | "coverage" | "logtail" | "settings" | "problems" | "outline" | "ports";
 type BottomPanel = "terminal" | "preview" | "console" | "logs";
 
 interface Tab {
@@ -373,6 +380,38 @@ export default function Editor() {
 
   const { toast } = useToast();
 
+  /* ─── Editor ref (for programmatic navigation) ─── */
+  const editorRef = useRef<import("monaco-editor").editor.IStandaloneCodeEditor | null>(null);
+
+  /* ─── IDE Settings (read once; updated via custom event) ─── */
+  const [ideSettings, setIdeSettings] = useState(loadSettings);
+  useEffect(() => {
+    const handler = (e: Event) => setIdeSettings((e as CustomEvent).detail);
+    window.addEventListener("ide-settings-change", handler);
+    return () => window.removeEventListener("ide-settings-change", handler);
+  }, []);
+
+  /* ─── Collaboration (real-time WebSocket sync) ─── */
+  const collabUserId = useRef(
+    sessionStorage.getItem("presence-uid") ??
+    (() => { const id = `user-${Math.random().toString(36).slice(2,8)}`; sessionStorage.setItem("presence-uid", id); return id; })()
+  ).current;
+
+  const sendEditRef = useRef<((file: string, content: string) => void) | null>(null);
+
+  const { connected: collabConnected, sendCursor, sendEdit } = useCollaboration({
+    projectId: projectId ?? undefined,
+    userId: collabUserId,
+    username: ideSettings.username,
+    currentFile: activeTab?.path,
+    enabled: !!projectId,
+    onRemoteEdit: ({ file, content }) => {
+      setTabs(prev => prev.map(t => t.path === file ? { ...t, content } : t));
+    },
+    onCursorsChange: (_cursors) => { /* MultiCursorPresence manages its own state */ },
+  });
+  sendEditRef.current = sendEdit;
+
   /* Layout */
   const [sidePanel, setSidePanel] = useState<SidePanel>("files");
   const [bottomPanel, setBottomPanel] = useState<BottomPanel>("terminal");
@@ -515,7 +554,11 @@ export default function Editor() {
 
   const handleCodeChange = useCallback((val: string) => {
     setTabs(prev => prev.map((t, i) => i === activeTabIdx ? { ...t, content: val } : t));
-  }, [activeTabIdx]);
+    /* Broadcast edit to collaborators */
+    if (activeTab?.path) {
+      sendEditRef.current?.(activeTab.path, val);
+    }
+  }, [activeTabIdx, activeTab?.path]);
 
   const saveActiveFile = useCallback(async () => {
     if (!activeTab) return;
@@ -856,6 +899,8 @@ export default function Editor() {
 
           <VoiceCommand onCommand={handleVoiceCommand} />
 
+          <NotificationsCenter />
+
           <button onClick={() => setShowAI(p => !p)}
             title="AI Panel (⌘⇧A)"
             className={`h-8 w-8 flex items-center justify-center rounded transition-colors border ${showAI ? "bg-[#a371f7]/20 border-[#a371f7]/30 text-[#a371f7]" : "border-[#30363d] text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"}`}>
@@ -889,6 +934,9 @@ export default function Editor() {
           <SideBtn icon={<Gauge className="h-4 w-4" />} id="loadtest" title="Load Tester" />
           <SideBtn icon={<Languages className="h-4 w-4" />} id="i18n" title="i18n Manager" />
           <SideBtn icon={<Terminal className="h-4 w-4" />} id="logtail" title="Process Log Tail" />
+          <SideBtn icon={<AlertTriangle className="h-4 w-4" />} id="problems" title="Problems" />
+          <SideBtn icon={<Code2 className="h-4 w-4" />} id="outline" title="Code Outline" />
+          <SideBtn icon={<Network className="h-4 w-4" />} id="ports" title="Port Forwarding" />
           <div className="flex-1" />
           <SideBtn icon={<Layers className="h-4 w-4" />} id="templates" title="Environment Templates" />
           <SideBtn icon={<Keyboard className="h-4 w-4" />} id="keybindings" title="Keybindings" />
@@ -896,6 +944,7 @@ export default function Editor() {
           <SideBtn icon={<Lock className="h-4 w-4" />} id="secrets" title="Secrets" />
           <SideBtn icon={<Database className="h-4 w-4" />} id="database" title="Database GUI" />
           <SideBtn icon={<CreditCard className="h-4 w-4" />} id="billing" title="Billing & Plans" />
+          <SideBtn icon={<Settings className="h-4 w-4" />} id="settings" title="Settings" />
         </div>
 
         <PanelGroup direction="horizontal" className="flex-1 overflow-hidden">
@@ -963,6 +1012,35 @@ export default function Editor() {
                   {sidePanel === "loadtest"  && <LoadTesterPanel projectId={projectId ?? undefined} />}
                   {sidePanel === "i18n"      && <I18nManagerPanel projectId={projectId ?? undefined} />}
                   {sidePanel === "logtail"   && <ProcessLogPanel projectId={projectId ?? undefined} />}
+                  {sidePanel === "problems"  && (
+                    <ProblemsPanel
+                      projectId={projectId ?? undefined}
+                      onNavigate={(_file, line, _col) => {
+                        if (editorRef.current) {
+                          editorRef.current.revealLineInCenter(line);
+                          editorRef.current.setPosition({ lineNumber: line, column: 1 });
+                        }
+                      }}
+                    />
+                  )}
+                  {sidePanel === "outline"   && (
+                    <OutlinePanel
+                      content={activeTab?.content}
+                      language={activeTab?.language}
+                      filename={activeTab?.name}
+                      onNavigate={line => {
+                        if (editorRef.current) {
+                          editorRef.current.revealLineInCenter(line);
+                          editorRef.current.setPosition({ lineNumber: line, column: 1 });
+                          editorRef.current.focus();
+                        }
+                      }}
+                    />
+                  )}
+                  {sidePanel === "ports"     && (
+                    <PortForwardingPanel projectId={projectId ?? undefined} previewUrl={previewUrl} />
+                  )}
+                  {sidePanel === "settings"  && <SettingsPanel />}
                 </div>
               </Panel>
               <PanelResizeHandle className="w-px bg-[#21262d] hover:bg-[#58a6ff] transition-colors cursor-col-resize" />
@@ -1045,7 +1123,7 @@ export default function Editor() {
                               language={activeTab.language}
                               onChange={handleCodeChange}
                               onSave={saveActiveFile}
-                              onCursorChange={setCursorPos}
+                              onCursorChange={(pos) => { setCursorPos(pos); sendCursor(pos.line, pos.column); }}
                               onInlineAssist={(selection) => {
                                 setShowAI(true);
                                 if (selection) {
@@ -1054,6 +1132,17 @@ export default function Editor() {
                                   setAiPrompt("What would you like help with in this file?");
                                 }
                               }}
+                              onEditorMount={(ed) => { editorRef.current = ed; }}
+                              fontSize={ideSettings.fontSize}
+                              fontFamily={ideSettings.fontFamily}
+                              tabSize={ideSettings.tabSize}
+                              wordWrap={ideSettings.wordWrap}
+                              minimap={ideSettings.minimap}
+                              lineNumbers={ideSettings.lineNumbers}
+                              bracketColorization={ideSettings.bracketColorization}
+                              renderWhitespace={ideSettings.renderWhitespace}
+                              smoothScrolling={ideSettings.smoothScrolling}
+                              cursorStyle={ideSettings.cursorStyle}
                             />
                           </div>
                           {isSplitView && splitTab && (

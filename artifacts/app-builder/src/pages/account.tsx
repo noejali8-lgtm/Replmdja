@@ -5,7 +5,7 @@ import {
   ChevronRight, ExternalLink, Pencil, Moon, Sun, Monitor,
   Users, Info, Sparkles, Bell, Shield, Trash2, Check, X,
   Copy, LogOut, Key, CreditCard, Globe, Code2, Star, Zap,
-  HelpCircle, BookOpen, MessageSquare, ChevronDown, Loader2
+  HelpCircle, BookOpen, MessageSquare, ChevronDown, Loader2, Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth, getInitials, getAvatarColor } from "@/contexts/AuthContext";
@@ -378,7 +378,8 @@ export default function Account() {
       <Section>
         <SettingsRow icon={<Bell size={16} />} label="Notifications" />
         <SettingsRow icon={<Key size={16} />} label="Connected Apps" />
-        <SettingsRow icon={<Shield size={16} />} label="Privacy & Security" />
+        <SettingsRow icon={<Shield size={16} />} label="Privacy & Security" onClick={() => setLocation("/settings")} />
+        <SettingsRow icon={<Settings size={16} />} label="App Settings" onClick={() => setLocation("/settings")} />
       </Section>
 
       {/* HELP */}
