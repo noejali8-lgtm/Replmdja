@@ -45,10 +45,12 @@ import { BundleAnalyzerPanel } from "@/components/editor/BundleAnalyzerPanel";
 import { LoadTesterPanel } from "@/components/editor/LoadTesterPanel";
 import { I18nManagerPanel } from "@/components/editor/I18nManagerPanel";
 import { CoveragePanel } from "@/components/editor/CoveragePanel";
+import { ProcessLogPanel } from "@/components/editor/ProcessLogPanel";
+import { ExtensionsPanel } from "@/components/editor/ExtensionsPanel";
 import { sound } from "@/lib/soundSystem";
 
 /* ─── Types ─────────────────────────────────────────── */
-type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database" | "debug" | "packages" | "analytics" | "snapshots" | "review" | "gitgraph" | "templates" | "vulnscan" | "auditlogs" | "deployment" | "presence" | "keybindings" | "selfheal" | "billing" | "testing" | "bundle" | "loadtest" | "i18n" | "coverage";
+type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database" | "debug" | "packages" | "analytics" | "snapshots" | "review" | "gitgraph" | "templates" | "vulnscan" | "auditlogs" | "deployment" | "presence" | "keybindings" | "selfheal" | "billing" | "testing" | "bundle" | "loadtest" | "i18n" | "coverage" | "logtail";
 type BottomPanel = "terminal" | "preview" | "console" | "logs";
 
 interface Tab {
@@ -686,14 +688,37 @@ export default function Editor() {
     toast({ title: "Stopped" });
   }, [projectId, fileApi, toast]);
 
-  const handleDeploy = useCallback(() => {
+  const handleDeploy = useCallback(async () => {
     sound.play("deploy");
-    toast({ title: "Deploying…", description: "Building and deploying your project." });
-    setTimeout(() => {
+    toast({ title: "Deploying…", description: "Building your project…" });
+    if (projectId) {
+      try {
+        const es = new EventSource(`/api/projects/${projectId}/build`);
+        let built = false;
+        es.onmessage = (e) => {
+          try {
+            const ev = JSON.parse(e.data);
+            if (ev.type === "done") {
+              es.close();
+              built = true;
+              if (ev.code === 0) {
+                sound.play("success");
+                toast({ title: "Deployed! 🚀", description: `Live at https://${fileApi.projectInfo?.slug ?? projectName}.replit.app` });
+              } else {
+                toast({ title: "Build failed", description: "Check the Build Analyzer panel for details." });
+              }
+            }
+          } catch { /* */ }
+        };
+        es.onerror = () => { es.close(); if (!built) toast({ title: "Deploy error", description: "Could not reach build server." }); };
+      } catch {
+        toast({ title: "Deploy error", description: "Build request failed." });
+      }
+    } else {
       sound.play("success");
-      toast({ title: "Deployed!", description: `Live at https://${fileApi.projectInfo?.slug ?? projectName}.replit.app` });
-    }, 2500);
-  }, [fileApi.projectInfo, projectName, toast]);
+      toast({ title: "Deployed! 🚀", description: `Live at https://${projectName}.replit.app` });
+    }
+  }, [fileApi.projectInfo, projectId, projectName, toast]);
 
   /* ─── Voice command handler ─── */
   const handleVoiceCommand = useCallback((action: VoiceCommandAction, _raw: string) => {
@@ -863,6 +888,7 @@ export default function Editor() {
           <SideBtn icon={<Archive className="h-4 w-4" />} id="bundle" title="Bundle Analyzer" />
           <SideBtn icon={<Gauge className="h-4 w-4" />} id="loadtest" title="Load Tester" />
           <SideBtn icon={<Languages className="h-4 w-4" />} id="i18n" title="i18n Manager" />
+          <SideBtn icon={<Terminal className="h-4 w-4" />} id="logtail" title="Process Log Tail" />
           <div className="flex-1" />
           <SideBtn icon={<Layers className="h-4 w-4" />} id="templates" title="Environment Templates" />
           <SideBtn icon={<Keyboard className="h-4 w-4" />} id="keybindings" title="Keybindings" />
@@ -899,29 +925,7 @@ export default function Editor() {
                     <GitEnhancedPanel projectId={projectId ?? undefined} projectName={projectName} />
                   )}
                   {sidePanel === "extensions" && (
-                    <div className="flex flex-col h-full p-3 gap-2 overflow-y-auto">
-                      <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest">Extensions</p>
-                      {[
-                        { name: "Prettier", desc: "Code formatter", installed: true },
-                        { name: "ESLint", desc: "JavaScript linter", installed: true },
-                        { name: "GitHub Copilot", desc: "AI completions", installed: false },
-                        { name: "Tailwind CSS", desc: "IntelliSense support", installed: false },
-                        { name: "Error Lens", desc: "Inline error display", installed: false },
-                      ].map(ext => (
-                        <div key={ext.name} className="flex items-start gap-2 p-2 rounded bg-[#161b22] border border-[#21262d]">
-                          <div className="h-6 w-6 rounded bg-[#21262d] flex items-center justify-center shrink-0">
-                            <Package className="h-3.5 w-3.5 text-[#8b949e]" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[11px] font-medium text-[#e6edf3]">{ext.name}</p>
-                            <p className="text-[10px] text-[#8b949e]">{ext.desc}</p>
-                          </div>
-                          <button className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors shrink-0 ${ext.installed ? "border-green-500/30 text-green-400 bg-green-500/10" : "border-[#30363d] text-[#8b949e] hover:bg-[#21262d]"}`}>
-                            {ext.installed ? "✓" : "Install"}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                    <ExtensionsPanel projectId={projectId ?? undefined} />
                   )}
                   {sidePanel === "secrets" && (
                     <SecretsPanel projectId={projectId ?? undefined} />
@@ -958,6 +962,7 @@ export default function Editor() {
                   {sidePanel === "bundle"    && <BundleAnalyzerPanel projectId={projectId ?? undefined} />}
                   {sidePanel === "loadtest"  && <LoadTesterPanel projectId={projectId ?? undefined} />}
                   {sidePanel === "i18n"      && <I18nManagerPanel projectId={projectId ?? undefined} />}
+                  {sidePanel === "logtail"   && <ProcessLogPanel projectId={projectId ?? undefined} />}
                 </div>
               </Panel>
               <PanelResizeHandle className="w-px bg-[#21262d] hover:bg-[#58a6ff] transition-colors cursor-col-resize" />

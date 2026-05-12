@@ -503,6 +503,162 @@ router.post("/:id/i18n/translate", async (req, res) => {
   }
 });
 
+/* ─── Process registry (module-level, persists across requests) ── */
+interface ProcEntry {
+  pid: number;
+  cmd: string;
+  running: boolean;
+  logs: { ts: number; type: "stdout" | "stderr" | "info" | "error"; data: string }[];
+  listeners: Set<(e: { ts: number; type: string; data: string }) => void>;
+  proc: ReturnType<typeof spawn>;
+}
+const procRegistry = new Map<string, ProcEntry>();
+
+function pushLog(entry: ProcEntry, type: ProcEntry["logs"][number]["type"], data: string) {
+  const e = { ts: Date.now(), type, data };
+  entry.logs = [...entry.logs.slice(-500), e];
+  entry.listeners.forEach(fn => fn(e));
+}
+
+/* ─── POST /:id/process/start — spawn project's dev server ── */
+router.post("/:id/process/start", async (req, res) => {
+  const p = await getProject(Number(req.params.id));
+  if (!p) { res.status(404).json({ error: "Not found" }); return; }
+
+  const key = String(p.id);
+  const existing = procRegistry.get(key);
+  if (existing?.running) {
+    res.json({ ok: true, pid: existing.pid, message: "Already running" });
+    return;
+  }
+
+  const isPy  = p.language === "python" || p.language === "flask";
+  const pkgPath = path.join(p.dirPath, "package.json");
+  let scripts: Record<string, string> = {};
+  if (!isPy && fs.existsSync(pkgPath)) {
+    try { scripts = (JSON.parse(fs.readFileSync(pkgPath, "utf-8")).scripts ?? {}) as Record<string, string>; } catch { /* */ }
+  }
+
+  let cmd: string, args: string[];
+  if (isPy) {
+    const main = ["main.py", "app.py", "server.py"].find(f => fs.existsSync(path.join(p.dirPath, f))) ?? "main.py";
+    cmd = PYTHON; args = [main];
+  } else if (scripts.dev) {
+    cmd = "npm"; args = ["run", "dev"];
+  } else if (scripts.start) {
+    cmd = "npm"; args = ["start"];
+  } else {
+    cmd = "node"; args = ["index.js"];
+  }
+
+  const proc = spawn(cmd, args, {
+    cwd: p.dirPath,
+    env: { ...process.env, PORT: String(3500 + p.id) },
+  });
+
+  const entry: ProcEntry = {
+    pid: proc.pid ?? 0,
+    cmd: `${cmd} ${args.join(" ")}`,
+    running: true,
+    logs: [{ ts: Date.now(), type: "info", data: `▶ Starting: ${cmd} ${args.join(" ")} (pid ${proc.pid})` }],
+    listeners: new Set(),
+    proc,
+  };
+  procRegistry.set(key, entry);
+
+  proc.stdout.on("data", d => pushLog(entry, "stdout", d.toString()));
+  proc.stderr.on("data", d => pushLog(entry, "stderr", d.toString()));
+  proc.on("close", code => {
+    entry.running = false;
+    pushLog(entry, code === 0 ? "info" : "error", `■ Process exited (code ${code})`);
+  });
+  proc.on("error", err => {
+    entry.running = false;
+    pushLog(entry, "error", `✗ Spawn error: ${err.message}`);
+  });
+
+  res.json({ ok: true, pid: proc.pid, cmd: entry.cmd });
+});
+
+/* ─── GET /:id/process/status ── */
+router.get("/:id/process/status", async (req, res) => {
+  const p = await getProject(Number(req.params.id));
+  if (!p) { res.status(404).json({ error: "Not found" }); return; }
+  const entry = procRegistry.get(String(p.id));
+  if (!entry) { res.json({ running: false }); return; }
+  res.json({ running: entry.running, pid: entry.pid, cmd: entry.cmd, logCount: entry.logs.length });
+});
+
+/* ─── GET /:id/process/logs — SSE stream of live stdout/stderr ── */
+router.get("/:id/process/logs", async (req, res) => {
+  const p = await getProject(Number(req.params.id));
+  if (!p) { res.status(404).json({ error: "Not found" }); return; }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const key   = String(p.id);
+  const entry = procRegistry.get(key);
+
+  const send = (e: { ts: number; type: string; data: string }) => {
+    try { res.write(`data: ${JSON.stringify(e)}\n\n`); } catch { /* client gone */ }
+  };
+
+  /* Replay buffered logs first */
+  if (entry) {
+    entry.logs.forEach(send);
+    if (!entry.running) {
+      res.end();
+      return;
+    }
+    entry.listeners.add(send);
+  } else {
+    send({ ts: Date.now(), type: "info", data: "No process running. Click Start to launch your project." });
+  }
+
+  req.on("close", () => {
+    if (entry) entry.listeners.delete(send);
+  });
+});
+
+/* ─── DELETE /:id/process/stop ── */
+router.delete("/:id/process/stop", async (req, res) => {
+  const p = await getProject(Number(req.params.id));
+  if (!p) { res.status(404).json({ error: "Not found" }); return; }
+
+  const entry = procRegistry.get(String(p.id));
+  if (!entry || !entry.running) {
+    res.json({ ok: true, message: "Not running" });
+    return;
+  }
+
+  try {
+    entry.proc.kill("SIGTERM");
+    setTimeout(() => { try { entry.proc.kill("SIGKILL"); } catch { /* */ } }, 3000);
+  } catch { /* */ }
+
+  entry.running = false;
+  pushLog(entry, "info", "■ Process stopped by user");
+  res.json({ ok: true });
+});
+
+/* ─── POST /:id/process/stop (alias for DELETE) ── */
+router.post("/:id/process/stop", async (req, res) => {
+  const p = await getProject(Number(req.params.id));
+  if (!p) { res.status(404).json({ error: "Not found" }); return; }
+
+  const entry = procRegistry.get(String(p.id));
+  if (!entry || !entry.running) { res.json({ ok: true, message: "Not running" }); return; }
+
+  try { entry.proc.kill("SIGTERM"); } catch { /* */ }
+  entry.running = false;
+  pushLog(entry, "info", "■ Process stopped by user");
+  res.json({ ok: true });
+});
+
 /* ─── POST /:id/diagnostics — TypeScript / Python type errors ── */
 router.post("/:id/diagnostics", async (req, res) => {
   const p = await getProject(Number(req.params.id));

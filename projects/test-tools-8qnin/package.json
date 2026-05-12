@@ -2,5 +2,11 @@
   "name": "my-node-app",
   "version": "1.0.0",
   "main": "index.js",
-  "scripts": { "start": "node index.js", "dev": "node --watch index.js" }
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "is-odd": "^3.0.1"
+  }
 }
