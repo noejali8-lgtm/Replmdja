@@ -8,7 +8,7 @@ import {
   Database, Lock, RefreshCw, ExternalLink, ChevronRight, Plus,
   Layers, Code2, Globe, AlertTriangle, Bug, Box, BarChart2, Camera,
   Shield, Mic, ScrollText, GitGraph, Zap, Keyboard, Users, Activity,
-  Network, GitMerge, Server, CreditCard
+  Network, GitMerge, Server, CreditCard, FlaskConical, Archive, Gauge, Languages, PieChart
 } from "lucide-react";
 import { useProjectFiles } from "@/hooks/useProjectFiles";
 import { SecretsPanel } from "@/components/editor/SecretsPanel";
@@ -40,10 +40,15 @@ import { KeybindingsPanel } from "@/components/editor/KeybindingsPanel";
 import { GitEnhancedPanel } from "@/components/editor/GitEnhancedPanel";
 import { SelfHealingPanel } from "@/components/editor/SelfHealingPanel";
 import { BillingPanel } from "@/components/editor/BillingPanel";
+import { TestRunnerPanel } from "@/components/editor/TestRunnerPanel";
+import { BundleAnalyzerPanel } from "@/components/editor/BundleAnalyzerPanel";
+import { LoadTesterPanel } from "@/components/editor/LoadTesterPanel";
+import { I18nManagerPanel } from "@/components/editor/I18nManagerPanel";
+import { CoveragePanel } from "@/components/editor/CoveragePanel";
 import { sound } from "@/lib/soundSystem";
 
 /* ─── Types ─────────────────────────────────────────── */
-type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database" | "debug" | "packages" | "analytics" | "snapshots" | "review" | "gitgraph" | "templates" | "vulnscan" | "auditlogs" | "deployment" | "presence" | "keybindings" | "selfheal" | "billing";
+type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database" | "debug" | "packages" | "analytics" | "snapshots" | "review" | "gitgraph" | "templates" | "vulnscan" | "auditlogs" | "deployment" | "presence" | "keybindings" | "selfheal" | "billing" | "testing" | "bundle" | "loadtest" | "i18n" | "coverage";
 type BottomPanel = "terminal" | "preview" | "console" | "logs";
 
 interface Tab {
@@ -853,6 +858,11 @@ export default function Editor() {
           <SideBtn icon={<Network className="h-4 w-4" />} id="vulnscan" title="Vulnerability Scanner" />
           <SideBtn icon={<Activity className="h-4 w-4" />} id="auditlogs" title="Audit Log" />
           <SideBtn icon={<Users className="h-4 w-4" />} id="presence" title="Collaborators" />
+          <SideBtn icon={<FlaskConical className="h-4 w-4" />} id="testing" title="Test Runner" />
+          <SideBtn icon={<PieChart className="h-4 w-4" />} id="coverage" title="Code Coverage" />
+          <SideBtn icon={<Archive className="h-4 w-4" />} id="bundle" title="Bundle Analyzer" />
+          <SideBtn icon={<Gauge className="h-4 w-4" />} id="loadtest" title="Load Tester" />
+          <SideBtn icon={<Languages className="h-4 w-4" />} id="i18n" title="i18n Manager" />
           <div className="flex-1" />
           <SideBtn icon={<Layers className="h-4 w-4" />} id="templates" title="Environment Templates" />
           <SideBtn icon={<Keyboard className="h-4 w-4" />} id="keybindings" title="Keybindings" />
@@ -936,13 +946,18 @@ export default function Editor() {
                   )}
                   {sidePanel === "gitgraph"   && <GitGraphPanel />}
                   {sidePanel === "templates"  && <EnvironmentTemplates />}
-                  {sidePanel === "vulnscan"   && <VulnerabilityScanner />}
+                  {sidePanel === "vulnscan"   && <VulnerabilityScanner projectId={projectId ?? undefined} />}
                   {sidePanel === "auditlogs"  && <AuditLogs />}
                   {sidePanel === "deployment" && <DeploymentPanel />}
                   {sidePanel === "presence"   && <MultiCursorPresence currentFile={activeTab?.path} projectId={projectName} />}
                   {sidePanel === "keybindings"&& <KeybindingsPanel />}
-                  {sidePanel === "selfheal"   && <SelfHealingPanel currentFile={activeTab?.name} />}
+                  {sidePanel === "selfheal"   && <SelfHealingPanel currentFile={activeTab?.name} projectId={projectId ?? undefined} />}
                   {sidePanel === "billing"    && <BillingPanel />}
+                  {sidePanel === "testing"   && <TestRunnerPanel projectId={projectId ?? undefined} />}
+                  {sidePanel === "coverage"  && <CoveragePanel projectId={projectId ?? undefined} />}
+                  {sidePanel === "bundle"    && <BundleAnalyzerPanel projectId={projectId ?? undefined} />}
+                  {sidePanel === "loadtest"  && <LoadTesterPanel projectId={projectId ?? undefined} />}
+                  {sidePanel === "i18n"      && <I18nManagerPanel projectId={projectId ?? undefined} />}
                 </div>
               </Panel>
               <PanelResizeHandle className="w-px bg-[#21262d] hover:bg-[#58a6ff] transition-colors cursor-col-resize" />

@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Sparkles, AlertTriangle, CheckCircle2, RefreshCw, Zap, Play, ChevronRight, Wrench } from "lucide-react";
+import { Sparkles, AlertTriangle, CheckCircle2, RefreshCw, Zap, ChevronRight, Wrench, Info } from "lucide-react";
 
 interface ErrorDiagnostic {
   id: string;
@@ -13,59 +13,72 @@ interface ErrorDiagnostic {
   applied?: boolean;
 }
 
-const DEMO_ERRORS: ErrorDiagnostic[] = [
-  {
-    id: "e1", file: "src/App.tsx", line: 12, col: 8, severity: "error",
-    message: "Property 'user' does not exist on type 'AppState'",
-    code: "TS2339", fixAvailable: true,
-  },
-  {
-    id: "e2", file: "src/utils/api.ts", line: 34, col: 3, severity: "error",
-    message: "Cannot find name 'fetchUser'. Did you mean 'getUser'?",
-    code: "TS2304", fixAvailable: true,
-  },
-  {
-    id: "e3", file: "src/components/Header.tsx", line: 7, col: 15, severity: "warning",
-    message: "React Hook useEffect has missing dependencies: 'userId'",
-    code: "react-hooks/exhaustive-deps", fixAvailable: true,
-  },
-  {
-    id: "e4", file: "src/pages/Dashboard.tsx", line: 89, col: 1, severity: "error",
-    message: "Unreachable code detected",
-    code: "TS7027", fixAvailable: true,
-  },
-];
-
-const FIX_SUGGESTIONS: Record<string, string> = {
-  "e1": "Add `user?: UserType` to the AppState interface definition.",
-  "e2": "Import `getUser` from `./api` or rename the function call to `getUser`.",
-  "e3": "Add `userId` to the dependency array: `useEffect(() => { … }, [userId])`.",
-  "e4": "Remove the unreachable code block or move it before the return statement.",
-};
-
 interface SelfHealingPanelProps {
   currentFile?: string;
+  projectId?: number;
 }
 
-export function SelfHealingPanel({ currentFile }: SelfHealingPanelProps) {
-  const [errors, setErrors] = useState<ErrorDiagnostic[]>(DEMO_ERRORS);
+export function SelfHealingPanel({ currentFile, projectId }: SelfHealingPanelProps) {
+  const [errors, setErrors] = useState<ErrorDiagnostic[]>([]);
   const [scanning, setScanning] = useState(false);
-  const [scanned, setScanned] = useState(true);
+  const [scanned, setScanned] = useState(false);
   const [fixing, setFixing] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [summary, setSummary] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   const runScan = useCallback(async () => {
     setScanning(true);
     setScanned(false);
-    await new Promise(r => setTimeout(r, 1500));
-    setErrors(DEMO_ERRORS.map(e => ({ ...e, applied: false })));
+    setErrors([]);
+    setSummary(null);
+    setScanError(null);
+
+    if (!projectId) {
+      await new Promise(r => setTimeout(r, 1000));
+      setScanError("Open a real project to run type-checking diagnostics.");
+      setScanned(true);
+      setScanning(false);
+      return;
+    }
+
+    try {
+      const resp = await fetch(`/api/projects/${projectId}/diagnostics`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await resp.json() as {
+        diagnostics?: { file: string; line: number; col: number; message: string; severity: string; code?: string }[];
+        summary?: string;
+        language?: string;
+      };
+
+      const diags: ErrorDiagnostic[] = (data.diagnostics ?? []).map((d, i) => ({
+        id: String(i),
+        file: d.file.replace(/^.*\//, ""), // basename
+        line: d.line,
+        col: d.col,
+        message: d.message,
+        severity: d.severity === "warning" ? "warning" : "error",
+        code: d.code,
+        fixAvailable: !!(d.code && (d.code.startsWith("TS") || d.code.startsWith("E"))),
+        applied: false,
+      }));
+
+      setErrors(diags);
+      if (data.summary) setSummary(data.summary);
+    } catch (e) {
+      setScanError(`Failed to run diagnostics: ${(e as Error).message}`);
+    }
+
     setScanned(true);
     setScanning(false);
-  }, []);
+  }, [projectId]);
 
   const applyFix = useCallback(async (id: string) => {
     setFixing(id);
-    await new Promise(r => setTimeout(r, 1200));
+    await new Promise(r => setTimeout(r, 900));
     setErrors(prev => prev.map(e => e.id === id ? { ...e, applied: true } : e));
     setFixing(null);
   }, []);
@@ -74,16 +87,12 @@ export function SelfHealingPanel({ currentFile }: SelfHealingPanelProps) {
     const fixable = errors.filter(e => e.fixAvailable && !e.applied);
     for (const e of fixable) {
       await applyFix(e.id);
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 150));
     }
   }, [errors, applyFix]);
 
   const toggleExpanded = (id: string) => {
-    setExpanded(prev => {
-      const s = new Set(prev);
-      s.has(id) ? s.delete(id) : s.add(id);
-      return s;
-    });
+    setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   };
 
   const pending = errors.filter(e => !e.applied);
@@ -102,7 +111,23 @@ export function SelfHealingPanel({ currentFile }: SelfHealingPanelProps) {
         </button>
       </div>
 
-      {scanning ? (
+      {!scanned && !scanning ? (
+        <div className="flex flex-col items-center justify-center flex-1 gap-4 p-6">
+          <div className="h-14 w-14 rounded-full bg-[#f2cc60]/10 border border-[#f2cc60]/20 flex items-center justify-center">
+            <Zap className="h-7 w-7 text-[#f2cc60]" />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-medium text-[#e6edf3] mb-1">Code Diagnostics</p>
+            <p className="text-xs text-[#8b949e]">
+              {projectId ? "Runs tsc --noEmit to find type errors in your project" : "Open a project to run diagnostics"}
+            </p>
+          </div>
+          <button onClick={runScan}
+            className="flex items-center gap-2 px-4 py-2 rounded bg-[#f2cc60]/20 hover:bg-[#f2cc60]/30 text-[#f2cc60] text-xs font-medium border border-[#f2cc60]/20 transition-colors">
+            <Zap className="h-3.5 w-3.5" /> Run Diagnostics
+          </button>
+        </div>
+      ) : scanning ? (
         <div className="flex flex-col items-center justify-center flex-1 gap-3 p-6">
           <div className="relative h-12 w-12">
             <div className="absolute inset-0 rounded-full border-2 border-[#30363d]" />
@@ -111,13 +136,30 @@ export function SelfHealingPanel({ currentFile }: SelfHealingPanelProps) {
           </div>
           <div className="text-center">
             <p className="text-sm font-medium text-[#e6edf3]">Scanning…</p>
-            <p className="text-xs text-[#8b949e] mt-1">AI analyzing code quality</p>
+            <p className="text-xs text-[#8b949e] mt-1">Running type-checker on your project</p>
           </div>
+        </div>
+      ) : scanError ? (
+        <div className="flex flex-col items-center justify-center flex-1 gap-4 p-6">
+          <div className="flex items-start gap-2 p-3 rounded bg-[#d29922]/10 border border-[#d29922]/20 text-[#d29922] text-xs max-w-xs">
+            <Info className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>{scanError}</span>
+          </div>
+          <button onClick={runScan}
+            className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#21262d] hover:bg-[#30363d] text-[#8b949e] text-xs border border-[#30363d] transition-colors">
+            <RefreshCw className="h-3 w-3" /> Try Again
+          </button>
         </div>
       ) : (
         <div className="flex flex-col flex-1 overflow-hidden">
-          {/* Summary */}
+          {/* Summary bar */}
           <div className="px-3 py-2 border-b border-[#21262d] shrink-0">
+            {summary && errors.length === 0 && (
+              <div className="flex items-center gap-1.5 text-[11px] text-[#3fb950] mb-2">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {summary}
+              </div>
+            )}
             <div className="flex items-center gap-3 mb-2">
               {errorCount > 0 && (
                 <span className="flex items-center gap-1 text-[11px] text-[#f85149]">
@@ -148,7 +190,9 @@ export function SelfHealingPanel({ currentFile }: SelfHealingPanelProps) {
             {pending.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 gap-2 text-[#484f58]">
                 <CheckCircle2 className="h-8 w-8 text-[#3fb950] opacity-50" />
-                <p className="text-xs text-center">All issues resolved! ✨</p>
+                <p className="text-xs text-center">
+                  {errors.length === 0 ? "No issues found ✓" : "All issues resolved! ✨"}
+                </p>
               </div>
             ) : (
               pending.map(err => {
@@ -161,25 +205,31 @@ export function SelfHealingPanel({ currentFile }: SelfHealingPanelProps) {
                       <AlertTriangle className={`h-3 w-3 shrink-0 ${err.severity === "error" ? "text-[#f85149]" : "text-[#d29922]"}`} />
                       <div className="flex-1 min-w-0">
                         <p className="text-[11px] text-[#e6edf3] truncate">{err.message}</p>
-                        <p className="text-[9px] text-[#484f58]">{err.file}:{err.line}:{err.col} {err.code && `[${err.code}]`}</p>
+                        <p className="text-[9px] text-[#484f58]">{err.file}:{err.line}:{err.col}{err.code ? ` [${err.code}]` : ""}</p>
                       </div>
-                      {isOpen ? <ChevronRight className="h-3 w-3 text-[#484f58] rotate-90 shrink-0" /> : <ChevronRight className="h-3 w-3 text-[#484f58] shrink-0" />}
+                      <ChevronRight className={`h-3 w-3 text-[#484f58] shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`} />
                     </button>
-                    {isOpen && FIX_SUGGESTIONS[err.id] && (
+                    {isOpen && (
                       <div className="px-3 pb-2.5 border-t border-[#21262d]/40">
                         <div className="mt-2 p-2 rounded bg-[#161b22] border border-[#21262d]">
                           <div className="flex items-start gap-1.5 mb-2">
                             <Wrench className="h-3 w-3 text-[#8b949e] shrink-0 mt-0.5" />
-                            <p className="text-[10px] text-[#8b949e]">{FIX_SUGGESTIONS[err.id]}</p>
+                            <p className="text-[10px] text-[#8b949e]">
+                              {err.code?.startsWith("TS")
+                                ? `TypeScript ${err.code}: Check the type definitions around line ${err.line} in ${err.file}.`
+                                : `Review line ${err.line} in ${err.file} for ${err.severity === "error" ? "this error" : "this warning"}.`}
+                            </p>
                           </div>
-                          <button onClick={() => applyFix(err.id)} disabled={fixing === err.id}
-                            className="flex items-center gap-1.5 text-[10px] px-2 py-1 rounded bg-[#238636]/20 hover:bg-[#238636]/30 text-[#3fb950] border border-[#238636]/20 transition-colors disabled:opacity-50">
-                            {fixing === err.id ? (
-                              <><div className="h-2.5 w-2.5 border border-[#3fb950]/30 border-t-[#3fb950] rounded-full animate-spin" />Applying…</>
-                            ) : (
-                              <><Sparkles className="h-2.5 w-2.5" />Apply fix</>
-                            )}
-                          </button>
+                          {err.fixAvailable && (
+                            <button onClick={() => applyFix(err.id)} disabled={fixing === err.id}
+                              className="flex items-center gap-1.5 text-[10px] px-2 py-1 rounded bg-[#238636]/20 hover:bg-[#238636]/30 text-[#3fb950] border border-[#238636]/20 transition-colors disabled:opacity-50">
+                              {fixing === err.id ? (
+                                <><div className="h-2.5 w-2.5 border border-[#3fb950]/30 border-t-[#3fb950] rounded-full animate-spin" />Applying…</>
+                              ) : (
+                                <><Sparkles className="h-2.5 w-2.5" />Mark as reviewed</>
+                              )}
+                            </button>
+                          )}
                         </div>
                       </div>
                     )}
@@ -190,7 +240,7 @@ export function SelfHealingPanel({ currentFile }: SelfHealingPanelProps) {
 
             {fixed.length > 0 && (
               <div className="mt-2 pt-2 border-t border-[#21262d]">
-                <p className="text-[9px] text-[#484f58] px-1 mb-1 uppercase tracking-widest">Fixed</p>
+                <p className="text-[9px] text-[#484f58] px-1 mb-1 uppercase tracking-widest">Reviewed</p>
                 {fixed.map(err => (
                   <div key={err.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded opacity-50">
                     <CheckCircle2 className="h-3 w-3 text-[#3fb950] shrink-0" />
