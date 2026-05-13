@@ -52,13 +52,14 @@ import { ProblemsPanel } from "@/components/editor/ProblemsPanel";
 import { OutlinePanel } from "@/components/editor/OutlinePanel";
 import { PortForwardingPanel } from "@/components/editor/PortForwardingPanel";
 import { NotificationsCenter } from "@/components/editor/NotificationsCenter";
+import { AgentTerminalPanel } from "@/components/editor/AgentTerminalPanel";
 import { useCollaboration } from "@/hooks/useCollaboration";
 import { notify } from "@/lib/notifications";
 import { sound } from "@/lib/soundSystem";
 
 /* ─── Types ─────────────────────────────────────────── */
 type SidePanel = "files" | "search" | "git" | "extensions" | "secrets" | "database" | "debug" | "packages" | "analytics" | "snapshots" | "review" | "gitgraph" | "templates" | "vulnscan" | "auditlogs" | "deployment" | "presence" | "keybindings" | "selfheal" | "billing" | "testing" | "bundle" | "loadtest" | "i18n" | "coverage" | "logtail" | "settings" | "problems" | "outline" | "ports";
-type BottomPanel = "terminal" | "preview" | "console" | "logs";
+type BottomPanel = "terminal" | "preview" | "console" | "logs" | "agentterm";
 
 interface Tab {
   path: string;
@@ -1195,16 +1196,18 @@ export default function Editor() {
                       {/* Bottom tab bar */}
                       <div className="flex items-center gap-0.5 px-2 py-1 border-b border-[#21262d] bg-[#161b22] shrink-0">
                         {[
-                          { id: "terminal" as const, icon: <Terminal className="h-3 w-3" />, label: "Terminal" },
-                          { id: "preview" as const, icon: <Globe className="h-3 w-3" />, label: "Browser Preview" },
-                          { id: "console" as const, icon: <Layers className="h-3 w-3" />, label: "Console" },
-                          { id: "logs" as const, icon: <ScrollText className="h-3 w-3" />, label: "Logs" },
+                          { id: "terminal" as const,   icon: <Terminal className="h-3 w-3" />,  label: "Terminal" },
+                          { id: "agentterm" as const,  icon: <Sparkles className="h-3 w-3" />, label: "AI Terminal" },
+                          { id: "preview" as const,    icon: <Globe className="h-3 w-3" />,     label: "Browser Preview" },
+                          { id: "console" as const,    icon: <Layers className="h-3 w-3" />,    label: "Console" },
+                          { id: "logs" as const,       icon: <ScrollText className="h-3 w-3" />,label: "Logs" },
                         ].map(p => (
                           <button key={p.id} onClick={() => setBottomPanel(p.id)}
                             className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs transition-colors ${bottomPanel === p.id ? "bg-[#0d1117] text-[#e6edf3]" : "text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"}`}>
                             {p.icon}
                             <span>{p.label}</span>
                             {p.id === "terminal" && <Circle className="h-1.5 w-1.5 fill-green-400 text-green-400" />}
+                            {p.id === "agentterm" && <Circle className="h-1.5 w-1.5 fill-[#a371f7] text-[#a371f7]" />}
                           </button>
                         ))}
                         <div className="flex-1" />
@@ -1220,6 +1223,23 @@ export default function Editor() {
 
                       <div className="flex-1 overflow-hidden">
                         {bottomPanel === "terminal" && <TerminalPane cwd="/home/runner/workspace" />}
+
+                        {bottomPanel === "agentterm" && (
+                          <AgentTerminalPanel
+                            currentFile={activeTab?.name}
+                            currentCode={activeTab?.content}
+                            fileTree={(() => {
+                              function renderTree(nodes: import("@/components/editor/FileTree").FileNode[], prefix = ""): string {
+                                return nodes.map(n => {
+                                  const line = `${prefix}${n.type === "dir" ? "📁" : "📄"} ${n.name}`;
+                                  if (n.type === "dir" && n.children) return line + "\n" + renderTree(n.children, prefix + "  ");
+                                  return line;
+                                }).join("\n");
+                              }
+                              return renderTree(tree);
+                            })()}
+                          />
+                        )}
 
                         {bottomPanel === "preview" && (
                           <div className="flex flex-col h-full">

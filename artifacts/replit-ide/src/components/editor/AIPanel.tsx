@@ -68,6 +68,7 @@ interface AIPanelProps {
 
 /* ─── Models ─── */
 const MODELS = [
+  { id: "claude-opus-4-7",  label: "Claude Opus 4.7",  badge: "Max" },
   { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", badge: "Recommended" },
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", badge: "Fast" },
   { id: "claude-opus-4-5", label: "Claude Opus 4.5", badge: "Powerful" },
@@ -151,11 +152,24 @@ function MarkdownContent({
 
 /* ─── Tool card ─── */
 const TOOL_META: Record<string, { icon: React.ReactNode; label: string; color: string; bg: string }> = {
-  write_file: { icon: <FilePen className="h-3 w-3" />, label: "Write file", color: "text-[#3fb950]", bg: "bg-[#238636]/20 border-[#238636]/40" },
-  read_file: { icon: <FileText className="h-3 w-3" />, label: "Read file", color: "text-[#58a6ff]", bg: "bg-[#1f6feb]/20 border-[#1f6feb]/40" },
-  list_files: { icon: <FolderOpen className="h-3 w-3" />, label: "List files", color: "text-[#e3b341]", bg: "bg-[#9e6a03]/20 border-[#9e6a03]/40" },
-  search_files: { icon: <FileSearch className="h-3 w-3" />, label: "Search files", color: "text-[#a371f7]", bg: "bg-[#6e40c9]/20 border-[#6e40c9]/40" },
-  execute_command: { icon: <Terminal className="h-3 w-3" />, label: "Shell", color: "text-[#ffa657]", bg: "bg-[#d18616]/20 border-[#d18616]/40" },
+  write_file:            { icon: <FilePen className="h-3 w-3" />,    label: "Write file",    color: "text-[#3fb950]", bg: "bg-[#238636]/20 border-[#238636]/40" },
+  read_file:             { icon: <FileText className="h-3 w-3" />,   label: "Read file",     color: "text-[#58a6ff]", bg: "bg-[#1f6feb]/20 border-[#1f6feb]/40" },
+  list_files:            { icon: <FolderOpen className="h-3 w-3" />, label: "List files",    color: "text-[#e3b341]", bg: "bg-[#9e6a03]/20 border-[#9e6a03]/40" },
+  search_files:          { icon: <FileSearch className="h-3 w-3" />, label: "Search files",  color: "text-[#a371f7]", bg: "bg-[#6e40c9]/20 border-[#6e40c9]/40" },
+  execute_command:       { icon: <Terminal className="h-3 w-3" />,   label: "Shell",         color: "text-[#ffa657]", bg: "bg-[#d18616]/20 border-[#d18616]/40" },
+  execute_command_async: { icon: <Play className="h-3 w-3" />,       label: "Async shell",   color: "text-[#d29922]", bg: "bg-[#9e6a03]/20 border-[#9e6a03]/40" },
+  install_packages:      { icon: <Wrench className="h-3 w-3" />,     label: "Install pkgs",  color: "text-[#3fb950]", bg: "bg-[#238636]/20 border-[#238636]/40" },
+  query_database:        { icon: <Eye className="h-3 w-3" />,        label: "SQL query",     color: "text-[#76e3ea]", bg: "bg-[#1f6feb]/10 border-[#1f6feb]/30" },
+  push_db_schema:        { icon: <Shield className="h-3 w-3" />,     label: "DB push",       color: "text-[#76e3ea]", bg: "bg-[#1f6feb]/10 border-[#1f6feb]/30" },
+  git:                   { icon: <GitBranch className="h-3 w-3" />,  label: "Git",           color: "text-[#bc8cff]", bg: "bg-[#6e40c9]/20 border-[#6e40c9]/40" },
+  fetch_url:             { icon: <Search className="h-3 w-3" />,     label: "Fetch URL",     color: "text-[#58a6ff]", bg: "bg-[#1f6feb]/20 border-[#1f6feb]/40" },
+  delete_file:           { icon: <X className="h-3 w-3" />,          label: "Delete file",   color: "text-[#f85149]", bg: "bg-[#b91c1c]/20 border-[#f85149]/40" },
+  move_file:             { icon: <ChevronRight className="h-3 w-3" />,label: "Move file",    color: "text-[#ffa657]", bg: "bg-[#d18616]/20 border-[#d18616]/40" },
+  make_directory:        { icon: <FolderOpen className="h-3 w-3" />, label: "Make dir",      color: "text-[#e3b341]", bg: "bg-[#9e6a03]/20 border-[#9e6a03]/40" },
+  list_processes:        { icon: <Cpu className="h-3 w-3" />,        label: "List procs",    color: "text-[#8b949e]", bg: "bg-[#21262d] border-[#30363d]" },
+  kill_process:          { icon: <Zap className="h-3 w-3" />,        label: "Kill process",  color: "text-[#f85149]", bg: "bg-[#b91c1c]/20 border-[#f85149]/40" },
+  get_env:               { icon: <Eye className="h-3 w-3" />,        label: "Get env",       color: "text-[#8b949e]", bg: "bg-[#21262d] border-[#30363d]" },
+  set_env:               { icon: <Shield className="h-3 w-3" />,     label: "Set env",       color: "text-[#e3b341]", bg: "bg-[#9e6a03]/20 border-[#9e6a03]/40" },
 };
 
 function ToolCard({
@@ -740,11 +754,27 @@ export function AIPanel({
       {/* Mode badge */}
       {mode === "agent" && turns.length === 0 && (
         <div className="mx-3 mt-3 p-2.5 rounded-lg bg-[#161b22] border border-[#21262d] text-[10px] text-[#8b949e] leading-relaxed shrink-0">
-          <div className="flex items-center gap-1.5 mb-1">
+          <div className="flex items-center gap-1.5 mb-1.5">
             <Bot className="h-3 w-3 text-[#a371f7]" />
-            <span className="font-medium text-[#a371f7]">Agent mode active</span>
+            <span className="font-medium text-[#a371f7]">Agent 4 — Full permissions</span>
+            <span className="ml-auto px-1.5 py-0.5 rounded-full bg-[#238636]/20 border border-[#238636]/30 text-[9px] text-[#3fb950]">18 tools</span>
           </div>
-          I can read and write files in your project autonomously. I'll show you every file I touch and ask before running sensitive commands.
+          <div className="grid grid-cols-2 gap-1 mb-1.5">
+            {[
+              { icon: <Terminal className="h-2.5 w-2.5" />, label: "Shell commands", color: "text-[#ffa657]" },
+              { icon: <FilePen className="h-2.5 w-2.5" />, label: "Read/write files", color: "text-[#3fb950]" },
+              { icon: <Eye className="h-2.5 w-2.5" />, label: "Query database", color: "text-[#76e3ea]" },
+              { icon: <GitBranch className="h-2.5 w-2.5" />, label: "Git operations", color: "text-[#bc8cff]" },
+              { icon: <Wrench className="h-2.5 w-2.5" />, label: "Install packages", color: "text-[#3fb950]" },
+              { icon: <Search className="h-2.5 w-2.5" />, label: "Browse URLs", color: "text-[#58a6ff]" },
+            ].map(cap => (
+              <div key={cap.label} className={`flex items-center gap-1 ${cap.color}`}>
+                {cap.icon}
+                <span className="text-[9px]">{cap.label}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[9px] text-[#484f58]">No approval gates — all capabilities unlocked. Use the Agent Terminal tab for live shell execution.</p>
         </div>
       )}
 
