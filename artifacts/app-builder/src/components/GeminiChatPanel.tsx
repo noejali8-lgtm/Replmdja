@@ -16,7 +16,7 @@ import {
   FolderOpen, Search, ChevronDown, ChevronUp,
   Key, AlertCircle, Check, Loader2,
   Globe, Trash2, Copy, Zap, Clock, Mic, MicOff,
-  Swords
+  Swords, History, Plus, X, MessageSquare
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getBYOKKey, hasBYOKKey, BYOKBadge } from "./BYOKPanel";
@@ -51,6 +51,58 @@ type SpeechRecognitionCtor = new () => ISpeechRecognition;
    TYPES
 ══════════════════════════════════════════════════════════════ */
 type AppMode = "agent" | "chat" | "debate";
+
+/* ══════════════════════════════════════════════════════════════
+   HISTORY PERSISTENCE
+   Sessions stored in localStorage — max 20, newest first
+══════════════════════════════════════════════════════════════ */
+interface HistorySession {
+  id: string;
+  title: string;
+  mode: AppMode;
+  model: string;
+  turns: number;
+  createdAt: number;
+  updatedAt: number;
+  messages: Message[];
+}
+
+const HISTORY_LS_KEY = "antigravity_history_v1";
+const MAX_HISTORY     = 20;
+
+function useGeminiHistory() {
+  const load = (): HistorySession[] => {
+    try { return JSON.parse(localStorage.getItem(HISTORY_LS_KEY) ?? "[]") as HistorySession[]; }
+    catch { return []; }
+  };
+
+  const save = (sessions: HistorySession[]) => {
+    try { localStorage.setItem(HISTORY_LS_KEY, JSON.stringify(sessions)); } catch { /* quota */ }
+  };
+
+  const upsert = (session: HistorySession) => {
+    const all = load();
+    const idx = all.findIndex(s => s.id === session.id);
+    if (idx !== -1) all[idx] = session;
+    else { all.unshift(session); if (all.length > MAX_HISTORY) all.splice(MAX_HISTORY); }
+    save(all);
+  };
+
+  const remove = (id: string) => save(load().filter(s => s.id !== id));
+  const clearAll = () => localStorage.removeItem(HISTORY_LS_KEY);
+
+  return { load, upsert, remove, clearAll };
+}
+
+function sessionTitle(messages: Message[]): string {
+  const first = messages.find(m => m.role === "user");
+  const text  = (first?.blocks[0] as TextBlock | undefined)?.content ?? "New conversation";
+  return text.length > 55 ? text.slice(0, 52) + "…" : text;
+}
+
+function newSessionId() { return `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; }
+
+const MODE_ICON: Record<AppMode, string> = { agent: "🤖", chat: "💬", debate: "⚔️" };
 
 interface ThinkingBlock {
   type: "thought";
@@ -512,10 +564,15 @@ export function GeminiChatPanel({ onOpenBYOK }: GeminiChatPanelProps) {
   const [streamStartTime, setStreamStartTime] = useState(0);
   const [mode, setMode] = useState<AppMode>("agent");
   const [hasKey, setHasKey] = useState(hasBYOKKey("gemini"));
+  const [showHistory, setShowHistory] = useState(false);
+  const [sessionId, setSessionId] = useState(() => newSessionId());
+  const [sessionCreatedAt, setSessionCreatedAt] = useState(() => Date.now());
+  const [historySessions, setHistorySessions] = useState<HistorySession[]>([]);
 
   const abortRef = useRef<(() => void) | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const history = useGeminiHistory();
 
   const currentModel = GEMINI_MODELS.find(m => m.id === selectedModel) ?? GEMINI_MODELS[0];
 
@@ -530,6 +587,63 @@ export function GeminiChatPanel({ onOpenBYOK }: GeminiChatPanelProps) {
     window.addEventListener("focus", check);
     return () => window.removeEventListener("focus", check);
   }, []);
+
+  /* ── Load sessions list on mount ── */
+  useEffect(() => {
+    setHistorySessions(history.load());
+  }, []);
+
+  /* ── Auto-save when streaming ends and we have messages ── */
+  useEffect(() => {
+    if (streaming) return;
+    if (messages.length < 2) return;
+    const session: HistorySession = {
+      id: sessionId,
+      title: sessionTitle(messages),
+      mode,
+      model: selectedModel,
+      turns: messages.filter(m => m.role === "user").length,
+      createdAt: sessionCreatedAt,
+      updatedAt: Date.now(),
+      messages,
+    };
+    history.upsert(session);
+    setHistorySessions(history.load());
+  }, [streaming]);
+
+  /* ── New chat ── */
+  const startNewChat = useCallback(() => {
+    setMessages([]);
+    setInput("");
+    setSessionId(newSessionId());
+    setSessionCreatedAt(Date.now());
+    setShowHistory(false);
+  }, []);
+
+  /* ── Load a past session ── */
+  const loadSession = useCallback((s: HistorySession) => {
+    setMessages(s.messages);
+    setMode(s.mode);
+    setSelectedModel(s.model);
+    setSessionId(s.id);
+    setSessionCreatedAt(s.createdAt);
+    setShowHistory(false);
+  }, []);
+
+  /* ── Delete a session from history ── */
+  const deleteSession = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    history.remove(id);
+    setHistorySessions(history.load());
+    if (id === sessionId) startNewChat();
+  }, [sessionId, startNewChat]);
+
+  /* ── Clear all history ── */
+  const clearAllHistory = useCallback(() => {
+    history.clearAll();
+    setHistorySessions([]);
+    startNewChat();
+  }, [startNewChat]);
 
   /* ── Voice Input ── */
   const handleVoiceResult = useCallback((text: string) => {
@@ -778,23 +892,160 @@ export function GeminiChatPanel({ onOpenBYOK }: GeminiChatPanelProps) {
         }
       `}</style>
 
-      <div className="flex flex-col h-full bg-[#0a0a0a]">
+      <div className="relative flex flex-col h-full bg-[#0a0a0a] overflow-hidden">
+
+        {/* ══ HISTORY DRAWER (slide-in) ══ */}
+        <AnimatePresence>
+          {showHistory && (
+            <>
+              {/* Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowHistory(false)}
+                className="absolute inset-0 bg-black/50 z-20"
+              />
+              {/* Drawer */}
+              <motion.div
+                initial={{ x: "-100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "-100%" }}
+                transition={{ type: "spring", stiffness: 320, damping: 32 }}
+                className="absolute inset-y-0 left-0 w-[82%] max-w-[300px] bg-[#0e0e0e] border-r border-white/[0.08] z-30 flex flex-col"
+              >
+                {/* Drawer header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07]">
+                  <div className="flex items-center gap-2">
+                    <History size={13} className="text-white/50" />
+                    <span className="text-[12.5px] font-semibold text-white/75">Chat History</span>
+                    {historySessions.length > 0 && (
+                      <span className="text-[9.5px] px-1.5 py-0.5 bg-white/[0.05] rounded text-white/30">
+                        {historySessions.length}/{MAX_HISTORY}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setShowHistory(false)}
+                    className="text-white/25 hover:text-white/55 transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                {/* New chat button */}
+                <div className="px-3 pt-3 pb-2 shrink-0">
+                  <button
+                    onClick={startNewChat}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 bg-blue-500/10 hover:bg-blue-500/18 border border-blue-400/18 rounded-xl text-[12px] text-blue-300 transition-all"
+                  >
+                    <Plus size={12} />
+                    <span className="font-medium">New Conversation</span>
+                  </button>
+                </div>
+
+                {/* Sessions list */}
+                <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
+                  {historySessions.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-40 gap-3 text-center">
+                      <MessageSquare size={22} className="text-white/12" />
+                      <p className="text-[11px] text-white/25 leading-relaxed">
+                        No history yet.<br />Start a conversation to save it here.
+                      </p>
+                    </div>
+                  ) : (
+                    historySessions.map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => loadSession(s)}
+                        className={cn(
+                          "w-full flex items-start gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all group",
+                          s.id === sessionId
+                            ? "bg-blue-500/10 border border-blue-400/15"
+                            : "hover:bg-white/[0.04] border border-transparent"
+                        )}
+                      >
+                        <span className="text-[12px] mt-0.5 shrink-0">{MODE_ICON[s.mode]}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11.5px] text-white/70 truncate font-medium leading-tight">
+                            {s.title}
+                          </p>
+                          <p className="text-[10px] text-white/25 mt-0.5">
+                            {s.turns} turn{s.turns !== 1 ? "s" : ""} · {new Date(s.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                          </p>
+                        </div>
+                        <button
+                          onClick={e => deleteSession(s.id, e)}
+                          className="shrink-0 opacity-0 group-hover:opacity-100 text-white/25 hover:text-red-400/70 transition-all mt-0.5"
+                          title="Delete"
+                        >
+                          <X size={10} />
+                        </button>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {/* Clear all */}
+                {historySessions.length > 0 && (
+                  <div className="px-3 py-3 border-t border-white/[0.06] shrink-0">
+                    <button
+                      onClick={clearAllHistory}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 text-[11px] text-white/22 hover:text-red-400/65 transition-colors"
+                    >
+                      <Trash2 size={10} />
+                      Clear all history
+                    </button>
+                  </div>
+                )}
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
 
         {/* ══ HEADER ══ */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07] shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 bg-blue-500/10 border border-blue-400/14 rounded-lg flex items-center justify-center">
-              <span className="text-[13px]">💎</span>
+        <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/[0.07] shrink-0">
+          <div className="flex items-center gap-2">
+            {/* History button */}
+            <button
+              onClick={() => setShowHistory(p => !p)}
+              className={cn(
+                "relative w-7 h-7 flex items-center justify-center rounded-lg border transition-all",
+                showHistory
+                  ? "bg-blue-500/15 border-blue-400/25 text-blue-300"
+                  : "bg-white/[0.04] border-white/[0.07] text-white/35 hover:text-white/65 hover:bg-white/[0.07]"
+              )}
+              title="Chat history"
+            >
+              <History size={13} />
+              {historySessions.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-blue-500 rounded-full text-[8px] text-white flex items-center justify-center font-bold leading-none">
+                  {historySessions.length > 9 ? "9+" : historySessions.length}
+                </span>
+              )}
+            </button>
+
+            <div className="w-6 h-6 bg-blue-500/10 border border-blue-400/14 rounded-md flex items-center justify-center">
+              <span className="text-[11px]">💎</span>
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[13px] font-semibold text-white/85">Antigravity</span>
-                <span className="text-[9px] px-1.5 py-0.5 bg-blue-500/10 border border-blue-400/14 rounded text-blue-300/65 font-medium">OpenGravity</span>
+              <div className="flex items-center gap-1">
+                <span className="text-[12.5px] font-semibold text-white/85">Antigravity</span>
+                <span className="text-[8.5px] px-1.5 py-0.5 bg-blue-500/10 border border-blue-400/14 rounded text-blue-300/60 font-medium">OpenGravity</span>
               </div>
-              <div className="text-[10px] text-white/22">Gemini BYOK Agent</div>
             </div>
           </div>
-          <BYOKBadge provider="gemini" onClick={onOpenBYOK} />
+          <div className="flex items-center gap-1.5">
+            {/* New chat button */}
+            <button
+              onClick={startNewChat}
+              className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.07] rounded-lg text-white/35 hover:text-white/65 transition-all"
+              title="New chat"
+            >
+              <Plus size={13} />
+            </button>
+            <BYOKBadge provider="gemini" onClick={onOpenBYOK} />
+          </div>
         </div>
 
         {/* ══ MODE TABS ══ */}
@@ -1019,15 +1270,18 @@ export function GeminiChatPanel({ onOpenBYOK }: GeminiChatPanelProps) {
           {messages.length > 0 && (
             <div className="flex items-center justify-between pt-0.5">
               <button
-                onClick={() => setMessages([])}
+                onClick={startNewChat}
                 className="flex items-center gap-1 text-[10px] text-white/15 hover:text-white/38 transition-colors"
               >
-                <Trash2 size={8} />
-                Clear
+                <Plus size={8} />
+                New chat
               </button>
-              <span className="text-[9px] text-white/10">
-                {messages.filter(m => m.role === "user").length} turn{messages.filter(m => m.role === "user").length !== 1 ? "s" : ""}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] text-white/12">
+                  {messages.filter(m => m.role === "user").length} turn{messages.filter(m => m.role === "user").length !== 1 ? "s" : ""}
+                </span>
+                <span className="text-[9px] text-green-400/35">✓ saved</span>
+              </div>
             </div>
           )}
         </div>
