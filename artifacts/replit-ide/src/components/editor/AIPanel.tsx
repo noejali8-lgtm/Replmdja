@@ -170,6 +170,18 @@ const TOOL_META: Record<string, { icon: React.ReactNode; label: string; color: s
   kill_process:          { icon: <Zap className="h-3 w-3" />,        label: "Kill process",  color: "text-[#f85149]", bg: "bg-[#b91c1c]/20 border-[#f85149]/40" },
   get_env:               { icon: <Eye className="h-3 w-3" />,        label: "Get env",       color: "text-[#8b949e]", bg: "bg-[#21262d] border-[#30363d]" },
   set_env:               { icon: <Shield className="h-3 w-3" />,     label: "Set env",       color: "text-[#e3b341]", bg: "bg-[#9e6a03]/20 border-[#9e6a03]/40" },
+  web_search:            { icon: <Search className="h-3 w-3" />,     label: "Web search",    color: "text-[#58a6ff]", bg: "bg-[#1f6feb]/20 border-[#1f6feb]/40" },
+  run_tests:             { icon: <Play className="h-3 w-3" />,       label: "Run tests",     color: "text-[#3fb950]", bg: "bg-[#238636]/20 border-[#238636]/40" },
+  lint_code:             { icon: <Eye className="h-3 w-3" />,        label: "Lint",          color: "text-[#e3b341]", bg: "bg-[#9e6a03]/20 border-[#9e6a03]/40" },
+  format_code:           { icon: <Wrench className="h-3 w-3" />,     label: "Format",        color: "text-[#a371f7]", bg: "bg-[#6e40c9]/20 border-[#6e40c9]/40" },
+  get_system_info:       { icon: <Cpu className="h-3 w-3" />,        label: "System info",   color: "text-[#8b949e]", bg: "bg-[#21262d] border-[#30363d]" },
+  diff_files:            { icon: <ChevronRight className="h-3 w-3" />,label: "Diff",         color: "text-[#ffa657]", bg: "bg-[#d18616]/20 border-[#d18616]/40" },
+  tail_log:              { icon: <FileText className="h-3 w-3" />,   label: "Tail log",      color: "text-[#8b949e]", bg: "bg-[#21262d] border-[#30363d]" },
+  create_zip:            { icon: <Shield className="h-3 w-3" />,     label: "Create zip",    color: "text-[#e3b341]", bg: "bg-[#9e6a03]/20 border-[#9e6a03]/40" },
+  watch_port:            { icon: <Zap className="h-3 w-3" />,        label: "Watch port",    color: "text-[#3fb950]", bg: "bg-[#238636]/20 border-[#238636]/40" },
+  encode_decode:         { icon: <Eye className="h-3 w-3" />,        label: "Encode/decode", color: "text-[#76e3ea]", bg: "bg-[#1f6feb]/10 border-[#1f6feb]/30" },
+  hash_text:             { icon: <Shield className="h-3 w-3" />,     label: "Hash",          color: "text-[#bc8cff]", bg: "bg-[#6e40c9]/20 border-[#6e40c9]/40" },
+  screenshot_url:        { icon: <Bot className="h-3 w-3" />,        label: "Screenshot",    color: "text-[#58a6ff]", bg: "bg-[#1f6feb]/20 border-[#1f6feb]/40" },
 };
 
 function ToolCard({
@@ -757,16 +769,22 @@ export function AIPanel({
           <div className="flex items-center gap-1.5 mb-1.5">
             <Bot className="h-3 w-3 text-[#a371f7]" />
             <span className="font-medium text-[#a371f7]">Agent 4 — Full permissions</span>
-            <span className="ml-auto px-1.5 py-0.5 rounded-full bg-[#238636]/20 border border-[#238636]/30 text-[9px] text-[#3fb950]">18 tools</span>
+            <span className="ml-auto px-1.5 py-0.5 rounded-full bg-[#238636]/20 border border-[#238636]/30 text-[9px] text-[#3fb950]">30 tools</span>
           </div>
           <div className="grid grid-cols-2 gap-1 mb-1.5">
             {[
-              { icon: <Terminal className="h-2.5 w-2.5" />, label: "Shell commands", color: "text-[#ffa657]" },
-              { icon: <FilePen className="h-2.5 w-2.5" />, label: "Read/write files", color: "text-[#3fb950]" },
-              { icon: <Eye className="h-2.5 w-2.5" />, label: "Query database", color: "text-[#76e3ea]" },
-              { icon: <GitBranch className="h-2.5 w-2.5" />, label: "Git operations", color: "text-[#bc8cff]" },
-              { icon: <Wrench className="h-2.5 w-2.5" />, label: "Install packages", color: "text-[#3fb950]" },
-              { icon: <Search className="h-2.5 w-2.5" />, label: "Browse URLs", color: "text-[#58a6ff]" },
+              { icon: <Terminal className="h-2.5 w-2.5" />,   label: "Shell commands",    color: "text-[#ffa657]" },
+              { icon: <FilePen className="h-2.5 w-2.5" />,    label: "Read/write files",  color: "text-[#3fb950]" },
+              { icon: <Eye className="h-2.5 w-2.5" />,        label: "SQL database",      color: "text-[#76e3ea]" },
+              { icon: <GitBranch className="h-2.5 w-2.5" />,  label: "Git operations",    color: "text-[#bc8cff]" },
+              { icon: <Wrench className="h-2.5 w-2.5" />,     label: "Install packages",  color: "text-[#3fb950]" },
+              { icon: <Search className="h-2.5 w-2.5" />,     label: "Web search",        color: "text-[#58a6ff]" },
+              { icon: <Play className="h-2.5 w-2.5" />,       label: "Run tests",         color: "text-[#3fb950]" },
+              { icon: <Zap className="h-2.5 w-2.5" />,        label: "Lint + format",     color: "text-[#e3b341]" },
+              { icon: <Cpu className="h-2.5 w-2.5" />,        label: "System info",       color: "text-[#8b949e]" },
+              { icon: <Shield className="h-2.5 w-2.5" />,     label: "Hash / encode",     color: "text-[#a371f7]" },
+              { icon: <Bot className="h-2.5 w-2.5" />,        label: "Check URLs / ports",color: "text-[#58a6ff]" },
+              { icon: <FileText className="h-2.5 w-2.5" />,   label: "Tail logs / diff",  color: "text-[#8b949e]" },
             ].map(cap => (
               <div key={cap.label} className={`flex items-center gap-1 ${cap.color}`}>
                 {cap.icon}
@@ -774,7 +792,7 @@ export function AIPanel({
               </div>
             ))}
           </div>
-          <p className="text-[9px] text-[#484f58]">No approval gates — all capabilities unlocked. Use the Agent Terminal tab for live shell execution.</p>
+          <p className="text-[9px] text-[#484f58]">No approval gates — 30 tools, full permissions. Use AI Terminal tab for live execution.</p>
         </div>
       )}
 

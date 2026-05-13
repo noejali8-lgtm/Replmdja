@@ -92,14 +92,22 @@ function ts() {
    QUICK TASKS
 ══════════════════════════════════════════════ */
 const QUICK_TASKS = [
-  { label: "List files",        cmd: "Show me the project file structure" },
-  { label: "Git status",        cmd: "git status" },
-  { label: "Running processes", cmd: "Show me all running processes" },
-  { label: "DB tables",         cmd: "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'" },
-  { label: "Node version",      cmd: "node --version && pnpm --version" },
-  { label: "Install deps",      cmd: "Install all workspace dependencies with pnpm" },
-  { label: "Type check",        cmd: "Run TypeScript typecheck across the workspace" },
-  { label: "Git log",           cmd: "git log --oneline -10" },
+  { label: "List files",         cmd: "Show me the project file structure" },
+  { label: "Git status",         cmd: "git status" },
+  { label: "Web search",         cmd: "Search the web for: latest React 19 features" },
+  { label: "System info",        cmd: "Show me CPU, memory, disk, and Node.js version" },
+  { label: "Running processes",  cmd: "Show me all running processes and open ports" },
+  { label: "DB tables",          cmd: "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'" },
+  { label: "Run tests",          cmd: "Run all tests and show pass/fail results" },
+  { label: "Lint + typecheck",   cmd: "Run ESLint and TypeScript typecheck on the workspace" },
+  { label: "Format code",        cmd: "Format all TypeScript files with Prettier" },
+  { label: "Node version",       cmd: "node --version && pnpm --version" },
+  { label: "Install deps",       cmd: "Install all workspace dependencies with pnpm" },
+  { label: "Git log",            cmd: "git log --oneline -10" },
+  { label: "Check port 3001",    cmd: "Check if port 3001 is open and responding" },
+  { label: "Check port 8000",    cmd: "Check if port 8000 is open and responding" },
+  { label: "Gen UUID",           cmd: "Generate a new UUID" },
+  { label: "Env vars",           cmd: "Show me all non-sensitive environment variables" },
 ];
 
 /* ══════════════════════════════════════════════
