@@ -3,7 +3,7 @@ import {
   Sparkles, Send, X, Code2, FileText, Wrench, ChevronDown, ClipboardCopy,
   Play, FilePen, FolderOpen, Search, Terminal, CheckCircle2, XCircle,
   AlertTriangle, ChevronRight, Loader2, Cpu, Bot, Zap, RefreshCw,
-  GitBranch, FileSearch, Eye, Shield,
+  GitBranch, FileSearch, Eye, Shield, Database, Package, BarChart2 as BarChart, TestTube2 as TestTube,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -337,10 +337,18 @@ function ApprovalCard({
 
 /* ─── Quick actions ─── */
 const QUICK_ACTIONS = [
-  { icon: <Code2 className="h-3 w-3" />, label: "Explain code", prompt: "Explain what this code does in detail, covering the key logic and patterns." },
-  { icon: <Wrench className="h-3 w-3" />, label: "Fix bugs", prompt: "Find and fix any bugs or issues in this code." },
-  { icon: <Sparkles className="h-3 w-3" />, label: "Refactor", prompt: "Refactor this code to be cleaner and more maintainable, following best practices." },
-  { icon: <GitBranch className="h-3 w-3" />, label: "Add tests", prompt: "Write comprehensive unit tests for this code." },
+  { icon: <Code2 className="h-3 w-3" />,    label: "Explain code",     prompt: "Explain what this code does in detail, covering the key logic and patterns." },
+  { icon: <Wrench className="h-3 w-3" />,   label: "Fix bugs",         prompt: "Find and fix any bugs or issues in this code. Use code_review first to identify all issues." },
+  { icon: <Sparkles className="h-3 w-3" />, label: "Refactor",         prompt: "Refactor this code to be cleaner and more maintainable, following best practices. Then run lint_code to verify." },
+  { icon: <GitBranch className="h-3 w-3" />,label: "Add tests",        prompt: "Write comprehensive unit tests for this code, then run them with run_tests to confirm they pass." },
+  { icon: <Shield className="h-3 w-3" />,   label: "Security review",  prompt: "Run a security_scan on this project, then do a focused code_review with focus='security' on the riskiest files. Report all CRITICAL and HIGH findings with fixes." },
+  { icon: <Zap className="h-3 w-3" />,      label: "Perf audit",       prompt: "Benchmark the main API endpoints with the benchmark tool, then do a code_review with focus='performance'. Identify the top 3 bottlenecks and fix them." },
+  { icon: <Eye className="h-3 w-3" />,      label: "Code review",      prompt: "Run a deep code_review on the current file with focus='all'. Fix every CRITICAL and HIGH issue immediately." },
+  { icon: <Database className="h-3 w-3" />, label: "DB audit",         prompt: "Query the database to show all tables (SELECT table_name FROM information_schema.tables WHERE table_schema='public'), then describe the schema and suggest any missing indexes or constraints." },
+  { icon: <Search className="h-3 w-3" />,   label: "Recall memory",    prompt: "Use memory_recall to load all stored project context and memories, then summarize what you know about this project." },
+  { icon: <Package className="h-3 w-3" />,  label: "Dep audit",        prompt: "Run audit_dependencies to find vulnerable packages, then check if there are outdated packages and suggest upgrades." },
+  { icon: <BarChart className="h-3 w-3" />, label: "Bundle size",      prompt: "Build the project and run analyze_bundle to show what's taking the most space. Suggest optimizations." },
+  { icon: <TestTube className="h-3 w-3" />, label: "Test all",         prompt: "Run all tests with run_tests, then lint_code, then format_code. Report what passed, what failed, and fix any failures." },
 ];
 
 /* ─── Mode config ─── */
@@ -348,7 +356,7 @@ const MODE_CONFIG: Record<AgentMode, { label: string; icon: React.ReactNode; des
   agent: {
     label: "Agent",
     icon: <Bot className="h-3 w-3" />,
-    desc: "Reads & writes files autonomously",
+    desc: "Full 42-tool autonomous agent",
     endpoint: "/api/ide-agent/stream",
   },
   chat: {
@@ -360,7 +368,7 @@ const MODE_CONFIG: Record<AgentMode, { label: string; icon: React.ReactNode; des
   turbo: {
     label: "Turbo",
     icon: <Zap className="h-3 w-3" />,
-    desc: "Maximum speed, minimal prose",
+    desc: "Max speed, 42 tools, less prose",
     endpoint: "/api/ide-agent/stream",
   },
 };
@@ -769,22 +777,24 @@ export function AIPanel({
           <div className="flex items-center gap-1.5 mb-1.5">
             <Bot className="h-3 w-3 text-[#a371f7]" />
             <span className="font-medium text-[#a371f7]">Agent 4 — Full permissions</span>
-            <span className="ml-auto px-1.5 py-0.5 rounded-full bg-[#238636]/20 border border-[#238636]/30 text-[9px] text-[#3fb950]">30 tools</span>
+            <span className="ml-auto px-1.5 py-0.5 rounded-full bg-[#238636]/20 border border-[#238636]/30 text-[9px] text-[#3fb950]">42 tools</span>
           </div>
           <div className="grid grid-cols-2 gap-1 mb-1.5">
             {[
-              { icon: <Terminal className="h-2.5 w-2.5" />,   label: "Shell commands",    color: "text-[#ffa657]" },
-              { icon: <FilePen className="h-2.5 w-2.5" />,    label: "Read/write files",  color: "text-[#3fb950]" },
-              { icon: <Eye className="h-2.5 w-2.5" />,        label: "SQL database",      color: "text-[#76e3ea]" },
-              { icon: <GitBranch className="h-2.5 w-2.5" />,  label: "Git operations",    color: "text-[#bc8cff]" },
-              { icon: <Wrench className="h-2.5 w-2.5" />,     label: "Install packages",  color: "text-[#3fb950]" },
-              { icon: <Search className="h-2.5 w-2.5" />,     label: "Web search",        color: "text-[#58a6ff]" },
-              { icon: <Play className="h-2.5 w-2.5" />,       label: "Run tests",         color: "text-[#3fb950]" },
-              { icon: <Zap className="h-2.5 w-2.5" />,        label: "Lint + format",     color: "text-[#e3b341]" },
-              { icon: <Cpu className="h-2.5 w-2.5" />,        label: "System info",       color: "text-[#8b949e]" },
-              { icon: <Shield className="h-2.5 w-2.5" />,     label: "Hash / encode",     color: "text-[#a371f7]" },
-              { icon: <Bot className="h-2.5 w-2.5" />,        label: "Check URLs / ports",color: "text-[#58a6ff]" },
-              { icon: <FileText className="h-2.5 w-2.5" />,   label: "Tail logs / diff",  color: "text-[#8b949e]" },
+              { icon: <Terminal className="h-2.5 w-2.5" />,   label: "Shell + processes",  color: "text-[#ffa657]" },
+              { icon: <FilePen className="h-2.5 w-2.5" />,    label: "Read/write files",   color: "text-[#3fb950]" },
+              { icon: <Database className="h-2.5 w-2.5" />,   label: "SQL database",       color: "text-[#76e3ea]" },
+              { icon: <GitBranch className="h-2.5 w-2.5" />,  label: "Git operations",     color: "text-[#bc8cff]" },
+              { icon: <Package className="h-2.5 w-2.5" />,    label: "Install packages",   color: "text-[#3fb950]" },
+              { icon: <Search className="h-2.5 w-2.5" />,     label: "Web search",         color: "text-[#58a6ff]" },
+              { icon: <Play className="h-2.5 w-2.5" />,       label: "Run tests",          color: "text-[#3fb950]" },
+              { icon: <Zap className="h-2.5 w-2.5" />,        label: "Lint + format",      color: "text-[#e3b341]" },
+              { icon: <Bot className="h-2.5 w-2.5" />,        label: "Agent memory (DB)",  color: "text-[#a371f7]" },
+              { icon: <Shield className="h-2.5 w-2.5" />,     label: "Security scan",      color: "text-[#f85149]" },
+              { icon: <Eye className="h-2.5 w-2.5" />,        label: "AI code review",     color: "text-[#e3b341]" },
+              { icon: <TestTube className="h-2.5 w-2.5" />,   label: "API endpoint test",  color: "text-[#58a6ff]" },
+              { icon: <BarChart className="h-2.5 w-2.5" />,   label: "Benchmark + audit",  color: "text-[#8b949e]" },
+              { icon: <FileText className="h-2.5 w-2.5" />,   label: "JSON/CSV query",     color: "text-[#76e3ea]" },
             ].map(cap => (
               <div key={cap.label} className={`flex items-center gap-1 ${cap.color}`}>
                 {cap.icon}
@@ -792,7 +802,7 @@ export function AIPanel({
               </div>
             ))}
           </div>
-          <p className="text-[9px] text-[#484f58]">No approval gates — 30 tools, full permissions. Use AI Terminal tab for live execution.</p>
+          <p className="text-[9px] text-[#484f58]">No approval gates — 42 tools, full permissions. Memory persists in DB across sessions.</p>
         </div>
       )}
 

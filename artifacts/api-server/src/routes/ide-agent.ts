@@ -480,14 +480,252 @@ const IDE_AGENT_TOOLS = [
       required: ["url"],
     },
   },
+
+  /* ── Agent Memory ── */
+  {
+    name: "memory_store",
+    description:
+      "Store a fact, context, or preference in persistent memory. " +
+      "Use this to remember important project details, user preferences, architecture decisions, " +
+      "API keys locations, recurring patterns, or anything you want to recall in future sessions. " +
+      "Memory persists across conversations in the database.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        key: { type: "string", description: "Unique identifier for this memory (e.g. 'stack', 'db_schema', 'auth_pattern', 'user_pref_theme')" },
+        value: { type: "string", description: "The information to store (can be multi-line, JSON, or plain text)" },
+        category: { type: "string", description: "Category: 'project', 'preference', 'architecture', 'credentials_location', 'pattern', 'note'. Default: 'note'" },
+        importance: { type: "number", description: "Importance 1-10 (10 = critical, default 5)" },
+      },
+      required: ["key", "value"],
+    },
+  },
+  {
+    name: "memory_recall",
+    description:
+      "Retrieve facts stored in persistent memory. " +
+      "Use at the start of sessions to recall project context, preferences, and architecture decisions.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        key: { type: "string", description: "Specific key to retrieve (omit to get all memories)" },
+        category: { type: "string", description: "Filter by category: 'project', 'preference', 'architecture', 'credentials_location', 'pattern', 'note'" },
+        search: { type: "string", description: "Search term to find relevant memories" },
+        limit: { type: "number", description: "Max memories to return (default: 20)" },
+      },
+    },
+  },
+  {
+    name: "memory_delete",
+    description: "Delete a stored memory by key.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        key: { type: "string", description: "Key of the memory to delete" },
+      },
+      required: ["key"],
+    },
+  },
+
+  /* ── API Testing ── */
+  {
+    name: "api_test",
+    description:
+      "Test an HTTP API endpoint and assert the response. " +
+      "Sends a request and validates status code, response body, headers. " +
+      "Returns a pass/fail summary with details. " +
+      "Use after implementing API endpoints to verify they work correctly.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        url: { type: "string", description: "Full URL to test (e.g. http://localhost:8000/api/users)" },
+        method: { type: "string", description: "HTTP method: GET, POST, PUT, DELETE, PATCH (default: GET)" },
+        headers: { type: "object", description: "Request headers", additionalProperties: { type: "string" } },
+        body: { type: "string", description: "Request body (JSON string)" },
+        expect_status: { type: "number", description: "Expected HTTP status code (default: 200)" },
+        expect_body_contains: { type: "string", description: "String that should appear in the response body" },
+        expect_json_path: { type: "string", description: "JSON path to check (e.g. 'data.id' or 'users.0.name')" },
+        expect_json_value: { type: "string", description: "Expected value at the JSON path" },
+      },
+      required: ["url"],
+    },
+  },
+
+  /* ── Code Review ── */
+  {
+    name: "code_review",
+    description:
+      "Perform an AI-powered code review on a file or code snippet. " +
+      "Analyzes for bugs, security issues, performance problems, code style, and best practice violations. " +
+      "Returns a structured report with severity ratings (critical/high/medium/low).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: { type: "string", description: "File path to review (optional if providing code directly)" },
+        code: { type: "string", description: "Code to review (optional if providing a path)" },
+        language: { type: "string", description: "Programming language (auto-detected from path if not provided)" },
+        focus: { type: "string", description: "Review focus: 'all', 'security', 'performance', 'bugs', 'style' (default: 'all')" },
+      },
+    },
+  },
+
+  /* ── Security Scan ── */
+  {
+    name: "security_scan",
+    description:
+      "Scan the codebase for security vulnerabilities: hardcoded secrets, API keys, passwords, " +
+      "SQL injection risks, XSS vulnerabilities, exposed sensitive data, insecure dependencies. " +
+      "Returns a list of findings with file paths and line numbers.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        directory: { type: "string", description: "Directory to scan (default: workspace root)" },
+        scan_type: {
+          type: "string",
+          description: "Type of scan: 'secrets' (API keys/passwords), 'injection' (SQL/XSS), 'all' (default: 'all')",
+        },
+      },
+    },
+  },
+
+  /* ── Webhook Notify ── */
+  {
+    name: "notify_webhook",
+    description:
+      "Send a notification to a webhook URL (Slack, Discord, Teams, custom). " +
+      "Supports Slack's Block Kit format, Discord embeds, and plain JSON. " +
+      "Use to notify about completed deployments, test results, or errors.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        url: { type: "string", description: "Webhook URL (Slack/Discord/Teams/custom)" },
+        message: { type: "string", description: "Plain text message to send" },
+        title: { type: "string", description: "Optional title for the notification" },
+        color: { type: "string", description: "Color for Discord/Slack: 'green', 'red', 'yellow', 'blue' or hex" },
+        fields: {
+          type: "array",
+          description: "Key-value fields to include",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              value: { type: "string" },
+            },
+          },
+        },
+        format: { type: "string", description: "Format: 'slack', 'discord', 'json' (auto-detect from URL)" },
+      },
+      required: ["url", "message"],
+    },
+  },
+
+  /* ── Data Query ── */
+  {
+    name: "query_data_file",
+    description:
+      "Parse and query JSON or CSV files. " +
+      "Supports filtering, sorting, counting, and extracting fields. " +
+      "Use for analyzing data files, config files, or API response dumps.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: { type: "string", description: "Path to JSON or CSV file" },
+        operation: {
+          type: "string",
+          description: "Operation: 'read' (full content), 'count' (row count), 'fields' (list fields/keys), 'filter' (filter rows), 'select' (extract specific fields), 'stats' (numeric statistics)",
+        },
+        filter_key: { type: "string", description: "Field to filter on" },
+        filter_value: { type: "string", description: "Value to filter by" },
+        select_fields: {
+          type: "array",
+          items: { type: "string" },
+          description: "Fields to extract (for 'select' operation)",
+        },
+        limit: { type: "number", description: "Max rows to return (default: 50)" },
+      },
+      required: ["path", "operation"],
+    },
+  },
+
+  /* ── Generate Types ── */
+  {
+    name: "generate_types",
+    description:
+      "Generate TypeScript type definitions from a JSON sample, JSON Schema, or existing JS object. " +
+      "Also can generate Zod schemas, Drizzle table definitions, or OpenAPI types from an example.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        input: { type: "string", description: "JSON sample, JS object literal, or JSON Schema to generate types from" },
+        output_format: {
+          type: "string",
+          description: "Output format: 'typescript' (interface), 'zod' (Zod schema), 'drizzle' (Drizzle ORM table). Default: 'typescript'",
+        },
+        type_name: { type: "string", description: "Name for the generated type/interface (default: 'GeneratedType')" },
+        output_path: { type: "string", description: "If provided, write the generated types to this file" },
+      },
+      required: ["input"],
+    },
+  },
+
+  /* ── Benchmark ── */
+  {
+    name: "benchmark",
+    description:
+      "Run a simple performance benchmark: measure how long a command or script takes to execute, " +
+      "or benchmark an HTTP endpoint with multiple requests. " +
+      "Returns timing statistics: min, max, mean, p50, p95, p99.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        type: { type: "string", description: "Benchmark type: 'command' or 'http' (default: 'command')" },
+        command: { type: "string", description: "Shell command to benchmark (for 'command' type)" },
+        url: { type: "string", description: "URL to benchmark (for 'http' type)" },
+        iterations: { type: "number", description: "Number of iterations (default: 5 for command, 20 for http)" },
+        method: { type: "string", description: "HTTP method for 'http' type (default: GET)" },
+        body: { type: "string", description: "Request body for 'http' type" },
+      },
+    },
+  },
+
+  /* ── Dependency Audit ── */
+  {
+    name: "audit_dependencies",
+    description:
+      "Check npm/pnpm packages for known security vulnerabilities, outdated versions, and license issues. " +
+      "Returns a list of vulnerable packages with CVE numbers and recommended fixes.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        workspace: { type: "string", description: "Which workspace to audit (omit for all)" },
+        severity: { type: "string", description: "Minimum severity to report: 'low', 'moderate', 'high', 'critical' (default: 'moderate')" },
+      },
+    },
+  },
+
+  /* ── Bundle Analysis ── */
+  {
+    name: "analyze_bundle",
+    description:
+      "Analyze the JavaScript bundle size of a built project. " +
+      "Shows which files and packages are taking the most space. " +
+      "Requires the project to be built first.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        dist_path: { type: "string", description: "Path to the dist/build directory (default: 'dist')" },
+        top_n: { type: "number", description: "Show top N largest files (default: 20)" },
+      },
+    },
+  },
 ] as const;
 
 /* ══════════════════════════════════════════════════════════════
    SYSTEM PROMPT — Full Agent with All Permissions
 ══════════════════════════════════════════════════════════════ */
-const IDE_SYSTEM_PROMPT = `You are Agent 4 — Replit's fully autonomous AI engineer with FULL SYSTEM ACCESS and 30 tools.
+const IDE_SYSTEM_PROMPT = `You are Agent 4 — Replit's fully autonomous AI engineer with FULL SYSTEM ACCESS and 42 tools.
 
-## You Have Complete Permissions — 30 Tools Available
+## You Have Complete Permissions — 42 Tools Available
 
 ### Filesystem (7 tools)
 - ✅ write_file — Create/overwrite any file
@@ -542,6 +780,37 @@ const IDE_SYSTEM_PROMPT = `You are Agent 4 — Replit's fully autonomous AI engi
 - ✅ encode_decode — base64/URL/hex/JSON/HTML encode/decode
 - ✅ hash_text — SHA256/MD5/UUID/random tokens
 - ✅ screenshot_url — Check a URL and return page metadata
+
+### Agent Memory (3 tools) — PERSISTS ACROSS ALL SESSIONS IN DATABASE
+- ✅ memory_store — Store any fact, decision, or preference permanently (key/value with category + importance)
+- ✅ memory_recall — Retrieve memories by key, category, or full-text search
+- ✅ memory_delete — Remove a stored memory
+
+### API Testing (1 tool)
+- ✅ api_test — Test any HTTP endpoint: assert status, body content, JSON path values — returns PASS/FAIL
+
+### AI-Powered Analysis (2 tools)
+- ✅ code_review — Run a deep AI code review: finds CRITICAL/HIGH/MEDIUM/LOW issues (bugs, security, perf, style)
+- ✅ security_scan — Scan entire codebase for hardcoded secrets, API keys, SQL injection, XSS risks
+
+### Integration & Notifications (1 tool)
+- ✅ notify_webhook — Send structured notifications to Slack/Discord/Teams/custom webhooks with embeds
+
+### Data Querying (2 tools)
+- ✅ query_data_file — Parse JSON/CSV files: filter, select fields, count rows, compute stats
+- ✅ generate_types — Generate TypeScript interfaces / Zod schemas / Drizzle tables from JSON samples
+
+### Performance & Audit (3 tools)
+- ✅ benchmark — Measure performance of commands or HTTP endpoints (min/max/mean/p50/p95/p99)
+- ✅ audit_dependencies — Check packages for known CVEs (pnpm audit with severity filtering)
+- ✅ analyze_bundle — Analyze JS/CSS bundle size breakdown after builds
+
+## MEMORY PROTOCOL
+At the start of any complex task, call memory_recall (no arguments) to load stored project context.
+Use memory_store to save important decisions, patterns, or facts you discover.
+High importance (8-10): architectural decisions, auth patterns, DB schema facts.
+Medium importance (5-7): common bugs, file locations, user preferences.
+Low importance (1-4): temporary notes.
 
 ## Core Principle: ACT, Don't Talk
 You are a DOER. When asked to build something, BUILD it immediately.
@@ -953,6 +1222,549 @@ function toolSetEnv(p: { vars: Record<string, string>; file?: string }): string 
   }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   AGENT MEMORY — persistent DB-backed memory
+══════════════════════════════════════════════════════════════ */
+async function ensureMemoryTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS agent_memory (
+      id SERIAL PRIMARY KEY,
+      key TEXT UNIQUE NOT NULL,
+      value TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'note',
+      importance INTEGER NOT NULL DEFAULT 5,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+}
+
+async function toolMemoryStore(p: { key: string; value: string; category?: string; importance?: number }): Promise<string> {
+  try {
+    await ensureMemoryTable();
+    const cat = p.category ?? "note";
+    const imp = p.importance ?? 5;
+    await pool.query(
+      `INSERT INTO agent_memory (key, value, category, importance, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (key) DO UPDATE SET value=$2, category=$3, importance=$4, updated_at=NOW()`,
+      [p.key, p.value, cat, imp]
+    );
+    return `✅ Memory stored: [${p.key}] (category: ${cat}, importance: ${imp}/10)`;
+  } catch (e) {
+    return `Memory Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+async function toolMemoryRecall(p: { key?: string; category?: string; search?: string; limit?: number }): Promise<string> {
+  try {
+    await ensureMemoryTable();
+    const lim = p.limit ?? 20;
+    let rows: Array<{ key: string; value: string; category: string; importance: number; updated_at: Date }>;
+
+    if (p.key) {
+      const r = await pool.query(`SELECT key, value, category, importance, updated_at FROM agent_memory WHERE key=$1`, [p.key]);
+      rows = r.rows;
+    } else if (p.search) {
+      const r = await pool.query(
+        `SELECT key, value, category, importance, updated_at FROM agent_memory
+         WHERE key ILIKE $1 OR value ILIKE $1 ORDER BY importance DESC, updated_at DESC LIMIT $2`,
+        [`%${p.search}%`, lim]
+      );
+      rows = r.rows;
+    } else if (p.category) {
+      const r = await pool.query(
+        `SELECT key, value, category, importance, updated_at FROM agent_memory
+         WHERE category=$1 ORDER BY importance DESC, updated_at DESC LIMIT $2`,
+        [p.category, lim]
+      );
+      rows = r.rows;
+    } else {
+      const r = await pool.query(
+        `SELECT key, value, category, importance, updated_at FROM agent_memory
+         ORDER BY importance DESC, updated_at DESC LIMIT $1`,
+        [lim]
+      );
+      rows = r.rows;
+    }
+
+    if (rows.length === 0) return "(no memories found)";
+    return rows.map(r =>
+      `[${r.key}] (${r.category}, importance:${r.importance}/10, updated: ${new Date(r.updated_at).toLocaleDateString()})\n${r.value}`
+    ).join("\n\n---\n\n");
+  } catch (e) {
+    return `Memory Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+async function toolMemoryDelete(p: { key: string }): Promise<string> {
+  try {
+    await ensureMemoryTable();
+    const r = await pool.query(`DELETE FROM agent_memory WHERE key=$1`, [p.key]);
+    return r.rowCount && r.rowCount > 0 ? `✅ Deleted memory: ${p.key}` : `Not found: ${p.key}`;
+  } catch (e) {
+    return `Memory Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/* ── api_test ── */
+async function toolApiTest(p: {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  expect_status?: number;
+  expect_body_contains?: string;
+  expect_json_path?: string;
+  expect_json_value?: string;
+}): Promise<string> {
+  const method = (p.method ?? "GET").toUpperCase();
+  const expectedStatus = p.expect_status ?? 200;
+  const lines: string[] = [`🧪 API Test: ${method} ${p.url}`];
+  try {
+    const startMs = Date.now();
+    const res = await fetch(p.url, {
+      method,
+      headers: { "Content-Type": "application/json", ...(p.headers ?? {}) },
+      body: p.body ?? undefined,
+      signal: AbortSignal.timeout(15000),
+    });
+    const elapsed = Date.now() - startMs;
+    const bodyText = await res.text();
+    let bodyJson: unknown = null;
+    try { bodyJson = JSON.parse(bodyText); } catch { /* not JSON */ }
+
+    const statusOk = res.status === expectedStatus;
+    lines.push(`${statusOk ? "✅" : "❌"} Status: ${res.status} (expected ${expectedStatus}) — ${elapsed}ms`);
+
+    if (p.expect_body_contains) {
+      const contains = bodyText.includes(p.expect_body_contains);
+      lines.push(`${contains ? "✅" : "❌"} Body contains: "${p.expect_body_contains}"`);
+    }
+
+    if (p.expect_json_path && bodyJson !== null) {
+      const parts = p.expect_json_path.split(".");
+      let val: unknown = bodyJson;
+      for (const part of parts) {
+        if (val && typeof val === "object" && part in (val as object)) {
+          val = (val as Record<string, unknown>)[part];
+        } else {
+          val = undefined; break;
+        }
+      }
+      const strVal = String(val);
+      const matches = p.expect_json_value ? strVal === p.expect_json_value : val !== undefined;
+      lines.push(`${matches ? "✅" : "❌"} JSON path ${p.expect_json_path} = ${strVal}${p.expect_json_value ? ` (expected: ${p.expect_json_value})` : ""}`);
+    }
+
+    const preview = bodyText.slice(0, 1000) + (bodyText.length > 1000 ? "...(truncated)" : "");
+    lines.push(`\nResponse:\n${preview}`);
+    return lines.join("\n");
+  } catch (e) {
+    return `❌ Request failed: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/* ── code_review ── */
+async function toolCodeReview(p: {
+  path?: string;
+  code?: string;
+  language?: string;
+  focus?: string;
+}): Promise<string> {
+  let codeToReview = p.code ?? "";
+  let lang = p.language ?? "typescript";
+  if (p.path && !p.code) {
+    const abs = guardPath(p.path);
+    if (abs && fs.existsSync(abs)) {
+      codeToReview = fs.readFileSync(abs, "utf-8").slice(0, 8000);
+      const ext = p.path.split(".").pop() ?? "ts";
+      lang = ext;
+    }
+  }
+  if (!codeToReview) return "Error: provide path or code to review";
+  const focus = p.focus ?? "all";
+  const focusInstructions: Record<string, string> = {
+    all: "Check for bugs, security vulnerabilities, performance issues, code style, and best practices.",
+    security: "Focus ONLY on security vulnerabilities: SQL injection, XSS, CSRF, auth bypass, secrets exposure, path traversal.",
+    performance: "Focus ONLY on performance: N+1 queries, unnecessary re-renders, memory leaks, blocking operations, inefficient algorithms.",
+    bugs: "Focus ONLY on logic errors, null pointer exceptions, off-by-one errors, race conditions, and incorrect behavior.",
+    style: "Focus ONLY on code style, naming conventions, DRY violations, complexity, and maintainability.",
+  };
+  const prompt = `You are a senior code reviewer. ${focusInstructions[focus] ?? focusInstructions.all}
+
+Review this ${lang} code and output a structured report with:
+- CRITICAL (security issues, data loss risks)
+- HIGH (bugs that will cause failures)
+- MEDIUM (performance, logic issues)
+- LOW (style, maintainability)
+
+Format each finding as:
+[SEVERITY] Line X: Description
+  Code: \`affected code\`
+  Fix: suggested fix
+
+Code to review:
+\`\`\`${lang}
+${codeToReview}
+\`\`\`
+
+Be concise. Only report real issues, not suggestions.`;
+
+  try {
+    const msg = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 2048,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const result = msg.content[0]?.type === "text" ? msg.content[0].text : "(no output)";
+    return `📋 Code Review${p.path ? ` for ${p.path}` : ""} (focus: ${focus}):\n\n${result}`;
+  } catch (e) {
+    return `Review Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/* ── security_scan ── */
+async function toolSecurityScan(p: { directory?: string; scan_type?: string }): Promise<string> {
+  const dir = p.directory ?? ".";
+  const abs = guardPath(dir);
+  if (!abs) return "Error: path escapes workspace";
+
+  const findings: string[] = [];
+  const type = p.scan_type ?? "all";
+  const SKIP = new Set(["node_modules", ".git", "dist", ".local", ".cache"]);
+
+  const SECRET_PATTERNS: Array<[string, RegExp]> = [
+    ["Hardcoded password", /password\s*[:=]\s*["'][^"']{4,}["']/i],
+    ["Hardcoded API key", /api[_-]?key\s*[:=]\s*["'][a-zA-Z0-9_\-]{16,}["']/i],
+    ["AWS Access Key", /AKIA[0-9A-Z]{16}/],
+    ["Private key header", /-----BEGIN (RSA |EC )?PRIVATE KEY-----/],
+    ["Bearer token in code", /bearer\s+[a-zA-Z0-9_\-\.]{20,}/i],
+    ["JWT token", /eyJ[a-zA-Z0-9_\-]{50,}\.[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+/],
+    ["GitHub token", /ghp_[a-zA-Z0-9]{36}/],
+    ["Slack token", /xox[baprs]-[0-9a-zA-Z]{10,}/],
+  ];
+
+  const INJECTION_PATTERNS: Array<[string, RegExp]> = [
+    ["SQL injection risk", /\.query\s*\(\s*`[^`]*\$\{[^}]+\}[^`]*`\s*\)/],
+    ["eval() usage", /\beval\s*\(/],
+    ["innerHTML assignment", /\.innerHTML\s*=[^;]+;/],
+    ["dangerouslySetInnerHTML", /dangerouslySetInnerHTML/],
+    ["No input validation", /req\.body\.[a-zA-Z]+\s*(?!\?)/g],
+  ];
+
+  function scanDir(dirPath: string) {
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(dirPath, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (SKIP.has(e.name)) continue;
+      const full = path.join(dirPath, e.name);
+      if (e.isDirectory()) { scanDir(full); }
+      else if (e.isFile() && /\.(ts|tsx|js|jsx|env|json|yaml|yml)$/.test(e.name) && !e.name.endsWith(".min.js")) {
+        try {
+          const content = fs.readFileSync(full, "utf-8");
+          const relPath = path.relative(WORKSPACE, full);
+          const lines = content.split("\n");
+          const pats = type === "secrets" ? SECRET_PATTERNS : type === "injection" ? INJECTION_PATTERNS : [...SECRET_PATTERNS, ...INJECTION_PATTERNS];
+          for (const [name, pattern] of pats) {
+            for (let i = 0; i < lines.length; i++) {
+              if (pattern.test(lines[i] ?? "")) {
+                findings.push(`⚠️  ${name}\n   File: ${relPath}:${i + 1}\n   Line: ${lines[i]?.trim().slice(0, 100)}`);
+                break;
+              }
+            }
+          }
+        } catch { /* binary */ }
+      }
+    }
+  }
+
+  scanDir(abs);
+  if (findings.length === 0) return `✅ Security scan complete — no issues found in ${dir} (type: ${type})`;
+  return `🔐 Security Scan Results (${findings.length} findings):\n\n${findings.join("\n\n")}`;
+}
+
+/* ── notify_webhook ── */
+async function toolNotifyWebhook(p: {
+  url: string;
+  message: string;
+  title?: string;
+  color?: string;
+  fields?: Array<{ name: string; value: string }>;
+  format?: string;
+}): Promise<string> {
+  const isDiscord = p.url.includes("discord.com") || p.format === "discord";
+  const isSlack = p.url.includes("slack.com") || p.format === "slack";
+
+  const colorMap: Record<string, number | string> = {
+    green: isDiscord ? 0x2ea043 : "good",
+    red: isDiscord ? 0xf85149 : "danger",
+    yellow: isDiscord ? 0xe3b341 : "warning",
+    blue: isDiscord ? 0x58a6ff : "#58a6ff",
+  };
+  const color = p.color ? (colorMap[p.color] ?? p.color) : (isDiscord ? 0x58a6ff : "good");
+
+  let body: string;
+  if (isDiscord) {
+    body = JSON.stringify({
+      embeds: [{
+        title: p.title,
+        description: p.message,
+        color,
+        fields: p.fields?.map(f => ({ name: f.name, value: f.value, inline: true })),
+        timestamp: new Date().toISOString(),
+      }],
+    });
+  } else if (isSlack) {
+    body = JSON.stringify({
+      attachments: [{
+        color: color as string,
+        title: p.title,
+        text: p.message,
+        fields: p.fields?.map(f => ({ title: f.name, value: f.value, short: true })),
+      }],
+    });
+  } else {
+    body = JSON.stringify({ title: p.title, message: p.message, fields: p.fields, timestamp: new Date().toISOString() });
+  }
+
+  try {
+    const res = await fetch(p.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      signal: AbortSignal.timeout(10000),
+    });
+    return res.ok ? `✅ Webhook sent (${res.status})` : `❌ Webhook failed: HTTP ${res.status} — ${await res.text()}`;
+  } catch (e) {
+    return `Webhook Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/* ── query_data_file ── */
+function toolQueryDataFile(p: {
+  path: string;
+  operation: string;
+  filter_key?: string;
+  filter_value?: string;
+  select_fields?: string[];
+  limit?: number;
+}): string {
+  try {
+    const abs = guardPath(p.path);
+    if (!abs || !fs.existsSync(abs)) return `Not found: ${p.path}`;
+    const content = fs.readFileSync(abs, "utf-8");
+    const isCsv = p.path.endsWith(".csv");
+    const lim = p.limit ?? 50;
+
+    let rows: Record<string, string>[];
+    if (isCsv) {
+      const lines = content.trim().split("\n");
+      const headers = lines[0]?.split(",").map(h => h.trim()) ?? [];
+      rows = lines.slice(1).map(l => {
+        const vals = l.split(",");
+        const row: Record<string, string> = {};
+        headers.forEach((h, i) => { row[h] = (vals[i] ?? "").trim(); });
+        return row;
+      });
+    } else {
+      const parsed = JSON.parse(content);
+      rows = Array.isArray(parsed) ? parsed : [parsed];
+    }
+
+    switch (p.operation) {
+      case "count": return `${rows.length} rows`;
+      case "fields": return Object.keys(rows[0] ?? {}).join(", ") || "(no fields)";
+      case "filter": {
+        if (!p.filter_key) return "Error: filter_key required";
+        const filtered = rows.filter(r => String(r[p.filter_key!] ?? "").includes(p.filter_value ?? "")).slice(0, lim);
+        return JSON.stringify(filtered, null, 2);
+      }
+      case "select": {
+        if (!p.select_fields?.length) return "Error: select_fields required";
+        const selected = rows.slice(0, lim).map(r => {
+          const out: Record<string, string> = {};
+          p.select_fields!.forEach(f => { out[f] = r[f] ?? ""; });
+          return out;
+        });
+        return JSON.stringify(selected, null, 2);
+      }
+      case "stats": {
+        const numericFields = Object.keys(rows[0] ?? {}).filter(k => !isNaN(Number(rows[0]?.[k])));
+        const stats: Record<string, object> = {};
+        for (const f of numericFields) {
+          const vals = rows.map(r => Number(r[f])).filter(v => !isNaN(v));
+          const sorted = [...vals].sort((a, b) => a - b);
+          stats[f] = {
+            count: vals.length,
+            min: sorted[0],
+            max: sorted[sorted.length - 1],
+            mean: vals.reduce((a, b) => a + b, 0) / vals.length,
+            sum: vals.reduce((a, b) => a + b, 0),
+          };
+        }
+        return JSON.stringify(stats, null, 2);
+      }
+      default: return JSON.stringify(rows.slice(0, lim), null, 2);
+    }
+  } catch (e) {
+    return `Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/* ── generate_types ── */
+async function toolGenerateTypes(p: {
+  input: string;
+  output_format?: string;
+  type_name?: string;
+  output_path?: string;
+}): Promise<string> {
+  const format = p.output_format ?? "typescript";
+  const name = p.type_name ?? "GeneratedType";
+  const formatInstructions: Record<string, string> = {
+    typescript: `Generate a TypeScript interface named ${name}. Use exact property names and types from the JSON. Use optional (?) for nullable fields.`,
+    zod: `Generate a Zod schema named ${name}Schema. Use z.object(), z.string(), z.number(), z.boolean(), z.array(), etc.`,
+    drizzle: `Generate a Drizzle ORM PostgreSQL table definition named ${name}Table using pgTable, text(), integer(), boolean(), timestamp(), etc.`,
+  };
+  const prompt = `${formatInstructions[format] ?? formatInstructions.typescript}
+
+Input JSON:
+${p.input}
+
+Return ONLY the code, no explanation, no markdown fences.`;
+
+  try {
+    const msg = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const code = msg.content[0]?.type === "text" ? msg.content[0].text.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "") : "";
+    if (p.output_path && code) {
+      const abs = guardPath(p.output_path);
+      if (abs) {
+        fs.mkdirSync(path.dirname(abs), { recursive: true });
+        fs.writeFileSync(abs, code, "utf-8");
+        return `✅ Types written to ${p.output_path}\n\n${code}`;
+      }
+    }
+    return code;
+  } catch (e) {
+    return `Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/* ── benchmark ── */
+async function toolBenchmark(p: {
+  type?: string;
+  command?: string;
+  url?: string;
+  iterations?: number;
+  method?: string;
+  body?: string;
+}): Promise<string> {
+  const type = p.type ?? "command";
+  const iterations = p.iterations ?? (type === "http" ? 20 : 5);
+  const timings: number[] = [];
+
+  try {
+    for (let i = 0; i < iterations; i++) {
+      const start = performance.now();
+      if (type === "http" && p.url) {
+        await fetch(p.url, {
+          method: p.method ?? "GET",
+          body: p.body ?? undefined,
+          signal: AbortSignal.timeout(10000),
+        });
+      } else if (p.command) {
+        await execAsync(p.command, { cwd: WORKSPACE, timeout: 30000 });
+      }
+      timings.push(performance.now() - start);
+    }
+
+    const sorted = [...timings].sort((a, b) => a - b);
+    const mean = timings.reduce((a, b) => a + b, 0) / timings.length;
+    const p50 = sorted[Math.floor(sorted.length * 0.5)]!;
+    const p95 = sorted[Math.floor(sorted.length * 0.95)]!;
+    const p99 = sorted[Math.floor(sorted.length * 0.99)]!;
+    const target = type === "http" ? p.url : p.command;
+
+    return [
+      `⏱️  Benchmark: ${target}`,
+      `Iterations: ${iterations}`,
+      `Min:  ${sorted[0]?.toFixed(1)}ms`,
+      `Max:  ${sorted[sorted.length - 1]?.toFixed(1)}ms`,
+      `Mean: ${mean.toFixed(1)}ms`,
+      `p50:  ${p50.toFixed(1)}ms`,
+      `p95:  ${p95.toFixed(1)}ms`,
+      `p99:  ${p99.toFixed(1)}ms`,
+    ].join("\n");
+  } catch (e) {
+    return `Benchmark Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/* ── audit_dependencies ── */
+async function toolAuditDependencies(p: { workspace?: string; severity?: string }): Promise<string> {
+  const cmd = p.workspace
+    ? `pnpm --filter ${p.workspace} audit --json 2>&1 || true`
+    : `pnpm audit --json 2>&1 || true`;
+  const raw = await toolExecuteCommand({ command: cmd, timeout_ms: 60000 });
+  const sev = p.severity ?? "moderate";
+  const sevLevels: Record<string, number> = { low: 0, moderate: 1, high: 2, critical: 3 };
+  const minLevel = sevLevels[sev] ?? 1;
+
+  try {
+    const data = JSON.parse(raw) as { advisories?: Record<string, { module_name: string; severity: string; title: string; url: string; findings?: Array<{ version: string }> }> };
+    const advisories = Object.values(data.advisories ?? {}).filter(a => (sevLevels[a.severity] ?? 0) >= minLevel);
+    if (advisories.length === 0) return `✅ No ${sev}+ vulnerabilities found.`;
+    return advisories.map(a =>
+      `${a.severity.toUpperCase()}: ${a.module_name} — ${a.title}\n  Version: ${a.findings?.[0]?.version ?? "unknown"}\n  More: ${a.url}`
+    ).join("\n\n");
+  } catch {
+    return raw.slice(0, 3000);
+  }
+}
+
+/* ── analyze_bundle ── */
+function toolAnalyzeBundle(p: { dist_path?: string; top_n?: number }): string {
+  const distPath = p.dist_path ?? "dist";
+  const abs = guardPath(distPath);
+  if (!abs) return "Error: path escapes workspace";
+  if (!fs.existsSync(abs)) return `Not found: ${distPath}. Run the build first.`;
+
+  const topN = p.top_n ?? 20;
+  const files: Array<{ path: string; size: number; gzip: number }> = [];
+
+  function walk(dir: string) {
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const e of entries) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) walk(full);
+        else if (e.isFile() && /\.(js|css|wasm|json)$/.test(e.name) && !e.name.endsWith(".map")) {
+          const stat = fs.statSync(full);
+          files.push({ path: path.relative(WORKSPACE, full), size: stat.size, gzip: Math.round(stat.size * 0.35) });
+        }
+      }
+    } catch { /* skip */ }
+  }
+  walk(abs);
+
+  const sorted = files.sort((a, b) => b.size - a.size).slice(0, topN);
+  const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+  const totalGzip = Math.round(totalSize * 0.35);
+
+  const formatBytes = (b: number) => b > 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(2)} MB` : `${(b / 1024).toFixed(1)} KB`;
+  const lines = [`📦 Bundle Analysis — ${distPath}`, `Total: ${formatBytes(totalSize)} (gzip ~${formatBytes(totalGzip)})`, ``];
+  for (const f of sorted) {
+    const bar = "█".repeat(Math.round(f.size / (sorted[0]?.size ?? 1) * 20));
+    lines.push(`${bar} ${f.path}`);
+    lines.push(`  ${formatBytes(f.size)} (gzip ~${formatBytes(f.gzip)})`);
+  }
+  return lines.join("\n");
+}
+
 /* ── web_search ── */
 async function toolWebSearch(p: { query: string; max_results?: number }): Promise<string> {
   try {
@@ -1359,6 +2171,18 @@ router.post("/stream", async (req, res) => {
               case "encode_decode":        result = toolEncodeDecode(params as never); break;
               case "hash_text":            result = toolHashText(params as never); break;
               case "screenshot_url":       result = await toolScreenshotUrl(params as never); break;
+              case "memory_store":         result = await toolMemoryStore(params as never); break;
+              case "memory_recall":        result = await toolMemoryRecall(params as never); break;
+              case "memory_delete":        result = await toolMemoryDelete(params as never); break;
+              case "api_test":             result = await toolApiTest(params as never); break;
+              case "code_review":          result = await toolCodeReview(params as never); break;
+              case "security_scan":        result = await toolSecurityScan(params as never); break;
+              case "notify_webhook":       result = await toolNotifyWebhook(params as never); break;
+              case "query_data_file":      result = toolQueryDataFile(params as never); break;
+              case "generate_types":       result = await toolGenerateTypes(params as never); break;
+              case "benchmark":            result = await toolBenchmark(params as never); break;
+              case "audit_dependencies":   result = await toolAuditDependencies(params as never); break;
+              case "analyze_bundle":       result = toolAnalyzeBundle(params as never); break;
               default:                     result = `Unknown tool: ${name}`;
             }
           } catch (toolErr) {

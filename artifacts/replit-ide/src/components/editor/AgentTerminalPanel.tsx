@@ -92,22 +92,42 @@ function ts() {
    QUICK TASKS
 ══════════════════════════════════════════════ */
 const QUICK_TASKS = [
+  /* ── Filesystem & Shell ── */
   { label: "List files",         cmd: "Show me the project file structure" },
   { label: "Git status",         cmd: "git status" },
-  { label: "Web search",         cmd: "Search the web for: latest React 19 features" },
+  { label: "Git log",            cmd: "git log --oneline -10" },
   { label: "System info",        cmd: "Show me CPU, memory, disk, and Node.js version" },
   { label: "Running processes",  cmd: "Show me all running processes and open ports" },
+  { label: "Env vars",           cmd: "Show me all non-sensitive environment variables" },
+  /* ── Database ── */
   { label: "DB tables",          cmd: "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'" },
+  { label: "DB schema",          cmd: "Query the database to describe all tables, their columns, types, and constraints" },
+  /* ── Code Quality ── */
   { label: "Run tests",          cmd: "Run all tests and show pass/fail results" },
   { label: "Lint + typecheck",   cmd: "Run ESLint and TypeScript typecheck on the workspace" },
   { label: "Format code",        cmd: "Format all TypeScript files with Prettier" },
-  { label: "Node version",       cmd: "node --version && pnpm --version" },
+  /* ── Packages & Network ── */
   { label: "Install deps",       cmd: "Install all workspace dependencies with pnpm" },
-  { label: "Git log",            cmd: "git log --oneline -10" },
   { label: "Check port 3001",    cmd: "Check if port 3001 is open and responding" },
   { label: "Check port 8000",    cmd: "Check if port 8000 is open and responding" },
   { label: "Gen UUID",           cmd: "Generate a new UUID" },
-  { label: "Env vars",           cmd: "Show me all non-sensitive environment variables" },
+  /* ── NEW: Agent Memory ── */
+  { label: "Recall memory",      cmd: "Use memory_recall to load all stored project context and memories, then summarize everything you know about this project" },
+  { label: "Store stack",        cmd: "Use memory_store to save the current project stack: pnpm monorepo, React 19, Vite 7, Tailwind 4, Express 5, Drizzle ORM, PostgreSQL, Anthropic Claude — category: project, importance: 9" },
+  /* ── NEW: AI Analysis ── */
+  { label: "Security scan",      cmd: "Run security_scan on the entire workspace. Report all findings with file paths and suggested fixes." },
+  { label: "Code review",        cmd: "Run code_review on artifacts/api-server/src/routes/ide-agent.ts with focus='all'. Fix every CRITICAL and HIGH issue immediately." },
+  { label: "Review frontend",    cmd: "Run code_review on artifacts/replit-ide/src/components/editor/AIPanel.tsx with focus='bugs'. Fix any issues found." },
+  /* ── NEW: API Testing ── */
+  { label: "Test healthz",       cmd: "Use api_test to test http://localhost:8000/api/healthz — expect status 200 and body contains 'ok'" },
+  { label: "Test API routes",    cmd: "Use api_test to test each of these endpoints and report results: GET /api/healthz, POST /api/anthropic/code-assist" },
+  /* ── NEW: Performance ── */
+  { label: "Benchmark API",      cmd: "Use benchmark to measure the performance of GET http://localhost:8000/api/healthz with 20 iterations. Show p50 and p95." },
+  { label: "Dep audit",          cmd: "Run audit_dependencies with severity='moderate' to find vulnerable packages in the workspace" },
+  { label: "Bundle analysis",    cmd: "Build app-builder and then run analyze_bundle on artifacts/app-builder/dist to show the largest files" },
+  /* ── NEW: Data & Types ── */
+  { label: "Gen TS types",       cmd: "Use generate_types to create TypeScript interfaces from this JSON: {\"id\": 1, \"name\": \"Alice\", \"email\": \"alice@example.com\", \"role\": \"admin\", \"createdAt\": \"2024-01-01\"}" },
+  { label: "Web search",         cmd: "Search the web for: latest Claude API features 2025" },
 ];
 
 /* ══════════════════════════════════════════════
