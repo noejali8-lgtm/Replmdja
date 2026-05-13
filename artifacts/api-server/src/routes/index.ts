@@ -24,6 +24,7 @@ import ideAgentRouter from "./ide-agent";
 import gitRouter from "./git";
 import billingRouter from "./billing";
 import projectToolsRouter from "./project-tools";
+import geminiRouter from "./gemini";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,6 @@ router.use("/billing", billingRouter);
 router.use("/system", systemRouter);
 router.use("/db-gui", dbGuiRouter);
 router.use("/ide-agent", ideAgentRouter);
+router.use("/gemini", geminiRouter);
 
 export default router;

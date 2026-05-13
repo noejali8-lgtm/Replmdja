@@ -9,6 +9,8 @@ import {
   Minus as MinusIcon, MessageSquare, CornerDownRight, AlertCircle, Eye
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { GeminiChatPanel } from "./GeminiChatPanel";
+import { BYOKPanel } from "./BYOKPanel";
 
 // ─── Model Data ────────────────────────────────────────────────────────────────
 export interface AIModel {
@@ -191,10 +193,11 @@ const AUTOTUNE_CONTEXTS = [
 ];
 
 // ─── Panel Tabs ──────────────────────────────────────────────────────────────────
-export type PanelTab = "models" | "ensemble" | "arena" | "godmode" | "ultraplinian" | "parseltongue" | "autotune" | "stm";
+export type PanelTab = "models" | "ensemble" | "arena" | "godmode" | "ultraplinian" | "parseltongue" | "autotune" | "stm" | "gemini";
 
 const PANEL_TABS: { id: PanelTab; label: string; icon: React.ReactNode; color: string }[] = [
   { id: "models",       label: "Models",       icon: <Cpu size={13} />,      color: "text-white" },
+  { id: "gemini",       label: "Gemini BYOK",  icon: <span className="text-[11px]">💎</span>, color: "text-blue-400" },
   { id: "ensemble",     label: "Ensemble",     icon: <Brain size={13} />,    color: "text-purple-400" },
   { id: "arena",        label: "Arena",        icon: <Swords size={13} />,   color: "text-yellow-400" },
   { id: "godmode",      label: "GODMODE",      icon: <Flame size={13} />,    color: "text-red-400" },
@@ -233,6 +236,12 @@ interface ArenaMatch {
   textA: string;
   textB: string;
   vote: ArenaVote;
+}
+
+// ─── BYOK state helper ───────────────────────────────────────────────────────────
+function useForceUpdate() {
+  const [, set] = useState(0);
+  return () => set(n => n + 1);
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────────────
@@ -289,6 +298,8 @@ export function AIModelsPanel({
   const [parseltongueInput, setParseltongueInput] = useState("");
   const [selectedTechniques, setSelectedTechniques] = useState<Set<string>>(new Set(["leet"]));
   const [showFreeOnly, setShowFreeOnly] = useState(false);
+  const [showBYOKPanel, setShowBYOKPanel] = useState(false);
+  const forceUpdate = useForceUpdate();
 
   // ── Ensemble state ────────────────────────────────────────────────────────────
   const [ensembleApiKey, setEnsembleApiKey] = useState(() => localStorage.getItem("openrouter_api_key") || "");
@@ -1980,6 +1991,20 @@ export function AIModelsPanel({
         )}
 
         {/* ── STM MODULES TAB ─────────────────────────────────────────────────────── */}
+        {activeTab === "gemini" && (
+          <div className="flex flex-col h-full">
+            <AnimatePresence>
+              {showBYOKPanel && (
+                <BYOKPanel
+                  onClose={() => { setShowBYOKPanel(false); forceUpdate(); }}
+                  initialProvider="gemini"
+                />
+              )}
+            </AnimatePresence>
+            <GeminiChatPanel onOpenBYOK={() => setShowBYOKPanel(true)} />
+          </div>
+        )}
+
         {activeTab === "stm" && (
           <div className="px-4 py-4 space-y-4">
             <div className="bg-purple-500/10 border border-purple-400/20 rounded-2xl p-4 space-y-2">
