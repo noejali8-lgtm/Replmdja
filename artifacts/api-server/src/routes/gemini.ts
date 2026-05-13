@@ -748,4 +748,153 @@ router.post("/validate-key", async (req: Request, res: Response) => {
   }
 });
 
+/* ══════════════════════════════════════════════════════════════
+   POST /api/gemini/debate — Antigravity Debate Mode
+   3-phase self-refinement pipeline:
+     Phase 1 — Initial Answer  (model answers the question)
+     Phase 2 — Self-Critique   (model critiques its own answer)
+     Phase 3 — Synthesis       (model merges answer + critique)
+   SSE events: round_start, thought, text, round_end, done
+══════════════════════════════════════════════════════════════ */
+router.post("/debate", async (req: Request, res: Response) => {
+  const apiKey = (req.headers["x-gemini-key"] as string) || req.body?.apiKey;
+  if (!apiKey) {
+    res.status(401).json({ error: "Gemini API key required. Send via X-Gemini-Key header." });
+    return;
+  }
+
+  const { model = "gemini-3.1-pro-preview", query } = req.body as {
+    model?: string;
+    query: string;
+  };
+
+  if (!query) { res.status(400).json({ error: "query required" }); return; }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (data: object) => {
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* disconnected */ }
+  };
+
+  const callGemini = async (contents: Array<{ role: string; parts: Array<{ text: string }> }>, system?: string) => {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const body: Record<string, unknown> = {
+      contents,
+      generationConfig: { thinkingConfig: { includeThoughts: true, thinkingBudget: -1 } },
+    };
+    if (system) body.systemInstruction = { parts: [{ text: system }] };
+
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const raw = await r.text();
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed.error) {
+      const e = parsed.error as Record<string, unknown>;
+      throw new Error(`Gemini API Error: ${e.message ?? String(e)}`);
+    }
+    const candidates = (parsed.candidates as Array<Record<string, unknown>>) ?? [];
+    const parts = ((candidates[0]?.content as Record<string, unknown>)?.parts as Array<Record<string, unknown>>) ?? [];
+    let thoughts = "";
+    let text = "";
+    for (const p of parts) {
+      if (p.thought) thoughts += (p.text as string ?? "") + "\n";
+      else if (p.text) text += (p.text as string ?? "");
+    }
+    return { thoughts, text };
+  };
+
+  try {
+    /* ── PHASE 1: Initial Answer ── */
+    send({ type: "round_start", round: 1, label: "Initial Answer", icon: "💡" });
+    send({ type: "thinking_start" });
+
+    const phase1 = await callGemini(
+      [{ role: "user", parts: [{ text: query }] }],
+      `You are Antigravity, an expert AI software engineer. Answer the user's question clearly and thoroughly.
+      Be direct and comprehensive. After your answer, your response will be reviewed and refined.`
+    );
+
+    if (phase1.thoughts) send({ type: "thought", content: phase1.thoughts, round: 1 });
+    send({ type: "text", content: phase1.text, round: 1 });
+    send({ type: "round_end", round: 1 });
+
+    /* ── PHASE 2: Self-Critique ── */
+    send({ type: "round_start", round: 2, label: "Self-Critique", icon: "🔍" });
+    send({ type: "thinking_start" });
+
+    const critiquePrompt = `You previously answered this question:
+
+Question: "${query}"
+
+Your previous answer:
+${phase1.text}
+
+---
+
+Now critically analyze your own answer. Identify:
+1. **Weaknesses** — What's missing, imprecise, or could be misunderstood?
+2. **Improvements** — What would make this answer more accurate, complete, or practical?
+3. **Counterarguments** — What opposing views or edge cases did you miss?
+
+Be honest and rigorous. This critique will be used to produce a better final answer.`;
+
+    const phase2 = await callGemini(
+      [{ role: "user", parts: [{ text: critiquePrompt }] }],
+      `You are a rigorous technical reviewer. Critically evaluate the given answer and provide constructive critique.
+      Be specific about what is wrong or missing. Do not hold back.`
+    );
+
+    if (phase2.thoughts) send({ type: "thought", content: phase2.thoughts, round: 2 });
+    send({ type: "text", content: phase2.text, round: 2 });
+    send({ type: "round_end", round: 2 });
+
+    /* ── PHASE 3: Synthesis ── */
+    send({ type: "round_start", round: 3, label: "Refined Synthesis", icon: "✨" });
+    send({ type: "thinking_start" });
+
+    const synthesisPrompt = `Here is the original question, the initial answer, and a self-critique. Your task is to produce the definitive final answer.
+
+**Original Question:** "${query}"
+
+**Initial Answer:**
+${phase1.text}
+
+**Self-Critique:**
+${phase2.text}
+
+---
+
+Now write a **refined, comprehensive final answer** that:
+- Addresses all the weaknesses identified in the critique
+- Incorporates any missing information
+- Is clear, accurate, and practical
+- Is better than the initial answer in every way
+
+This is the final answer that will be shown to the user.`;
+
+    const phase3 = await callGemini(
+      [{ role: "user", parts: [{ text: synthesisPrompt }] }],
+      `You are Antigravity. Synthesize the previous reasoning into the best possible final answer.
+      Be comprehensive, accurate, and direct. This is the definitive response.`
+    );
+
+    if (phase3.thoughts) send({ type: "thought", content: phase3.thoughts, round: 3 });
+    send({ type: "text", content: phase3.text, round: 3 });
+    send({ type: "round_end", round: 3 });
+
+    send({ type: "done", model, rounds: 3 });
+    res.end();
+
+  } catch (e) {
+    send({ type: "error", error: e instanceof Error ? e.message : String(e) });
+    res.end();
+  }
+});
+
 export default router;
