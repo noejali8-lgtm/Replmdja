@@ -1,323 +1,731 @@
 import { Router } from "express";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { pool } from "@workspace/db";
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
+import { execSync, exec } from "child_process";
+import { promisify } from "util";
 
+const execAsync = promisify(exec);
 const router = Router();
 const WORKSPACE = path.resolve("/home/runner/workspace");
 
-/* ─── Tool Definitions ─── */
+/* ══════════════════════════════════════════════════════════════
+   TOOL DEFINITIONS — Full Permissions
+══════════════════════════════════════════════════════════════ */
 const IDE_AGENT_TOOLS = [
+  /* ── Filesystem ── */
   {
     name: "write_file",
     description:
-      "Create or update a file with given content. " +
-      "Use this to actually write code — never just show code in text. " +
-      "Always call read_file first before editing an existing file.",
+      "Create or overwrite a file with complete content. " +
+      "ALWAYS use this instead of showing code in text. " +
+      "Read the file first if it already exists to avoid losing logic.",
     input_schema: {
       type: "object" as const,
       properties: {
-        path: {
-          type: "string",
-          description:
-            "Relative path from workspace root (e.g. artifacts/replit-ide/src/App.tsx)",
-        },
-        content: {
-          type: "string",
-          description:
-            "Complete file content to write. Never truncate. Never use placeholders.",
-        },
-        description: {
-          type: "string",
-          description: "One sentence: what this file does / why you're writing it",
-        },
+        path: { type: "string", description: "Relative path from workspace root" },
+        content: { type: "string", description: "Full file content — never truncate, never use placeholders" },
       },
       required: ["path", "content"],
     },
   },
   {
     name: "read_file",
-    description:
-      "Read the content of an existing file. " +
-      "Always read before editing so you preserve existing logic.",
+    description: "Read any file in the workspace. Always read before editing an existing file.",
     input_schema: {
       type: "object" as const,
       properties: {
-        path: {
-          type: "string",
-          description: "Relative path from workspace root",
-        },
+        path: { type: "string", description: "Relative path from workspace root" },
+        start_line: { type: "number", description: "Optional: first line to read (1-indexed)" },
+        end_line: { type: "number", description: "Optional: last line to read (inclusive)" },
       },
       required: ["path"],
     },
   },
   {
     name: "list_files",
-    description:
-      "List files and directories in a folder. " +
-      "Use to understand project structure before starting work.",
+    description: "List files and directories recursively. Use at the start of complex tasks to understand structure.",
     input_schema: {
       type: "object" as const,
       properties: {
-        directory: {
-          type: "string",
-          description:
-            "Relative path from workspace root. Defaults to '.' (workspace root).",
-        },
+        directory: { type: "string", description: "Relative path. Defaults to workspace root." },
+        depth: { type: "number", description: "Max depth (default 4)" },
       },
     },
   },
   {
     name: "search_files",
-    description:
-      "Search for a text pattern across all project files. " +
-      "Use to find where a function, class, or import is defined before modifying it.",
+    description: "Search for any text/regex pattern across all project files. Use before modifying code to locate the right place.",
     input_schema: {
       type: "object" as const,
       properties: {
-        pattern: {
-          type: "string",
-          description: "Text or simple regex pattern to search for",
-        },
-        directory: {
-          type: "string",
-          description: "Directory to search in (default: workspace root)",
-        },
+        pattern: { type: "string", description: "Text or regex pattern" },
+        directory: { type: "string", description: "Directory to search (default: workspace root)" },
+        file_ext: { type: "string", description: "Optional file extension filter e.g. 'ts' or 'tsx'" },
       },
       required: ["pattern"],
     },
   },
   {
-    name: "execute_command",
-    description:
-      "Execute a shell command in the workspace. " +
-      "Use for safe read-only operations (ls, ps, which, netstat, node --version, etc.). " +
-      "Set requires_approval=true for anything that installs, deletes, or modifies the system.",
+    name: "delete_file",
+    description: "Delete a file or directory (recursively). Use with care.",
     input_schema: {
       type: "object" as const,
       properties: {
-        command: {
-          type: "string",
-          description: "Shell command to run",
-        },
-        requires_approval: {
-          type: "boolean",
-          description:
-            "Set true if this command installs packages, deletes files, or modifies the system",
-        },
-        description: {
-          type: "string",
-          description: "What this command does and why you need it",
-        },
+        path: { type: "string", description: "Relative path to file or directory to delete" },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "move_file",
+    description: "Move or rename a file or directory.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        from: { type: "string", description: "Source relative path" },
+        to: { type: "string", description: "Destination relative path" },
+      },
+      required: ["from", "to"],
+    },
+  },
+  {
+    name: "make_directory",
+    description: "Create a directory and all parent directories.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: { type: "string", description: "Relative path of directory to create" },
+      },
+      required: ["path"],
+    },
+  },
+
+  /* ── Shell / System ── */
+  {
+    name: "execute_command",
+    description:
+      "Execute ANY shell command with full permissions — no restrictions. " +
+      "Can install packages (pnpm add ...), run builds, start processes, delete files, git operations, curl, etc. " +
+      "Commands run in the workspace root. Long-running commands (servers, watchers) use timeout of 30s. " +
+      "Use this for: pnpm install, pnpm build, pnpm db:push, git add/commit/push, curl, node scripts, etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        command: { type: "string", description: "Any shell command to execute" },
+        cwd: { type: "string", description: "Working directory (relative, default: workspace root)" },
+        timeout_ms: { type: "number", description: "Timeout in ms (default: 30000, max: 120000)" },
       },
       required: ["command"],
     },
   },
+  {
+    name: "execute_command_async",
+    description:
+      "Run a long-running command in the background and return its PID. " +
+      "Use for starting dev servers, watchers, or any process that runs indefinitely. " +
+      "Output is captured to a log file you can read later.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        command: { type: "string", description: "Shell command to run in background" },
+        log_file: { type: "string", description: "Relative path to capture stdout/stderr (e.g. /tmp/server.log)" },
+        cwd: { type: "string", description: "Working directory (relative, default: workspace root)" },
+      },
+      required: ["command"],
+    },
+  },
+
+  /* ── Package Management ── */
+  {
+    name: "install_packages",
+    description:
+      "Install npm/pnpm packages. Runs pnpm add in the specified workspace package. " +
+      "Use for installing new dependencies into the project.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        packages: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of package names to install (e.g. ['zod', 'express', '@types/node'])",
+        },
+        dev: { type: "boolean", description: "Install as devDependency (default: false)" },
+        workspace: {
+          type: "string",
+          description: "Which workspace to install into (e.g. '@workspace/api-server', '@workspace/app-builder'). Omit for workspace root.",
+        },
+      },
+      required: ["packages"],
+    },
+  },
+
+  /* ── Database ── */
+  {
+    name: "query_database",
+    description:
+      "Execute any SQL query against the PostgreSQL database. " +
+      "SELECT, INSERT, UPDATE, DELETE, CREATE TABLE, ALTER TABLE — all supported. " +
+      "Returns rows as JSON.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        sql: { type: "string", description: "SQL query to execute" },
+        params: {
+          type: "array",
+          items: {},
+          description: "Optional parameterized query values ($1, $2, ...)",
+        },
+      },
+      required: ["sql"],
+    },
+  },
+  {
+    name: "push_db_schema",
+    description: "Run drizzle-kit push to sync the Drizzle ORM schema to the database. Use after modifying schema files.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+
+  /* ── Git ── */
+  {
+    name: "git",
+    description:
+      "Run any git command in the workspace. " +
+      "Examples: status, add, commit, push, pull, checkout, branch, log, diff, stash, merge, rebase.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        args: { type: "string", description: "Git arguments (everything after 'git'), e.g. 'commit -am \"fix: update auth\"'" },
+      },
+      required: ["args"],
+    },
+  },
+
+  /* ── Internet / HTTP ── */
+  {
+    name: "fetch_url",
+    description:
+      "Fetch any URL from the internet — websites, APIs, GitHub repos, npm registry, documentation, etc. " +
+      "Can send GET or POST with custom headers and body. Returns response body as text.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        url: { type: "string", description: "Full URL to fetch" },
+        method: { type: "string", description: "HTTP method: GET, POST, PUT, DELETE (default: GET)" },
+        headers: {
+          type: "object",
+          description: "Optional HTTP headers as key-value pairs",
+          additionalProperties: { type: "string" },
+        },
+        body: { type: "string", description: "Optional request body for POST/PUT" },
+        max_chars: { type: "number", description: "Max response characters to return (default 8000)" },
+      },
+      required: ["url"],
+    },
+  },
+
+  /* ── Process Management ── */
+  {
+    name: "list_processes",
+    description: "List running processes. Useful for checking if a server is running, finding PIDs, etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        filter: { type: "string", description: "Optional grep filter for process names" },
+      },
+    },
+  },
+  {
+    name: "kill_process",
+    description: "Kill a process by PID or port number.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        pid: { type: "number", description: "Process ID to kill" },
+        port: { type: "number", description: "Kill process listening on this port (uses fuser)" },
+        signal: { type: "string", description: "Signal to send (default: SIGTERM)" },
+      },
+    },
+  },
+
+  /* ── Environment ── */
+  {
+    name: "get_env",
+    description: "Read environment variables available in the current process.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        keys: {
+          type: "array",
+          items: { type: "string" },
+          description: "Specific keys to retrieve. Omit to get all non-sensitive vars.",
+        },
+      },
+    },
+  },
+  {
+    name: "set_env",
+    description: "Write environment variables to a .env file for use in the project.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        vars: {
+          type: "object",
+          description: "Key-value pairs to write",
+          additionalProperties: { type: "string" },
+        },
+        file: { type: "string", description: "Target .env file (default: .env)" },
+      },
+      required: ["vars"],
+    },
+  },
 ] as const;
 
-const IDE_SYSTEM_PROMPT = `You are Agent 4 — Replit's fully autonomous AI engineer embedded in the IDE.
+/* ══════════════════════════════════════════════════════════════
+   SYSTEM PROMPT — Full Agent with All Permissions
+══════════════════════════════════════════════════════════════ */
+const IDE_SYSTEM_PROMPT = `You are Agent 4 — Replit's fully autonomous AI engineer with FULL SYSTEM ACCESS.
+
+## You Have Complete Permissions
+- ✅ Read, write, move, delete ANY file in the workspace
+- ✅ Execute ANY shell command (pnpm, npm, node, bash, curl, git, etc.)
+- ✅ Install or remove packages (pnpm add / pnpm remove)
+- ✅ Run database queries (SELECT, INSERT, UPDATE, DELETE, DDL)
+- ✅ Push schema changes to the database
+- ✅ Run git operations (commit, push, pull, branch, merge)
+- ✅ Fetch any URL from the internet (APIs, docs, GitHub, npm)
+- ✅ Start/stop/kill processes
+- ✅ Read environment variables
+- ✅ Run build systems, test runners, linters, formatters
 
 ## Core Principle: ACT, Don't Talk
-You are a DOER. When asked to build something, BUILD it. When asked to fix something, FIX it.
-You have real tool access to read, write, and search the file system.
-NEVER describe code in text — ALWAYS use write_file to actually write it.
+You are a DOER. When asked to build something, BUILD it immediately.
+NEVER describe what you're about to do — just DO it using tools.
+NEVER show code in plain text — ALWAYS write_file to actually create/edit it.
 
 ## Agentic Loop — Follow This Every Time
 
-**1. ORIENT** — Understand what exists. Use list_files or read_file to see the actual codebase.
-**2. THINK** — One sentence: "The issue is..." or "I'll create..." or "Looking at..."  
-**3. EXECUTE** — Use write_file. Use search_files. Use read_file before editing.
-**4. VERIFY** — One sentence confirming what was done and what the user should see.
+**1. ORIENT** — list_files or read_file to understand the actual codebase first.
+**2. PLAN** — One silent sentence of intent (not shown to user).
+**3. EXECUTE** — Use tools. write_file, execute_command, query_database, fetch_url — whatever it takes.
+**4. VERIFY** — execute_command to check results (run the file, query the DB, curl the endpoint).
+**5. HEAL** — If something is broken, fix it immediately without asking.
 
-## Self-Healing
-If you spot a bug AFTER calling write_file, call write_file again immediately to fix it.
-Narrate it: "Wait — I missed the async handler. Fixing now..."
+## Self-Healing Rules
+- If write_file produces broken code, read_file and rewrite immediately.
+- If execute_command fails, read the error, understand the cause, fix it, retry.
+- If a package is missing, install_packages then retry.
+- If a DB schema is wrong, push_db_schema then retry.
+- Never stop and ask — keep going until the task is fully done and verified.
 
-## Mandatory Tool Rules
-- NEVER show code in plain text. Always write_file.
-- ALWAYS read_file before editing an existing file (to preserve existing logic)
-- Use list_files at the start of complex tasks
-- Use search_files before modifying a function/class/import to find the right location
+## Tool Usage Rules
+- **Always** read_file before editing an existing file
+- **Always** search_files before modifying a function to find the exact location
+- **Always** list_files at the start of complex multi-file tasks
+- **Always** execute_command to verify: run the script, curl the API, check the output
+- **Install packages** when a dependency is missing — don't just tell the user to install
+- **Query the database** to verify data was actually inserted/updated
+- **Use git** to commit finished work when asked to deploy or ship
 
-## Communication
-- Narrate what you're doing: "Reading the file structure...", "Writing the component..."
-- Keep prose to 1–2 sentences between tool calls
-- After write_file: one sentence on what was written and what's next
-- After execute_command: one sentence on what the output means
+## Communication Style
+- Narrate what you're doing in 1 sentence before each tool call
+- After write_file: one sentence on what was written
+- After execute_command: one sentence interpreting the output
+- After query_database: one sentence on what the data shows
+- If an error occurs: "Error: [what failed]. Fixing by [approach]..." then immediately fix
 
 ## Stack & Standards
-- TypeScript + React 19 + Tailwind CSS 4
-- Dark theme: bg=#0d1117, surface=#161b22, border=#21262d, text=#e6edf3
-- Complete files — zero truncation, zero TODO, zero placeholders
-- Import everything you use. Export what you define.
-- Error handling, loading states, edge cases — always included
+- TypeScript + React 19 + Vite 7 + Tailwind CSS 4
+- Dark theme: bg=#0d1117, surface=#161b22, border=#21262d, text=#e6edf3, accent=#58a6ff
+- Express 5 + Drizzle ORM + PostgreSQL for backend
+- Complete files — zero TODO, zero placeholders, zero truncation
+- Always include error handling, loading states, and TypeScript types
+- Import everything used. Export everything defined.
 `;
 
-/* ─── Tool Executors ─── */
+/* ══════════════════════════════════════════════════════════════
+   TOOL EXECUTORS
+══════════════════════════════════════════════════════════════ */
 
-function toolWriteFile(params: { path: string; content: string }): string {
+function guardPath(p: string): string | null {
+  const abs = path.resolve(WORKSPACE, p);
+  if (!abs.startsWith(WORKSPACE)) return null;
+  return abs;
+}
+
+/* ── write_file ── */
+function toolWriteFile(p: { path: string; content: string }): string {
   try {
-    const abs = path.resolve(WORKSPACE, params.path);
-    if (!abs.startsWith(WORKSPACE)) return "Error: Path outside workspace";
+    const abs = guardPath(p.path);
+    if (!abs) return "Error: Path escapes workspace";
     fs.mkdirSync(path.dirname(abs), { recursive: true });
-    fs.writeFileSync(abs, params.content, "utf-8");
-    const bytes = Buffer.byteLength(params.content, "utf-8");
-    const lines = params.content.split("\n").length;
-    return `Written ${params.path} — ${lines} lines, ${Math.round(bytes / 1024 * 10) / 10} KB`;
+    fs.writeFileSync(abs, p.content, "utf-8");
+    const lines = p.content.split("\n").length;
+    const kb = Math.round(Buffer.byteLength(p.content, "utf-8") / 102.4) / 10;
+    return `✅ Written: ${p.path} (${lines} lines, ${kb} KB)`;
   } catch (e) {
-    return `Error writing file: ${e instanceof Error ? e.message : String(e)}`;
+    return `Error: ${e instanceof Error ? e.message : String(e)}`;
   }
 }
 
-function toolReadFile(params: { path: string }): string {
+/* ── read_file ── */
+function toolReadFile(p: { path: string; start_line?: number; end_line?: number }): string {
   try {
-    const abs = path.resolve(WORKSPACE, params.path);
-    if (!abs.startsWith(WORKSPACE)) return "Error: Path outside workspace";
-    if (!fs.existsSync(abs)) return `File not found: ${params.path}`;
-    const stat = fs.statSync(abs);
-    if (!stat.isFile()) return `Not a file: ${params.path}`;
-    const content = fs.readFileSync(abs, "utf-8");
-    const MAX = 10000;
-    return content.length > MAX
-      ? content.slice(0, MAX) + `\n\n...[truncated — ${content.length - MAX} chars omitted]`
-      : content;
+    const abs = guardPath(p.path);
+    if (!abs) return "Error: Path escapes workspace";
+    if (!fs.existsSync(abs)) return `Not found: ${p.path}`;
+    if (!fs.statSync(abs).isFile()) return `Not a file: ${p.path}`;
+    let content = fs.readFileSync(abs, "utf-8");
+    if (p.start_line !== undefined || p.end_line !== undefined) {
+      const lines = content.split("\n");
+      const start = Math.max(0, (p.start_line ?? 1) - 1);
+      const end = p.end_line !== undefined ? p.end_line : lines.length;
+      content = lines.slice(start, end).join("\n");
+    }
+    const MAX = 12000;
+    if (content.length > MAX) {
+      return content.slice(0, MAX) + `\n\n...[truncated: ${content.length - MAX} more chars. Use start_line/end_line to read sections.]`;
+    }
+    return content;
   } catch (e) {
-    return `Error reading file: ${e instanceof Error ? e.message : String(e)}`;
+    return `Error: ${e instanceof Error ? e.message : String(e)}`;
   }
 }
 
-function toolListFiles(params: { directory?: string }): string {
+/* ── list_files ── */
+function toolListFiles(p: { directory?: string; depth?: number }): string {
   try {
-    const dir = params.directory ?? ".";
-    const abs = path.resolve(WORKSPACE, dir);
-    if (!abs.startsWith(WORKSPACE)) return "Error: Path outside workspace";
-    const SKIP = new Set(["node_modules", ".git", "dist", ".local", ".cache", "coverage", "__pycache__"]);
+    const dir = p.directory ?? ".";
+    const abs = guardPath(dir);
+    if (!abs) return "Error: Path escapes workspace";
+    const MAX_DEPTH = p.depth ?? 4;
+    const SKIP = new Set(["node_modules", ".git", "dist", ".local", ".cache", "coverage", "__pycache__", ".replit", ".upm"]);
 
     function walk(p: string, prefix: string, depth: number): string[] {
-      if (depth > 4) return [];
+      if (depth > MAX_DEPTH) return [];
       let entries: fs.Dirent[];
-      try {
-        entries = fs.readdirSync(p, { withFileTypes: true });
-      } catch {
-        return [];
-      }
-      const dirs = entries.filter(e => e.isDirectory() && !SKIP.has(e.name));
-      const files = entries.filter(e => e.isFile());
-      dirs.sort((a, b) => a.name.localeCompare(b.name));
-      files.sort((a, b) => a.name.localeCompare(b.name));
+      try { entries = fs.readdirSync(p, { withFileTypes: true }); } catch { return []; }
+      const dirs = entries.filter(e => e.isDirectory() && !SKIP.has(e.name)).sort((a, b) => a.name.localeCompare(b.name));
+      const files = entries.filter(e => e.isFile()).sort((a, b) => a.name.localeCompare(b.name));
       const lines: string[] = [];
       for (const e of [...dirs, ...files]) {
         lines.push(`${prefix}${e.isDirectory() ? "📁" : "📄"} ${e.name}`);
-        if (e.isDirectory()) {
-          lines.push(...walk(path.join(p, e.name), prefix + "  ", depth + 1));
-        }
+        if (e.isDirectory()) lines.push(...walk(path.join(p, e.name), prefix + "  ", depth + 1));
       }
       return lines;
     }
 
     const result = walk(abs, "", 0);
-    return result.length > 0 ? result.join("\n") : "(empty directory)";
+    return result.length > 0 ? result.join("\n") : "(empty)";
   } catch (e) {
-    return `Error listing files: ${e instanceof Error ? e.message : String(e)}`;
+    return `Error: ${e instanceof Error ? e.message : String(e)}`;
   }
 }
 
-function toolSearchFiles(params: { pattern: string; directory?: string }): string {
+/* ── search_files ── */
+function toolSearchFiles(p: { pattern: string; directory?: string; file_ext?: string }): string {
   try {
-    const dir = params.directory ?? ".";
-    const abs = path.resolve(WORKSPACE, dir);
-    if (!abs.startsWith(WORKSPACE)) return "Error: Path outside workspace";
+    const dir = p.directory ?? ".";
+    const abs = guardPath(dir);
+    if (!abs) return "Error: Path escapes workspace";
     const SKIP = new Set(["node_modules", ".git", "dist", ".local", ".cache"]);
-    const pat = params.pattern.toLowerCase();
+    const pat = p.pattern.toLowerCase();
     const results: string[] = [];
+    const extFilter = p.file_ext ? `.${p.file_ext.replace(/^\./, "")}` : null;
 
     function search(p: string) {
-      if (results.length > 100) return;
+      if (results.length >= 150) return;
       let entries: fs.Dirent[];
-      try {
-        entries = fs.readdirSync(p, { withFileTypes: true });
-      } catch {
-        return;
-      }
+      try { entries = fs.readdirSync(p, { withFileTypes: true }); } catch { return; }
       for (const e of entries) {
         if (SKIP.has(e.name)) continue;
         const full = path.join(p, e.name);
-        if (e.isDirectory()) {
-          search(full);
-        } else if (e.isFile()) {
+        if (e.isDirectory()) { search(full); }
+        else if (e.isFile()) {
+          if (extFilter && !e.name.endsWith(extFilter)) continue;
           try {
             const content = fs.readFileSync(full, "utf-8");
             const lines = content.split("\n");
             for (let i = 0; i < lines.length; i++) {
               if (lines[i].toLowerCase().includes(pat)) {
-                const rel = path.relative(WORKSPACE, full);
-                results.push(`${rel}:${i + 1}: ${lines[i].trim()}`);
-                if (results.length >= 100) return;
+                results.push(`${path.relative(WORKSPACE, full)}:${i + 1}: ${lines[i].trim()}`);
+                if (results.length >= 150) return;
               }
             }
-          } catch { /* binary file — skip */ }
+          } catch { /* binary */ }
         }
       }
     }
 
     search(abs);
-    if (results.length === 0) return `No matches for "${params.pattern}"`;
-    return results.join("\n") + (results.length >= 100 ? "\n...(limited to 100 results)" : "");
+    if (results.length === 0) return `No matches for "${p.pattern}"`;
+    return results.join("\n") + (results.length >= 150 ? "\n...(150 result limit reached)" : "");
   } catch (e) {
-    return `Error searching: ${e instanceof Error ? e.message : String(e)}`;
+    return `Error: ${e instanceof Error ? e.message : String(e)}`;
   }
 }
 
-const SAFE_CMD_PREFIXES = [
-  "ls", "cat ", "echo ", "pwd", "which ", "node --version", "node -e",
-  "pnpm --version", "npm --version", "npx --version",
-  "ps aux", "netstat", "lsof -i", "curl -s", "grep ",
-  "find ", "wc ", "head ", "tail ", "wc -l", "stat ",
-];
-
-function toolExecuteCommand(params: {
-  command: string;
-  requires_approval?: boolean;
-  description?: string;
-}): string {
-  if (params.requires_approval) {
-    return `APPROVAL_REQUIRED|${params.command}|${params.description ?? ""}`;
-  }
-
-  const isSafe = SAFE_CMD_PREFIXES.some(pfx =>
-    params.command.trim().startsWith(pfx),
-  );
-  if (!isSafe) {
-    return `APPROVAL_REQUIRED|${params.command}|${params.description ?? "Requires user approval"}`;
-  }
-
+/* ── delete_file ── */
+function toolDeleteFile(p: { path: string }): string {
   try {
-    const out = execSync(params.command, {
-      cwd: WORKSPACE,
-      timeout: 8000,
-      encoding: "utf-8",
-      maxBuffer: 200 * 1024,
-    });
-    return (out ?? "").trim() || "(no output)";
+    const abs = guardPath(p.path);
+    if (!abs) return "Error: Path escapes workspace";
+    if (!fs.existsSync(abs)) return `Not found: ${p.path}`;
+    const stat = fs.statSync(abs);
+    if (stat.isDirectory()) {
+      fs.rmSync(abs, { recursive: true, force: true });
+      return `✅ Deleted directory: ${p.path}`;
+    } else {
+      fs.unlinkSync(abs);
+      return `✅ Deleted file: ${p.path}`;
+    }
   } catch (e) {
-    const err = e as { stdout?: string; stderr?: string; message?: string };
-    return `Exit error: ${err.stderr ?? err.stdout ?? err.message ?? String(e)}`;
+    return `Error: ${e instanceof Error ? e.message : String(e)}`;
   }
 }
 
-/* ─── SSE helper ─── */
+/* ── move_file ── */
+function toolMoveFile(p: { from: string; to: string }): string {
+  try {
+    const absFrom = guardPath(p.from);
+    const absTo = guardPath(p.to);
+    if (!absFrom || !absTo) return "Error: Path escapes workspace";
+    if (!fs.existsSync(absFrom)) return `Not found: ${p.from}`;
+    fs.mkdirSync(path.dirname(absTo), { recursive: true });
+    fs.renameSync(absFrom, absTo);
+    return `✅ Moved: ${p.from} → ${p.to}`;
+  } catch (e) {
+    return `Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/* ── make_directory ── */
+function toolMakeDirectory(p: { path: string }): string {
+  try {
+    const abs = guardPath(p.path);
+    if (!abs) return "Error: Path escapes workspace";
+    fs.mkdirSync(abs, { recursive: true });
+    return `✅ Created directory: ${p.path}`;
+  } catch (e) {
+    return `Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/* ── execute_command (FULL PERMISSIONS — no allowlist) ── */
+async function toolExecuteCommand(p: {
+  command: string;
+  cwd?: string;
+  timeout_ms?: number;
+}): Promise<string> {
+  const cwd = p.cwd ? (guardPath(p.cwd) ?? WORKSPACE) : WORKSPACE;
+  const timeout = Math.min(p.timeout_ms ?? 30000, 120000);
+  try {
+    const { stdout, stderr } = await execAsync(p.command, {
+      cwd,
+      timeout,
+      maxBuffer: 2 * 1024 * 1024,
+      env: { ...process.env, FORCE_COLOR: "0" },
+    });
+    const out = (stdout ?? "").trim();
+    const err = (stderr ?? "").trim();
+    const parts: string[] = [];
+    if (out) parts.push(out);
+    if (err) parts.push(`[stderr]\n${err}`);
+    return parts.join("\n") || "(no output)";
+  } catch (e) {
+    const err = e as { stdout?: string; stderr?: string; message?: string; code?: number };
+    const out = (err.stdout ?? "").trim();
+    const se = (err.stderr ?? "").trim();
+    const parts = [`Exit code: ${err.code ?? "?"}`];
+    if (out) parts.push(out);
+    if (se) parts.push(`[stderr]\n${se}`);
+    return parts.join("\n");
+  }
+}
+
+/* ── execute_command_async ── */
+function toolExecuteCommandAsync(p: {
+  command: string;
+  log_file?: string;
+  cwd?: string;
+}): string {
+  try {
+    const cwd = p.cwd ? (guardPath(p.cwd) ?? WORKSPACE) : WORKSPACE;
+    const logFile = p.log_file ?? `/tmp/agent-bg-${Date.now()}.log`;
+    const shell = `nohup bash -c ${JSON.stringify(p.command)} > ${logFile} 2>&1 & echo $!`;
+    const pid = execSync(shell, { cwd, encoding: "utf-8" }).trim();
+    return `✅ Started background process PID=${pid}. Logs: ${logFile}`;
+  } catch (e) {
+    return `Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/* ── install_packages ── */
+async function toolInstallPackages(p: {
+  packages: string[];
+  dev?: boolean;
+  workspace?: string;
+}): Promise<string> {
+  const flag = p.dev ? "-D" : "";
+  const pkgs = p.packages.join(" ");
+  let cmd: string;
+  if (p.workspace) {
+    cmd = `pnpm --filter ${p.workspace} add ${flag} ${pkgs}`.trim();
+  } else {
+    cmd = `pnpm add -w ${flag} ${pkgs}`.trim();
+  }
+  return toolExecuteCommand({ command: cmd, timeout_ms: 90000 });
+}
+
+/* ── query_database ── */
+async function toolQueryDatabase(p: { sql: string; params?: unknown[] }): Promise<string> {
+  try {
+    const client = await pool.connect();
+    try {
+      const result = await client.query(p.sql, p.params as never[] | undefined);
+      const rows = result.rows;
+      if (rows.length === 0) {
+        return `✅ Query OK — ${result.rowCount ?? 0} row(s) affected. (no rows returned)`;
+      }
+      const preview = rows.slice(0, 50);
+      const json = JSON.stringify(preview, null, 2);
+      const suffix = rows.length > 50 ? `\n...(showing 50 of ${rows.length} rows)` : "";
+      return `✅ ${rows.length} row(s)\n${json}${suffix}`;
+    } finally {
+      client.release();
+    }
+  } catch (e) {
+    return `DB Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/* ── push_db_schema ── */
+async function toolPushDbSchema(): Promise<string> {
+  return toolExecuteCommand({
+    command: "pnpm --filter @workspace/db run push",
+    timeout_ms: 60000,
+  });
+}
+
+/* ── git ── */
+async function toolGit(p: { args: string }): Promise<string> {
+  return toolExecuteCommand({
+    command: `git ${p.args}`,
+    timeout_ms: 30000,
+  });
+}
+
+/* ── fetch_url ── */
+async function toolFetchUrl(p: {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  max_chars?: number;
+}): Promise<string> {
+  try {
+    const method = (p.method ?? "GET").toUpperCase();
+    const MAX = p.max_chars ?? 8000;
+    const res = await fetch(p.url, {
+      method,
+      headers: {
+        "User-Agent": "Replit-Agent/4.0",
+        ...(p.headers ?? {}),
+      },
+      body: p.body ?? undefined,
+    });
+    const text = await res.text();
+    const truncated = text.length > MAX
+      ? text.slice(0, MAX) + `\n...[truncated: ${text.length - MAX} more chars]`
+      : text;
+    return `HTTP ${res.status} ${res.statusText}\n${[...res.headers.entries()].map(([k, v]) => `${k}: ${v}`).join("\n")}\n\n${truncated}`;
+  } catch (e) {
+    return `Fetch Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/* ── list_processes ── */
+async function toolListProcesses(p: { filter?: string }): Promise<string> {
+  const cmd = p.filter
+    ? `ps aux | grep ${JSON.stringify(p.filter)} | grep -v grep`
+    : "ps aux | head -40";
+  return toolExecuteCommand({ command: cmd });
+}
+
+/* ── kill_process ── */
+async function toolKillProcess(p: {
+  pid?: number;
+  port?: number;
+  signal?: string;
+}): Promise<string> {
+  const sig = p.signal ?? "SIGTERM";
+  if (p.port) {
+    return toolExecuteCommand({ command: `fuser -k -${sig} ${p.port}/tcp 2>&1 || true` });
+  }
+  if (p.pid) {
+    return toolExecuteCommand({ command: `kill -${sig} ${p.pid} 2>&1 || true` });
+  }
+  return "Error: provide pid or port";
+}
+
+/* ── get_env ── */
+function toolGetEnv(p: { keys?: string[] }): string {
+  const SENSITIVE = /key|secret|password|token|auth|credential|private/i;
+  const env = process.env;
+  if (p.keys && p.keys.length > 0) {
+    const result: Record<string, string> = {};
+    for (const k of p.keys) {
+      result[k] = env[k] ?? "(not set)";
+    }
+    return JSON.stringify(result, null, 2);
+  }
+  const safe: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (!SENSITIVE.test(k)) safe[k] = v ?? "";
+  }
+  return JSON.stringify(safe, null, 2);
+}
+
+/* ── set_env ── */
+function toolSetEnv(p: { vars: Record<string, string>; file?: string }): string {
+  try {
+    const file = p.file ?? ".env";
+    const abs = guardPath(file);
+    if (!abs) return "Error: Path escapes workspace";
+    let existing = "";
+    if (fs.existsSync(abs)) existing = fs.readFileSync(abs, "utf-8");
+    const lines = existing.split("\n").filter(Boolean);
+    for (const [k, v] of Object.entries(p.vars)) {
+      const idx = lines.findIndex(l => l.startsWith(`${k}=`));
+      const line = `${k}=${v}`;
+      if (idx >= 0) lines[idx] = line;
+      else lines.push(line);
+    }
+    fs.writeFileSync(abs, lines.join("\n") + "\n", "utf-8");
+    return `✅ Written ${Object.keys(p.vars).length} var(s) to ${file}`;
+  } catch (e) {
+    return `Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SSE HELPER
+══════════════════════════════════════════════════════════════ */
 type SsePayload = Record<string, unknown>;
 
 function makeSend(res: import("express").Response) {
   return (data: SsePayload) => {
-    try {
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
-    } catch { /* client disconnected */ }
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* disconnected */ }
   };
 }
 
-/* ─── POST /api/ide-agent/stream ─── */
+/* ══════════════════════════════════════════════════════════════
+   POST /api/ide-agent/stream
+══════════════════════════════════════════════════════════════ */
 router.post("/stream", async (req, res) => {
   const {
     message,
@@ -325,7 +733,7 @@ router.post("/stream", async (req, res) => {
     currentFile,
     currentCode,
     history = [],
-    model = "claude-sonnet-4-5",
+    model = "claude-opus-4-7",
   } = req.body as {
     message?: string;
     fileTree?: string;
@@ -335,10 +743,7 @@ router.post("/stream", async (req, res) => {
     model?: string;
   };
 
-  if (!message) {
-    res.status(400).json({ error: "message is required" });
-    return;
-  }
+  if (!message) { res.status(400).json({ error: "message is required" }); return; }
 
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
@@ -347,12 +752,12 @@ router.post("/stream", async (req, res) => {
 
   const send = makeSend(res);
 
-  /* Build user message with file context */
+  /* Build context-enriched user message */
   const ctxParts: string[] = [];
   if (currentFile) ctxParts.push(`## Current file: ${currentFile}`);
   if (currentCode) {
-    const snippet = currentCode.length > 3000
-      ? currentCode.slice(0, 3000) + "\n...[truncated for context]"
+    const snippet = currentCode.length > 4000
+      ? currentCode.slice(0, 4000) + "\n...[truncated for context — use read_file for full content]"
       : currentCode;
     ctxParts.push(`## Current file content:\n\`\`\`\n${snippet}\n\`\`\``);
   }
@@ -362,20 +767,14 @@ router.post("/stream", async (req, res) => {
     ? `${ctxParts.join("\n\n")}\n\n---\n\n${message}`
     : message;
 
-  type AMsg =
-    | { role: "user"; content: string | unknown[] }
-    | { role: "assistant"; content: unknown[] };
+  type AMsg = { role: "user"; content: string | unknown[] } | { role: "assistant"; content: unknown[] };
 
   const messages: AMsg[] = [
-    ...history.map(h => ({
-      role: h.role as "user" | "assistant",
-      content: h.content,
-    })) as AMsg[],
+    ...history.map(h => ({ role: h.role as "user" | "assistant", content: h.content })) as AMsg[],
     { role: "user", content: userContent },
   ];
 
-  /* Agentic loop */
-  const MAX_LOOPS = 12;
+  const MAX_LOOPS = 20;
   let loopCount = 0;
 
   try {
@@ -390,75 +789,57 @@ router.post("/stream", async (req, res) => {
         messages: messages as never,
       });
 
-      /* Stream any text content */
       for (const block of response.content) {
         if (block.type === "text" && block.text) {
           send({ type: "text_delta", content: block.text });
         }
       }
 
-      if (response.stop_reason === "end_turn") {
-        send({ type: "done" });
-        break;
-      }
+      if (response.stop_reason === "end_turn") { send({ type: "done" }); break; }
 
       if (response.stop_reason === "tool_use") {
         const toolBlocks = response.content.filter((b: { type: string }) => b.type === "tool_use");
-        if (toolBlocks.length === 0) {
-          send({ type: "done" });
-          break;
-        }
+        if (toolBlocks.length === 0) { send({ type: "done" }); break; }
 
         messages.push({ role: "assistant", content: response.content });
 
-        const toolResults: {
-          type: "tool_result";
-          tool_use_id: string;
-          content: string;
-        }[] = [];
+        const toolResults: { type: "tool_result"; tool_use_id: string; content: string }[] = [];
 
         for (const tb of toolBlocks) {
           if (tb.type !== "tool_use") continue;
           const { id, name, input } = tb;
-          const params = input as Record<string, string | boolean | undefined>;
+          const params = input as Record<string, unknown>;
 
           send({ type: "tool_call", tool: name, params, id });
 
           let result = "";
-          switch (name) {
-            case "write_file":
-              result = toolWriteFile(params as never);
-              break;
-            case "read_file":
-              result = toolReadFile(params as never);
-              break;
-            case "list_files":
-              result = toolListFiles(params as never);
-              break;
-            case "search_files":
-              result = toolSearchFiles(params as never);
-              break;
-            case "execute_command":
-              result = toolExecuteCommand(params as never);
-              break;
-            default:
-              result = `Unknown tool: ${name}`;
+          try {
+            switch (name) {
+              case "write_file":           result = toolWriteFile(params as never); break;
+              case "read_file":            result = toolReadFile(params as never); break;
+              case "list_files":           result = toolListFiles(params as never); break;
+              case "search_files":         result = toolSearchFiles(params as never); break;
+              case "delete_file":          result = toolDeleteFile(params as never); break;
+              case "move_file":            result = toolMoveFile(params as never); break;
+              case "make_directory":       result = toolMakeDirectory(params as never); break;
+              case "execute_command":      result = await toolExecuteCommand(params as never); break;
+              case "execute_command_async":result = toolExecuteCommandAsync(params as never); break;
+              case "install_packages":     result = await toolInstallPackages(params as never); break;
+              case "query_database":       result = await toolQueryDatabase(params as never); break;
+              case "push_db_schema":       result = await toolPushDbSchema(); break;
+              case "git":                  result = await toolGit(params as never); break;
+              case "fetch_url":            result = await toolFetchUrl(params as never); break;
+              case "list_processes":       result = await toolListProcesses(params as never); break;
+              case "kill_process":         result = await toolKillProcess(params as never); break;
+              case "get_env":              result = toolGetEnv(params as never); break;
+              case "set_env":              result = toolSetEnv(params as never); break;
+              default:                     result = `Unknown tool: ${name}`;
+            }
+          } catch (toolErr) {
+            result = `Tool error: ${toolErr instanceof Error ? toolErr.message : String(toolErr)}`;
           }
 
-          /* Detect approval-required commands */
-          if (result.startsWith("APPROVAL_REQUIRED|")) {
-            const parts = result.split("|");
-            send({
-              type: "approval_required",
-              id,
-              command: parts[1] ?? "",
-              description: parts[2] ?? "",
-            });
-            result = "Command pending user approval.";
-          } else {
-            send({ type: "tool_result", tool: name, result, id });
-          }
-
+          send({ type: "tool_result", tool: name, result, id });
           toolResults.push({ type: "tool_result", tool_use_id: id, content: result });
         }
 
@@ -470,69 +851,49 @@ router.post("/stream", async (req, res) => {
     }
 
     if (loopCount >= MAX_LOOPS) {
-      send({
-        type: "text_delta",
-        content: "\n\n⚠️ Agent reached the iteration limit. The task may be partially complete.",
-      });
+      send({ type: "text_delta", content: "\n\n⚠️ Reached iteration limit (20 loops). Task may be partially complete." });
       send({ type: "done" });
     }
   } catch (e) {
-    send({
-      type: "error",
-      message: e instanceof Error ? e.message : String(e),
-    });
+    send({ type: "error", message: e instanceof Error ? e.message : String(e) });
     send({ type: "done" });
   }
 });
 
-/* ─── POST /api/ide-agent/approve ─── */
-router.post("/approve", (req, res) => {
+/* ══════════════════════════════════════════════════════════════
+   POST /api/ide-agent/approve  (legacy — kept for compatibility)
+══════════════════════════════════════════════════════════════ */
+router.post("/approve", async (req, res) => {
   const { command } = req.body as { command?: string };
-  if (!command) {
-    res.status(400).json({ error: "command required" });
-    return;
-  }
-
-  try {
-    const out = execSync(command, {
-      cwd: WORKSPACE,
-      timeout: 30000,
-      encoding: "utf-8",
-      maxBuffer: 512 * 1024,
-    });
-    res.json({ ok: true, output: (out ?? "").trim() });
-  } catch (e) {
-    const err = e as { stdout?: string; stderr?: string; message?: string };
-    res.json({ ok: false, output: err.stderr ?? err.stdout ?? err.message ?? String(e) });
-  }
+  if (!command) { res.status(400).json({ error: "command required" }); return; }
+  const result = await toolExecuteCommand({ command, timeout_ms: 60000 });
+  res.json({ ok: true, output: result });
 });
 
-/* ── AI code completion (inline autocomplete) ── */
+/* ══════════════════════════════════════════════════════════════
+   POST /api/ide-agent/complete  (inline autocomplete)
+══════════════════════════════════════════════════════════════ */
 router.post("/complete", async (req, res) => {
   const { code, language, filename, prefix, suffix } = req.body ?? {};
   if (!code && !prefix) { res.status(400).json({ error: "code or prefix required" }); return; }
-
   try {
     const lang = language ?? "javascript";
     const file = filename ?? "file";
     const context = prefix ?? code ?? "";
-    const after   = suffix ?? "";
-
+    const after = suffix ?? "";
     const prompt = after
-      ? `Complete this ${lang} code. File: ${file}\n\nCode before cursor:\n${context}\n\nCode after cursor:\n${after}\n\nReturn ONLY the text to insert at the cursor position. No explanation, no markdown.`
-      : `Continue this ${lang} code naturally. File: ${file}\n\n${context}\n\nReturn ONLY the next few tokens/lines to add. No explanation, no markdown, no repetition of existing code.`;
-
+      ? `Complete this ${lang} code. File: ${file}\n\nBefore cursor:\n${context}\n\nAfter cursor:\n${after}\n\nReturn ONLY the text to insert. No explanation, no markdown.`
+      : `Continue this ${lang} code naturally. File: ${file}\n\n${context}\n\nReturn ONLY the next tokens/lines. No explanation, no markdown, no repetition.`;
     const msg = await anthropic.messages.create({
-      model: "claude-3-5-haiku-20241022",
-      max_tokens: 200,
+      model: "claude-haiku-4-5",
+      max_tokens: 256,
       messages: [{ role: "user", content: prompt }],
     });
-
     const text = msg.content[0]?.type === "text" ? msg.content[0].text : "";
     const clean = text.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trimEnd();
     res.json({ completion: clean });
   } catch (err) {
-    console.error("Autocomplete error:", err);
+    req.log.error({ err }, "autocomplete failed");
     res.json({ completion: "" });
   }
 });
