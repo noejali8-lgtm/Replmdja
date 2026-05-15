@@ -37,6 +37,7 @@ import GodmodeReadmePage from "@/pages/godmode-readme";
 import GodmodeLeaderboardPage from "@/pages/godmode-leaderboard";
 import JarvisPage from "@/pages/jarvis";
 import OpenClawPage from "@/pages/openclaw";
+import GeminiPage from "@/pages/gemini";
 import LoginPage from "@/pages/login";
 import SettingsPage from "@/pages/settings";
 import NotificationsPage from "@/pages/notifications";
@@ -85,6 +86,7 @@ function Router() {
         <Route path="/godmode-leaderboard" component={GodmodeLeaderboardPage} />
         <Route path="/jarvis" component={JarvisPage} />
         <Route path="/openclaw" component={OpenClawPage} />
+        <Route path="/gemini" component={GeminiPage} />
         <Route path="/login" component={LoginPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/notifications" component={NotificationsPage} />
@@ -106,7 +108,7 @@ function AppLayout() {
   const isChat = location === "/chat";
   const isRufloPage = RUFLO_PAGES.some(p => location === p || location.startsWith(p + "/"));
   const isFullScreen = ["/notifications", "/profile", "/plans", "/bounties"].some(p => location === p || location.startsWith(p + "/"));
-  const hideBottomNav = isChat || isRufloPage;
+  const hideBottomNav = isChat || isRufloPage || location === "/gemini";
 
   // Show tour on first visit
   useEffect(() => {

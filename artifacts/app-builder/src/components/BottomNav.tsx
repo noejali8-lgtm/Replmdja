@@ -1,7 +1,22 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { FolderOpen, Plus, User, BookOpen, Compass, Grip } from "lucide-react";
+import { FolderOpen, Plus, User, BookOpen, Compass } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/* Gemini diamond icon inline */
+function GeminiIcon({ size = 20, active = false }: { size?: number; active?: boolean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M12 2C12 2 14.5 8 20 12C14.5 16 12 22 12 22C12 22 9.5 16 4 12C9.5 8 12 2 12 2Z"
+        fill={active ? "#60a5fa" : "currentColor"}
+        fillOpacity={active ? 1 : 0.45}
+        stroke={active ? "#93c5fd" : "none"}
+        strokeWidth="0.5"
+      />
+    </svg>
+  );
+}
 
 export function BottomNav() {
   const [location] = useLocation();
@@ -16,12 +31,11 @@ export function BottomNav() {
   }, []);
 
   const tabs = [
-    { id: "account", path: "/account", icon: User, label: "Account" },
-    { id: "explore", path: "/explore", icon: Compass, label: "Explore" },
-    { id: "create", path: "/", icon: Plus, label: "Create" },
-    { id: "templates", path: "/templates", icon: BookOpen, label: "Templates" },
-    { id: "projects", path: "/projects", icon: FolderOpen, label: "Projects" },
-    { id: "openclaw", path: "/openclaw", icon: Grip, label: "OpenClaw" },
+    { id: "account",  path: "/account",   icon: User,      label: "Account",   gemini: false },
+    { id: "explore",  path: "/explore",   icon: Compass,   label: "Explore",   gemini: false },
+    { id: "create",   path: "/",          icon: Plus,      label: "Create",    gemini: false },
+    { id: "projects", path: "/projects",  icon: FolderOpen,label: "Projects",  gemini: false },
+    { id: "gemini",   path: "/gemini",    icon: null,      label: "Gemini",    gemini: true  },
   ];
 
   const isExploreActive = location === "/explore"
@@ -49,6 +63,7 @@ export function BottomNav() {
               ? isExploreActive
               : location === tab.path || location.startsWith(tab.path + "/");
             const isCreate = tab.id === "create";
+            const isGemini = tab.id === "gemini";
 
             return (
               <Link key={tab.id} href={tab.path} className="flex-1 h-full">
@@ -57,7 +72,10 @@ export function BottomNav() {
                   className="flex flex-col items-center justify-center w-full h-full gap-1 cursor-pointer relative"
                 >
                   {isActive && !isCreate && (
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] bg-white rounded-full" />
+                    <div className={cn(
+                      "absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full",
+                      isGemini ? "bg-blue-400" : "bg-white"
+                    )} />
                   )}
 
                   {isCreate ? (
@@ -66,14 +84,26 @@ export function BottomNav() {
                         "w-[34px] h-[34px] rounded-[10px] flex items-center justify-center transition-all",
                         isActive ? "bg-white text-black" : "bg-white/10 text-white/70"
                       )}>
-                        <Icon size={18} strokeWidth={2} />
+                        {Icon && <Icon size={18} strokeWidth={2} />}
                       </div>
                       <span className={cn("text-[9px] font-medium", isActive ? "text-white" : "text-white/50")}>{tab.label}</span>
+                    </>
+                  ) : isGemini ? (
+                    <>
+                      <div className={cn(
+                        "w-[34px] h-[34px] rounded-[10px] flex items-center justify-center transition-all",
+                        isActive
+                          ? "bg-blue-500/20 border border-blue-400/40"
+                          : "bg-white/[0.04] border border-white/[0.07]"
+                      )}>
+                        <GeminiIcon size={18} active={isActive} />
+                      </div>
+                      <span className={cn("text-[9px] font-medium", isActive ? "text-blue-300" : "text-white/40")}>{tab.label}</span>
                     </>
                   ) : (
                     <>
                       <div className="relative">
-                        <Icon size={20} strokeWidth={isActive ? 2 : 1.5} className={isActive ? "text-white" : "text-white/40"} />
+                        {Icon && <Icon size={20} strokeWidth={isActive ? 2 : 1.5} className={isActive ? "text-white" : "text-white/40"} />}
                         {tab.id === "explore" && (
                           <div className={cn("absolute -top-0.5 -right-1 w-1.5 h-1.5 rounded-full border border-[#141414]", online ? "bg-green-400" : "bg-yellow-400")} />
                         )}

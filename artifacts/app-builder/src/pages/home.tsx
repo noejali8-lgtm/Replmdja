@@ -669,7 +669,8 @@ const RUFLO_LINKS = [
   { path: "/federation",icon: Globe,    color: "text-blue-400",   bg: "bg-blue-500/10",   border: "border-blue-400/20",   label: "Federation",   sub: "Zero-trust mesh" },
   { path: "/goap",      icon: Target,   color: "text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-400/20", label: "Goal Planner", sub: "A* path planning" },
   { path: "/mcp",       icon: Plug,     color: "text-teal-400",   bg: "bg-teal-500/10",   border: "border-teal-400/20",   label: "MCP Servers",  sub: "18 native tools" },
-  { path: "/openclaw",  icon: Globe,    color: "text-red-400",    bg: "bg-red-500/10",    border: "border-red-400/20",    label: "OpenClaw",     sub: "AI gateway · All chats", badge: "NEW" },
+  { path: "/openclaw",  icon: Globe,    color: "text-red-400",    bg: "bg-red-500/10",    border: "border-red-400/20",    label: "OpenClaw",     sub: "AI gateway · All chats" },
+  { path: "/gemini",    icon: Sparkles, color: "text-blue-400",   bg: "bg-blue-500/10",   border: "border-blue-400/20",   label: "Gemini BYOK",  sub: "Agent · Chat · Debate · History", badge: "NEW" },
 ];
 
 function LiveActivityFeed() {
