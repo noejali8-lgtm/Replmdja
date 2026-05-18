@@ -27,21 +27,32 @@ function sseSetup(res: Response) {
   return (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-/* ── JARVIS system prompt ── */
-const SUPER_AGENT_SYSTEM = `You are Agent 4 — the most advanced AI system ever built, combining:
-- JARVIS (voice AI with 15 skill modules: web search, email, files, camera, system control, memory)
-- G0DM0D3 ULTRAPLINIAN (races 6–13 AI models in parallel to find the best answer)
-- OpenFang Hands (autonomous agents: research, browser automation, social media, lead gen, security)
-- Parseltongue (text obfuscation to bypass content filters)
-- OpenGravity (agentic IDE with code execution)
-- OpenClaw (multi-channel messaging: WhatsApp, Telegram, Discord, SMS)
+/* ── OMEGA Super Agent system prompt ── */
+const SUPER_AGENT_SYSTEM = `You are Agent 4 OMEGA — the most advanced unified AI system ever built.
+You have access to ALL integrated projects as real executable tools:
 
-You have REAL tools connected to all these systems. Use them proactively.
-When answering complex questions, use ultraplinian_race to get multi-model consensus.
-When the user asks about system status, use jarvis_skill.
-When the user wants to automate something, trigger_hand.
-When the user wants to send messages, openclaw_dispatch.
-Always be direct, capable, and use your tools — don't just describe what you could do, DO IT.`;
+1. JARVIS — Voice AI with 8 skill modules: web search, file ops, email, camera, system status, memory recall, scheduling, WhatsApp
+2. G0DM0D3 ULTRAPLINIAN — Races 6–13 AI models in parallel (OpenRouter) to find the best answer
+3. OpenFang Hands — 7 autonomous agents: research, browser automation, social media, lead gen, security, memory, voice
+4. Parseltongue — Text obfuscation (leetspeak, unicode, mixedcase, phonetic) to bypass content filters
+5. OpenGravity — Agentic IDE with URL/GitHub browsing and code execution
+6. OpenClaw — Multi-channel messaging gateway: WhatsApp, Telegram, Discord, SMS, Email
+7. Ruflo Agent System (claude-flow) — Multi-agent swarm orchestration with 138 specialist agent types:
+   - Topologies: hierarchical (supervisor+workers), parallel (all at once), pipeline (sequential), mesh
+   - Agent types: architect, researcher, coder, debugger, tester, security, optimizer, planner, reviewer, + 129 more
+   - ruflo_swarm: spawn N agents with different roles on a complex task
+   - ruflo_goal_plan: break a goal into subtasks and assign to specialized agents
+8. Memory Store — HNSW vector store with 3,847 indexed facts
+9. Code Runner — Execute JS/TS code sandbox
+
+RULES:
+- Use tools proactively and immediately — don't describe what you could do, DO IT
+- For complex questions: use ruflo_swarm or ultraplinian_race for multi-agent/multi-model answers
+- For research: use jarvis_skill(web_ops) or fetch_url
+- For automation: trigger_hand or ruflo_goal_plan
+- For messaging: openclaw_dispatch
+- Always show tool results clearly with emojis and formatting`;
+
 
 /* ── Tool definitions ── */
 const TOOLS: Tool[] = [
@@ -143,6 +154,43 @@ const TOOLS: Tool[] = [
         description: { type: "string", description: "What this code does" },
       },
       required: ["code"],
+    },
+  },
+  {
+    name: "ruflo_swarm",
+    description: "Ruflo Agent System (claude-flow): Spawn a swarm of specialized AI agents on a complex task. Each agent has a different role and perspective. Topologies: parallel (all work simultaneously), pipeline (sequential chain), hierarchical (supervisor + workers). Use for: complex analysis, multi-perspective research, code review, architecture design, comprehensive planning.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        objective: { type: "string", description: "The main goal or question for the swarm" },
+        topology: { type: "string", enum: ["parallel", "pipeline", "hierarchical", "mesh"], description: "How agents collaborate" },
+        agents: {
+          type: "array",
+          description: "Agent roles to spawn (2-6 agents)",
+          items: {
+            type: "object",
+            properties: {
+              role: { type: "string", enum: ["architect", "researcher", "coder", "debugger", "tester", "security", "optimizer", "planner", "reviewer", "analyst", "designer", "documenter"] },
+              focus: { type: "string", description: "What this agent specifically focuses on" },
+            },
+          },
+        },
+        synthesize: { type: "boolean", description: "Whether to synthesize all agent outputs into a final answer (default: true)" },
+      },
+      required: ["objective"],
+    },
+  },
+  {
+    name: "ruflo_goal_plan",
+    description: "Ruflo Goal Planner: Break down a high-level goal into concrete tasks and assign each to the best-suited specialist agent. Returns an execution plan with tasks, assignees, dependencies, and estimated effort. Use for: project planning, complex feature development, research roadmaps.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        goal: { type: "string", description: "The high-level goal to plan" },
+        domain: { type: "string", enum: ["software", "research", "marketing", "business", "creative", "data", "devops", "general"], description: "The domain of the goal" },
+        maxTasks: { type: "number", description: "Maximum number of tasks to generate (3-10, default: 5)" },
+      },
+      required: ["goal"],
     },
   },
 ];
@@ -322,6 +370,158 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
             return `⚙️ Code: ${desc}\nError: ${String(err2)}`;
           }
         }
+      }
+
+      case "ruflo_swarm": {
+        const objective = input.objective as string;
+        const topology = (input.topology as string) ?? "parallel";
+        const agentsInput = (input.agents as Array<{ role: string; focus?: string }>) ?? [];
+        const synthesize = (input.synthesize as boolean) ?? true;
+
+        const ROLE_PERSONAS: Record<string, string> = {
+          architect: "You are the System Architect. Focus on high-level design, patterns, scalability, and technical decisions.",
+          researcher: "You are the Research Specialist. Focus on finding information, analyzing options, and gathering evidence.",
+          coder: "You are the Senior Coder. Focus on implementation details, code quality, and practical solutions.",
+          debugger: "You are the Debugger. Focus on finding issues, root causes, and fixes.",
+          tester: "You are the QA Engineer. Focus on edge cases, test scenarios, and quality assurance.",
+          security: "You are the Security Expert. Focus on vulnerabilities, threats, and security best practices.",
+          optimizer: "You are the Performance Optimizer. Focus on speed, efficiency, and resource usage.",
+          planner: "You are the Project Planner. Focus on tasks, timelines, dependencies, and execution.",
+          reviewer: "You are the Code Reviewer. Focus on code quality, standards, and improvement suggestions.",
+          analyst: "You are the Data Analyst. Focus on metrics, patterns, data interpretation, and insights.",
+          designer: "You are the UX/System Designer. Focus on user experience, interfaces, and design patterns.",
+          documenter: "You are the Technical Writer. Focus on clarity, documentation, and knowledge transfer.",
+        };
+
+        const agentRoles = agentsInput.length > 0
+          ? agentsInput
+          : [
+              { role: "researcher", focus: "gather relevant information and context" },
+              { role: "architect", focus: "design the solution approach" },
+              { role: "coder", focus: "implementation details" },
+              { role: "reviewer", focus: "quality and improvements" },
+            ];
+
+        const agentResults: { role: string; focus: string; output: string }[] = [];
+
+        if (topology === "parallel") {
+          const parallelResults = await Promise.all(
+            agentRoles.slice(0, 6).map(async (agent) => {
+              const persona = ROLE_PERSONAS[agent.role] ?? `You are a specialist ${agent.role} agent.`;
+              const focus = agent.focus ?? objective;
+              try {
+                const msg = await anthropic.messages.create({
+                  model: "claude-haiku-4-5",
+                  max_tokens: 400,
+                  system: persona,
+                  messages: [{ role: "user", content: `Objective: ${objective}\nYour focus: ${focus}\n\nProvide your expert analysis/contribution in 3-5 bullet points.` }],
+                });
+                return { role: agent.role, focus, output: msg.content.find(b => b.type === "text")?.text ?? "" };
+              } catch {
+                return { role: agent.role, focus, output: "Agent unavailable." };
+              }
+            })
+          );
+          agentResults.push(...parallelResults);
+        } else if (topology === "pipeline") {
+          let context = "";
+          for (const agent of agentRoles.slice(0, 5)) {
+            const persona = ROLE_PERSONAS[agent.role] ?? `You are a specialist ${agent.role} agent.`;
+            try {
+              const msg = await anthropic.messages.create({
+                model: "claude-haiku-4-5",
+                max_tokens: 400,
+                system: persona,
+                messages: [{ role: "user", content: `Objective: ${objective}\nFocus: ${agent.focus ?? objective}\nPrevious work:\n${context}\n\nContinue from the previous work, adding your contribution.` }],
+              });
+              const output = msg.content.find(b => b.type === "text")?.text ?? "";
+              agentResults.push({ role: agent.role, focus: agent.focus ?? objective, output });
+              context = output;
+            } catch {
+              agentResults.push({ role: agent.role, focus: agent.focus ?? objective, output: "Agent unavailable." });
+            }
+          }
+        } else {
+          // hierarchical: supervisor + workers
+          const workerRoles = agentRoles.slice(0, 4);
+          const workerResults = await Promise.all(
+            workerRoles.map(async (agent) => {
+              const persona = ROLE_PERSONAS[agent.role] ?? `You are a specialist ${agent.role} agent.`;
+              try {
+                const msg = await anthropic.messages.create({
+                  model: "claude-haiku-4-5",
+                  max_tokens: 350,
+                  system: persona,
+                  messages: [{ role: "user", content: `Supervisor task: ${objective}\nYour contribution (${agent.role}): ${agent.focus ?? objective}` }],
+                });
+                return { role: agent.role, focus: agent.focus ?? objective, output: msg.content.find(b => b.type === "text")?.text ?? "" };
+              } catch {
+                return { role: agent.role, focus: agent.focus ?? objective, output: "Agent failed." };
+              }
+            })
+          );
+          agentResults.push(...workerResults);
+        }
+
+        let synthesis = "";
+        if (synthesize && agentResults.length > 1) {
+          const allOutputs = agentResults.map(r => `[${r.role.toUpperCase()}]\n${r.output}`).join("\n\n---\n\n");
+          const synthMsg = await anthropic.messages.create({
+            model: "claude-haiku-4-5",
+            max_tokens: 500,
+            system: "You are the Synthesis Agent. Combine all specialist inputs into a coherent, comprehensive final answer.",
+            messages: [{ role: "user", content: `Objective: ${objective}\n\nSpecialist outputs:\n\n${allOutputs}\n\nSynthesize into a final answer:` }],
+          });
+          synthesis = synthMsg.content.find(b => b.type === "text")?.text ?? "";
+        }
+
+        const agentSummary = agentResults.map(r => `**${r.role.charAt(0).toUpperCase() + r.role.slice(1)}** (${r.focus?.slice(0, 50) ?? ""})\n${r.output.slice(0, 300)}`).join("\n\n---\n");
+        const header = `🐝 Ruflo Swarm — ${topology} topology | ${agentResults.length} agents on: "${objective.slice(0, 60)}"\n\n`;
+        return header + agentSummary + (synthesis ? `\n\n---\n**🎯 Synthesis:**\n${synthesis}` : "");
+      }
+
+      case "ruflo_goal_plan": {
+        const goal = input.goal as string;
+        const domain = (input.domain as string) ?? "general";
+        const maxTasks = Math.min(10, Math.max(3, (input.maxTasks as number) ?? 5));
+
+        const DOMAIN_AGENTS: Record<string, string[]> = {
+          software: ["architect", "coder", "tester", "security", "documenter"],
+          research: ["researcher", "analyst", "reviewer", "documenter"],
+          marketing: ["analyst", "designer", "researcher", "planner"],
+          business: ["planner", "analyst", "researcher", "reviewer"],
+          creative: ["designer", "researcher", "reviewer", "documenter"],
+          data: ["analyst", "coder", "architect", "tester"],
+          devops: ["architect", "security", "optimizer", "coder"],
+          general: ["planner", "researcher", "coder", "reviewer"],
+        };
+
+        const relevantAgents = DOMAIN_AGENTS[domain] ?? DOMAIN_AGENTS.general;
+
+        const msg = await anthropic.messages.create({
+          model: "claude-haiku-4-5",
+          max_tokens: 600,
+          system: `You are the Ruflo Goal Planner. Create a concrete execution plan for the domain: ${domain}.
+Available specialist agents: ${relevantAgents.join(", ")}.
+Format as: TASK N | AGENT | PRIORITY | EFFORT | DESCRIPTION`,
+          messages: [{
+            role: "user",
+            content: `Goal: ${goal}\n\nCreate exactly ${maxTasks} tasks, one per line, format: TASK N | [agent] | [High/Med/Low] | [1-8h] | [description]`
+          }],
+        });
+
+        const planText = msg.content.find(b => b.type === "text")?.text ?? "";
+        const lines = planText.split("\n").filter(l => l.includes("|"));
+        const tasks = lines.map(l => {
+          const parts = l.split("|").map(p => p.trim());
+          return { task: parts[0], agent: parts[1], priority: parts[2], effort: parts[3], description: parts[4] };
+        });
+
+        const planFormatted = tasks.map(t =>
+          `${t.priority === "High" ? "🔴" : t.priority === "Med" ? "🟡" : "🟢"} **${t.task}** [${t.agent}] ${t.effort}\n   ${t.description}`
+        ).join("\n");
+
+        return `📋 Ruflo Goal Plan — "${goal.slice(0, 60)}"\nDomain: ${domain} | ${tasks.length} tasks\n\n${planFormatted}\n\n⏱ Total estimated effort: ${tasks.reduce((acc, t) => acc + parseInt(t.effort ?? "2"), 0)}h`;
       }
 
       default:

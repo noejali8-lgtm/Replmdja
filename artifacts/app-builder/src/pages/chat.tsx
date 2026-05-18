@@ -51,6 +51,15 @@ interface BuildStep {
   status: "pending" | "active" | "done";
 }
 
+interface OmegaLog {
+  id: string;
+  tool: string;
+  label: string;
+  status: "running" | "done" | "error";
+  result?: string;
+  time: number;
+}
+
 type AgentMode = "Core+" | "Power" | "Economy" | "Lite" | "OMEGA";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -5197,6 +5206,43 @@ function ArtifactPreviewPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
+/* ── OMEGA Status Bar ─────────────────────────────────────────────────────── */
+function OmegaStatusBar({ logs, active }: { logs: OmegaLog[]; active: boolean }) {
+  if (!active && logs.length === 0) return null;
+  const running = logs.find(l => l.status === "running");
+  const done = logs.filter(l => l.status === "done");
+  return (
+    <div className="shrink-0 px-3 py-1.5 border-b border-orange-500/20 bg-orange-500/5">
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {active && <motion.div className="w-1.5 h-1.5 rounded-full bg-orange-400" animate={{ scale: [1, 1.4, 1] }} transition={{ duration: 1, repeat: Infinity }} />}
+          <span className="text-[9px] font-bold text-orange-400/80 uppercase tracking-wider">🔱 OMEGA</span>
+        </div>
+        {running && (
+          <div className="flex items-center gap-1 overflow-hidden flex-1">
+            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}>
+              <span className="text-[10px]">⚙️</span>
+            </motion.div>
+            <span className="text-[10px] text-orange-300/70 truncate">{running.label}</span>
+          </div>
+        )}
+        {!running && done.length > 0 && (
+          <div className="flex items-center gap-1 flex-1 overflow-x-auto no-scrollbar">
+            {done.slice(-4).map(l => (
+              <span key={l.id} className="text-[9px] bg-orange-500/10 border border-orange-500/20 text-orange-300/60 px-1.5 py-0.5 rounded-full shrink-0 whitespace-nowrap">
+                ✓ {l.label.split("—")[0].trim()}
+              </span>
+            ))}
+          </div>
+        )}
+        {done.length > 0 && (
+          <span className="text-[9px] text-orange-400/50 shrink-0">{done.length} tool{done.length !== 1 ? "s" : ""}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Super Powers Panel ───────────────────────────────────────────────────── */
 function SuperPowersPanel({ onClose }: { onClose: () => void }) {
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -5212,24 +5258,27 @@ function SuperPowersPanel({ onClose }: { onClose: () => void }) {
 
   const SYSTEMS = [
     { key: "jarvis", label: "JARVIS", icon: "🤖", desc: "8 skill modules", color: "from-cyan-500/20 to-blue-500/20 border-cyan-500/30" },
-    { key: "ultraplinian", label: "ULTRAPLINIAN", icon: "⚡", desc: "5 tiers, up to 13 models racing", color: "from-yellow-500/20 to-orange-500/20 border-yellow-500/30" },
-    { key: "openFang", label: "OpenFang Hands", icon: "✋", desc: "7 autonomous agents", color: "from-purple-500/20 to-pink-500/20 border-purple-500/30" },
+    { key: "ultraplinian", label: "ULTRAPLINIAN", icon: "⚡", desc: "5 tiers, 6–13 models racing", color: "from-yellow-500/20 to-orange-500/20 border-yellow-500/30" },
+    { key: "openFang", label: "OpenFang Hands", icon: "✋", desc: "7 autonomous hand agents", color: "from-purple-500/20 to-pink-500/20 border-purple-500/30" },
     { key: "parseltongue", label: "Parseltongue", icon: "🐍", desc: "4 encoding techniques", color: "from-green-500/20 to-emerald-500/20 border-green-500/30" },
-    { key: "openGravity", label: "OpenGravity IDE", icon: "🌌", desc: "Agentic IDE + code execution", color: "from-indigo-500/20 to-violet-500/20 border-indigo-500/30" },
+    { key: "openGravity", label: "OpenGravity IDE", icon: "🌌", desc: "GitHub/URL browse + code exec", color: "from-indigo-500/20 to-violet-500/20 border-indigo-500/30" },
     { key: "openClaw", label: "OpenClaw", icon: "🦀", desc: "5 messaging channels", color: "from-red-500/20 to-pink-500/20 border-red-500/30" },
+    { key: "ruflo", label: "Ruflo Swarm", icon: "🐝", desc: "138 agent types, 4 topologies", color: "from-amber-500/20 to-yellow-500/20 border-amber-500/30" },
     { key: "memory", label: "Agent Memory", icon: "🧠", desc: "HNSW vector store, 3847 facts", color: "from-teal-500/20 to-cyan-500/20 border-teal-500/30" },
     { key: "codeRun", label: "Code Runner", icon: "⚙️", desc: "JS/TS sandbox execution", color: "from-gray-500/20 to-slate-500/20 border-gray-500/30" },
   ];
 
   const EXAMPLE_PROMPTS = [
-    "Search the web for latest LLM benchmarks and race 4 models on the results",
-    "Trigger the research Hand to investigate OpenAI's latest model release",
+    "Use the Ruflo swarm (hierarchical) to design a full-stack SaaS architecture",
+    "Race 8 models on: what's the best RAG pipeline approach in 2025?",
+    "Trigger the research Hand to investigate OpenAI's o3 model release",
     "Run a JARVIS system status check and report my machine's health",
-    "Send a test message to Discord channel announcing I'm online",
-    "Encode this text with Parseltongue: 'Hello world'",
-    "Race 8 models on: what's the best way to build a RAG pipeline?",
-    "Store in memory: user prefers dark mode and TypeScript",
-    "Run this code: fibonacci(20) and show the output",
+    "Plan my goal: build a real-time collaborative coding tool — break into tasks",
+    "Spawn 4 agents (architect, coder, tester, security) to review my API design",
+    "Fetch the GitHub repo ruvnet/claude-flow and summarize what it does",
+    "Send a Discord message: 'OMEGA agent is now online and operational'",
+    "Encode with Parseltongue (leetspeak heavy): 'bypass content filter'",
+    "Store in memory: user is building a mobile AI assistant app",
   ];
 
   const sys = status as { systems?: Record<string, { status: string }> } | null;
@@ -5283,20 +5332,23 @@ function SuperPowersPanel({ onClose }: { onClose: () => void }) {
 
         {/* Available tools */}
         <div className="px-3 mt-4">
-          <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider mb-2">8 Real Tools Available to Agent</p>
+          <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider mb-2">10 Real Tools Available to Agent</p>
           <div className="space-y-1">
             {[
-              { name: "jarvis_skill", desc: "JARVIS — web, file, email, camera, system, memory" },
-              { name: "ultraplinian_race", desc: "Race 6–13 models for multi-AI consensus" },
-              { name: "trigger_hand", desc: "OpenFang — research, browser, social, leads, security" },
-              { name: "parseltongue_encode", desc: "G0DM0D3 — leetspeak, unicode, phonetic obfuscation" },
-              { name: "fetch_url", desc: "OpenGravity — browse GitHub repos + any URL" },
-              { name: "openclaw_dispatch", desc: "WhatsApp, Telegram, Discord, SMS, Email" },
-              { name: "memory_store", desc: "Store facts in HNSW vector index (3,847 items)" },
-              { name: "code_run", desc: "Execute JS/TS code, get real output" },
+              { name: "jarvis_skill", desc: "🤖 JARVIS — web, file, email, camera, system, memory, WhatsApp", hot: false },
+              { name: "ultraplinian_race", desc: "⚡ Race 6–13 models (OpenRouter) for multi-AI consensus", hot: false },
+              { name: "trigger_hand", desc: "✋ OpenFang — research, browser, social, leads, security, memory", hot: false },
+              { name: "parseltongue_encode", desc: "🐍 G0DM0D3 — leetspeak, unicode, phonetic obfuscation", hot: false },
+              { name: "fetch_url", desc: "🌌 OpenGravity — browse GitHub repos + any URL", hot: false },
+              { name: "openclaw_dispatch", desc: "🦀 WhatsApp, Telegram, Discord, SMS, Email", hot: false },
+              { name: "ruflo_swarm", desc: "🐝 Ruflo — spawn N specialist agents (parallel/pipeline/hierarchical)", hot: true },
+              { name: "ruflo_goal_plan", desc: "📋 Ruflo — break goal into tasks, assign to specialist agents", hot: true },
+              { name: "memory_store", desc: "🧠 Store facts in HNSW vector index (3,847 items)", hot: false },
+              { name: "code_run", desc: "⚙️ Execute JS/TS code sandbox, get real output", hot: false },
             ].map(t => (
-              <div key={t.name} className="flex items-start gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                <code className="text-[9px] text-orange-400 font-mono shrink-0 mt-0.5">{t.name}</code>
+              <div key={t.name} className={`flex items-start gap-2 px-3 py-2 rounded-xl border ${t.hot ? "bg-amber-500/[0.06] border-amber-500/20" : "bg-white/[0.03] border-white/[0.05]"}`}>
+                <code className={`text-[9px] font-mono shrink-0 mt-0.5 ${t.hot ? "text-amber-400" : "text-orange-400"}`}>{t.name}</code>
+                {t.hot && <span className="text-[8px] bg-amber-500/20 text-amber-300 px-1 rounded-sm font-bold shrink-0 mt-0.5">NEW</span>}
                 <p className="text-[10px] text-white/40">{t.desc}</p>
               </div>
             ))}
@@ -5363,6 +5415,7 @@ export default function Chat() {
   const [showQuickSuggestions, setShowQuickSuggestions] = useState(true);
   const [showMoreTools, setShowMoreTools] = useState(false);
   const [showSuperPowers, setShowSuperPowers] = useState(false);
+  const [omegaLogs, setOmegaLogs] = useState<OmegaLog[]>([]);
   const [showDebate, setShowDebate] = useState(false);
   const [showDeploy, setShowDeploy] = useState(false);
   const [agentPhase, setAgentPhase] = useState(0);
@@ -5531,14 +5584,18 @@ export default function Chat() {
     try {
       /* ── OMEGA mode: use super-agent with real tool-use ── */
       if (agentMode === "OMEGA") {
-        const history = messages.slice(-14).map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
+        setOmegaLogs([]);
+        const history = messages
+          .filter(m => m.role === "user" || m.role === "assistant")
+          .slice(-14)
+          .map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
         const response = await fetch(`${BASE_URL}/api/super-agent/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: [...history, { role: "user", content }], maxTokens: 1500 }),
+          body: JSON.stringify({ messages: [...history, { role: "user", content }], maxTokens: 2000 }),
           signal: controller.signal,
         });
-        if (!response.ok || !response.body) throw new Error("Super-agent stream failed");
+        if (!response.ok || !response.body) throw new Error(`Super-agent stream failed: ${response.status}`);
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -5552,8 +5609,33 @@ export default function Chat() {
             if (!line.startsWith("data: ")) continue;
             try {
               const data = JSON.parse(line.slice(6));
-              if (data.tool_call) { setCurrentToolCall(data.tool_call); }
-              if (data.tool_result) { setCurrentToolCall(null); }
+              if (data.tool_call) {
+                const logId = `log-${Date.now()}`;
+                const TOOL_LABELS: Record<string, string> = {
+                  jarvis_skill: `🤖 JARVIS — ${String((data.tool_call.input as Record<string,unknown>)?.skill ?? "skill")}`,
+                  ultraplinian_race: `⚡ ULTRAPLINIAN — racing ${String((data.tool_call.input as Record<string,unknown>)?.tier ?? "fast")} tier`,
+                  trigger_hand: `✋ OpenFang Hand — ${String((data.tool_call.input as Record<string,unknown>)?.hand ?? "")}`,
+                  parseltongue_encode: `🐍 Parseltongue encoding`,
+                  fetch_url: `🌌 OpenGravity fetch`,
+                  openclaw_dispatch: `🦀 OpenClaw → ${String((data.tool_call.input as Record<string,unknown>)?.channel ?? "")}`,
+                  memory_store: `🧠 Memory store`,
+                  code_run: `⚙️ Code runner`,
+                  ruflo_swarm: `🐝 Ruflo swarm — ${String((data.tool_call.input as Record<string,unknown>)?.topology ?? "parallel")}`,
+                  ruflo_goal_plan: `📋 Ruflo goal planner`,
+                };
+                const label = TOOL_LABELS[data.tool_call.name] ?? `🔧 ${data.tool_call.name}`;
+                setOmegaLogs(prev => [...prev, { id: logId, tool: data.tool_call.name, label, status: "running", time: Date.now() }]);
+                setCurrentToolCall({ ...data.tool_call, _logId: logId });
+              }
+              if (data.tool_result) {
+                setCurrentToolCall(null);
+                const logId = (currentToolCall as (Record<string,unknown>|null))?._logId as string | undefined;
+                setOmegaLogs(prev => prev.map(l =>
+                  l.tool === data.tool_result.name && l.status === "running"
+                    ? { ...l, status: "done", result: String(data.tool_result.result).slice(0, 120) }
+                    : l
+                ));
+              }
               if (data.content) {
                 setCurrentToolCall(null);
                 if (isFirst) {
@@ -5569,15 +5651,18 @@ export default function Chat() {
               if (data.done) {
                 const responseTimeMs = Date.now() - sendTime;
                 const outputTokens = Math.round(totalOutputText.length / 4);
-                const stats: MessageStats = { inputTokens: estimatedInputTokens, outputTokens, responseTimeMs, ttftMs, cost: 0, tokensPerSec: (outputTokens / responseTimeMs) * 1000, model: "claude-opus-4-5 (OMEGA)" };
+                const stats: MessageStats = { inputTokens: estimatedInputTokens, outputTokens, responseTimeMs, ttftMs, cost: 0, tokensPerSec: outputTokens > 0 && responseTimeMs > 0 ? (outputTokens / responseTimeMs) * 1000 : 0, model: "claude-opus-4-5 (OMEGA)" };
                 setCurrentToolCall(null);
                 setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, isStreaming: false, stats } : m));
                 setSessionStats(prev => [...prev, stats]);
               }
-              if (data.error && isFirst) {
-                setIsThinking(false);
-                setMessages(prev => [...prev, { id: assistantMsgId, role: "assistant", content: `⚠️ OMEGA error: ${data.error}`, timestamp: new Date() }]);
-                isFirst = false;
+              if (data.error) {
+                setCurrentToolCall(null);
+                if (isFirst) {
+                  setIsThinking(false);
+                  setMessages(prev => [...prev, { id: assistantMsgId, role: "assistant", content: `⚠️ OMEGA error: ${data.error}`, timestamp: new Date() }]);
+                  isFirst = false;
+                }
               }
             } catch { /* ignore */ }
           }
@@ -5681,6 +5766,13 @@ export default function Chat() {
     setMessages([{ id: userMsgId, role: "user", content: prompt, timestamp: now }]);
     setIsThinking(true);
     try {
+      /* ── OMEGA mode: skip standard conversation creation + animation ── */
+      if (agentMode === "OMEGA") {
+        const omegaConvId = -(Date.now()); // negative local ID so never conflicts with server IDs
+        setConversationId(omegaConvId);
+        await sendMessage(prompt, omegaConvId);
+        return;
+      }
       const convRes = await fetch(`${BASE_URL}/api/anthropic/conversations`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: prompt.slice(0, 80) }),
@@ -5698,7 +5790,7 @@ export default function Chat() {
         timestamp: new Date()
       }]);
     }
-  }, [runBuildAnimation, sendMessage]);
+  }, [runBuildAnimation, sendMessage, agentMode]);
 
   useEffect(() => {
     if (hasInitialized.current) return;
@@ -5812,8 +5904,13 @@ export default function Chat() {
         </button>
       </div>
 
+      {/* ── OMEGA Status Bar ── */}
+      {agentMode === "OMEGA" && (
+        <OmegaStatusBar logs={omegaLogs} active={isThinking && agentMode === "OMEGA"} />
+      )}
+
       {/* ── Token Budget Bar ── */}
-      {(() => {
+      {agentMode !== "OMEGA" && (() => {
         const total = sessionStats.reduce((s, m) => s + m.inputTokens + m.outputTokens, 0);
         return <TokenBudgetBar usedTokens={total} />;
       })()}
@@ -5914,6 +6011,8 @@ export default function Chat() {
                       : (currentToolCall.name === "openclaw_dispatch") ? <span className="text-sm">🦀</span>
                       : (currentToolCall.name === "memory_store") ? <span className="text-sm">🧠</span>
                       : (currentToolCall.name === "code_run") ? <span className="text-sm">⚙️</span>
+                      : (currentToolCall.name === "ruflo_swarm") ? <span className="text-sm">🐝</span>
+                      : (currentToolCall.name === "ruflo_goal_plan") ? <span className="text-sm">📋</span>
                       : <Github size={13} className="text-muted-foreground/70 shrink-0" />
                     }
                   </motion.div>
@@ -5926,6 +6025,8 @@ export default function Chat() {
                         : currentToolCall.name === "openclaw_dispatch" ? `OpenClaw → ${String((currentToolCall.input as Record<string,unknown>)?.channel ?? "")}...`
                         : currentToolCall.name === "memory_store" ? "Storing in memory..."
                         : currentToolCall.name === "code_run" ? "Executing code..."
+                        : currentToolCall.name === "ruflo_swarm" ? `Ruflo swarm — ${String((currentToolCall.input as Record<string,unknown>)?.topology ?? "parallel")} topology...`
+                        : currentToolCall.name === "ruflo_goal_plan" ? "Ruflo goal planning..."
                         : "Fetching repository..."}
                     </p>
                     {currentToolCall.input && typeof currentToolCall.input === "object" && "url" in currentToolCall.input && (
@@ -6237,7 +6338,7 @@ export default function Chat() {
                     </div>
                   </motion.button>
 
-                  <div className="grid grid-cols-4 gap-1.5 mb-3">
+                  <div className="grid grid-cols-5 gap-1.5 mb-3">
                     {AGENT_MODES.map((mode) => (
                       <motion.button
                         key={mode.id}
@@ -6384,21 +6485,37 @@ export default function Chat() {
             {/* Agent mode pill */}
             <motion.button
               whileTap={{ scale: 0.96 }}
-              onClick={() => agentMode === "Core+" ? setShowAIModels(true) : setShowModes(!showModes)}
+              onClick={() =>
+                agentMode === "OMEGA" ? setShowSuperPowers(true)
+                : agentMode === "Core+" ? setShowAIModels(true)
+                : setShowModes(!showModes)
+              }
               className={cn(
                 "flex items-center gap-1 px-2.5 py-1.5 rounded-full border hover:bg-white/10 transition-colors shrink-0",
-                agentMode === "Core+"
+                agentMode === "OMEGA"
+                  ? "bg-orange-500/20 border-orange-400/50 hover:bg-orange-500/25"
+                  : agentMode === "Core+"
                   ? "bg-purple-500/15 border-purple-400/30 hover:bg-purple-500/20"
                   : "bg-white/6 border-white/10"
               )}
               data-testid="button-agent-mode"
             >
-              <AgentDots size={11} className={agentMode === "Core+" ? "text-purple-400" : "text-white/70"} />
-              <span className={cn("text-xs font-medium", agentMode === "Core+" ? "text-purple-300" : "text-white/80")}>{agentMode}</span>
+              {agentMode === "OMEGA"
+                ? <span className="text-[11px]">🔱</span>
+                : <AgentDots size={11} className={agentMode === "Core+" ? "text-purple-400" : "text-white/70"} />
+              }
+              <span className={cn("text-xs font-semibold",
+                agentMode === "OMEGA" ? "text-orange-300"
+                : agentMode === "Core+" ? "text-purple-300"
+                : "text-white/80"
+              )}>{agentMode}</span>
               {agentMode === "Core+" && selectedModelData && (
                 <span className="text-[9px] text-purple-400/70 truncate max-w-[60px]">{selectedModelData.name.split(" ").slice(-1)[0]}</span>
               )}
-              <ChevronDown size={10} className="text-white/40" />
+              {agentMode === "OMEGA"
+                ? <span className="text-[8px] bg-orange-500/30 text-orange-300 px-1 rounded-sm font-bold">10 tools</span>
+                : <ChevronDown size={10} className="text-white/40" />
+              }
             </motion.button>
 
             <div className="flex-1" />
