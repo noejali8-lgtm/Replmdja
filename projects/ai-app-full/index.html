@@ -1,0 +1,205 @@
+```html
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ذكاء اصطناعي - AI Assistant</title>
+<style>
+  :root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --glass-bg: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-hover: rgba(255, 255, 255, 0.08);
+    --accent: #58a6ff;
+    --accent-glow: rgba(88, 166, 255, 0.3);
+    --accent-secondary: #7c3aed;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #656d76;
+    --success: #3fb950;
+    --warning: #d29922;
+    --danger: #f85149;
+    --user-msg-bg: rgba(88, 166, 255, 0.15);
+    --ai-msg-bg: rgba(255, 255, 255, 0.05);
+    --sidebar-width: 280px;
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .light-mode {
+    --bg-primary: #f0f4f8;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #e8edf2;
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(0, 0, 0, 0.1);
+    --glass-hover: rgba(255, 255, 255, 0.9);
+    --text-primary: #1c2128;
+    --text-secondary: #57606a;
+    --text-muted: #8c959f;
+    --user-msg-bg: rgba(88, 166, 255, 0.2);
+    --ai-msg-bg: rgba(0, 0, 0, 0.05);
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', 'Arabic UI Text', Tahoma, Arial, sans-serif;
+  }
+
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow: hidden;
+    transition: var(--transition);
+    position: relative;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%;
+    right: -50%;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(ellipse at center, rgba(88, 166, 255, 0.08) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    bottom: -50%;
+    left: -50%;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(ellipse at center, rgba(124, 58, 237, 0.06) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app-container {
+    display: flex;
+    height: 100vh;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar {
+    width: var(--sidebar-width);
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-left: 1px solid var(--glass-border);
+    display: flex;
+    flex-direction: column;
+    transition: var(--transition);
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  .sidebar-header {
+    padding: 20px 16px 16px;
+    border-bottom: 1px solid var(--glass-border);
+  }
+
+  .logo-area {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .logo-icon {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    box-shadow: 0 0 20px var(--accent-glow);
+    animation: logoPulse 3s ease-in-out infinite;
+  }
+
+  @keyframes logoPulse {
+    0%, 100% { box-shadow: 0 0 20px var(--accent-glow); }
+    50% { box-shadow: 0 0 35px var(--accent-glow), 0 0 60px rgba(124, 58, 237, 0.2); }
+  }
+
+  .logo-text h1 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.5px;
+  }
+
+  .logo-text span {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .new-chat-btn {
+    width: 100%;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(124, 58, 237, 0.2));
+    border: 1px solid rgba(88, 166, 255, 0.3);
+    border-radius: 10px;
+    color: var(--accent);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: var(--transition);
+    font-family: inherit;
+    direction: rtl;
+  }
+
+  .new-chat-btn:hover {
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.3), rgba(124, 58, 237, 0.3));
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px var(--accent-glow);
+  }
+
+  /* Model Selector */
+  .model-selector {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--glass-border);
+  }
+
+  .model-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .model-select-wrapper {
+    position: relative;
+  }
+
+  .model-select {
+    width: 100%;
+    padding: 9px 14px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    appearance: none;
+    transition: var(--transition);
+    font-family: inherit;
+  }
+
+  .model-select:focus

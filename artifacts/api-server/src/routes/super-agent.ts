@@ -3842,7 +3842,16 @@ router.post("/chat", async (req: Request, res: Response) => {
 
     send({ done: true });
   } catch (err) {
-    send({ error: String(err) });
+    const errStr = String(err);
+    if (errStr.includes("FREE_TIER_BUDGET_EXCEEDED") || errStr.includes("free tier") || errStr.includes("spend limit")) {
+      send({ error: "FREE_TIER_BUDGET_EXCEEDED" });
+    } else if (errStr.includes("overloaded") || errStr.includes("529")) {
+      send({ error: "MODEL_OVERLOADED" });
+    } else if (errStr.includes("rate_limit") || errStr.includes("429")) {
+      send({ error: "RATE_LIMITED" });
+    } else {
+      send({ error: errStr });
+    }
   } finally {
     clearInterval(heartbeat);
     res.end();

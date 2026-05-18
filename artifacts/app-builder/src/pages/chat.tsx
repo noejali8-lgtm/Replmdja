@@ -16,7 +16,7 @@ import {
   GitMerge, Code2, Palette, BarChart3, TrendingUp,
   Github, Download, Settings, Globe2,
   ThumbsUp, ThumbsDown, Pin, Copy, Check, ChevronsDown, Gauge,
-  Mic, MicOff, Image, Package, ListTodo
+  Mic, MicOff, Image, Package, ListTodo, Bug
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -24,6 +24,7 @@ import { AIModelsPanel, ALL_MODELS } from "@/components/AIModelsPanel";
 import { AgentDebatePanel } from "@/components/AgentDebatePanel";
 import { DeploySheet } from "@/components/DeploySheet";
 import { TerminalPanel } from "@/components/TerminalPanel";
+import { DebuggerPanel } from "@/components/DebuggerPanel";
 import ProjectIDEPanel, { type ProjectFile } from "@/components/ProjectIDEPanel";
 
 interface MessageStats {
@@ -4599,6 +4600,37 @@ function MessageBubble({ msg, isLast, onQuickReply }: { msg: Message; isLast?: b
           )}
           {isUser ? (
             <p className="whitespace-pre-wrap">{msg.content}</p>
+          ) : msg.content === "__FREE_TIER_LIMIT__" ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-orange-500/8 border border-orange-500/25">
+                <div className="w-7 h-7 rounded-lg bg-orange-500/15 flex items-center justify-center shrink-0">
+                  <span className="text-sm">🚦</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-semibold text-orange-300">Monthly limit reached</div>
+                  <div className="text-[10px] text-orange-300/60 mt-0.5">OMEGA's free AI budget has been used up for this month.</div>
+                </div>
+              </div>
+              <p className="text-[11px] text-white/50 leading-relaxed">
+                The Anthropic AI integration included with Replit's free tier has hit its monthly spend cap. You can still use the app — just upgrade to a Replit paid plan or provide your own Anthropic API key to continue using OMEGA this month.
+              </p>
+            </div>
+          ) : msg.content === "__MODEL_OVERLOADED__" ? (
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-yellow-500/8 border border-yellow-500/25">
+              <span className="text-base">⏳</span>
+              <div>
+                <div className="text-[12px] font-semibold text-yellow-300">Model overloaded</div>
+                <div className="text-[10px] text-yellow-300/60">Claude is under heavy load right now. Try again in a few seconds.</div>
+              </div>
+            </div>
+          ) : msg.content === "__RATE_LIMITED__" ? (
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-blue-500/8 border border-blue-500/25">
+              <span className="text-base">🔄</span>
+              <div>
+                <div className="text-[12px] font-semibold text-blue-300">Rate limited</div>
+                <div className="text-[10px] text-blue-300/60">Too many requests. Wait a moment and try again.</div>
+              </div>
+            </div>
           ) : (
             <div className="prose prose-sm prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
               <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -5654,6 +5686,7 @@ export default function Chat() {
   const [showFiles, setShowFiles] = useState(false);
   const [showRun, setShowRun] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
+  const [showDebugger, setShowDebugger] = useState(false);
   const [showPublishing, setShowPublishing] = useState(false);
   const [showToolsSearch, setShowToolsSearch] = useState(false);
   const [showWebview, setShowWebview] = useState(false);
@@ -6090,7 +6123,15 @@ export default function Chat() {
                 setCurrentToolCall(null);
                 if (isFirst) {
                   setIsThinking(false);
-                  setMessages(prev => [...prev, { id: assistantMsgId, role: "assistant", content: `⚠️ OMEGA error: ${data.error}`, timestamp: new Date() }]);
+                  let errorContent = `⚠️ OMEGA error: ${data.error}`;
+                  if (data.error === "FREE_TIER_BUDGET_EXCEEDED") {
+                    errorContent = `__FREE_TIER_LIMIT__`;
+                  } else if (data.error === "MODEL_OVERLOADED") {
+                    errorContent = `__MODEL_OVERLOADED__`;
+                  } else if (data.error === "RATE_LIMITED") {
+                    errorContent = `__RATE_LIMITED__`;
+                  }
+                  setMessages(prev => [...prev, { id: assistantMsgId, role: "assistant", content: errorContent, timestamp: new Date() }]);
                   isFirst = false;
                 }
               }
@@ -6956,7 +6997,7 @@ export default function Chat() {
                 <span className="text-[9px] text-purple-400/70 truncate max-w-[60px]">{selectedModelData.name.split(" ").slice(-1)[0]}</span>
               )}
               {agentMode === "OMEGA"
-                ? <span className="text-[8px] bg-orange-500/30 text-orange-300 px-1 rounded-sm font-bold">59 tools</span>
+                ? <span className="text-[8px] bg-orange-500/30 text-orange-300 px-1 rounded-sm font-bold">61 tools</span>
                 : <ChevronDown size={10} className="text-white/40" />
               }
             </motion.button>
@@ -6992,7 +7033,7 @@ export default function Chat() {
             { icon: <Key size={13} />, label: "Secrets", action: () => setShowSecrets(true) },
             { icon: <Database size={13} />, label: "Database", action: () => setShowDatabase(true) },
             { icon: <ShieldCheck size={13} />, label: "Auth", action: () => setShowAuth(true) },
-            { icon: <ListTodo size={13} />, label: "Tasks", action: () => setShowTaskQueue(true) },
+            { icon: <Bug size={13} />, label: "Debugger", action: () => setShowDebugger(true), highlight: true },
             { icon: <BookOpen size={13} />, label: "Templates", action: () => setShowPromptTemplates(true) },
           ]).map(item => (
             <button key={item.label} onClick={item.action}
@@ -7111,6 +7152,21 @@ export default function Chat() {
       {/* ── Terminal Panel ── */}
       <AnimatePresence>
         {showTerminal && <TerminalPanel onClose={() => setShowTerminal(false)} />}
+      </AnimatePresence>
+
+      {/* ── Debugger Panel ── */}
+      <AnimatePresence>
+        {showDebugger && (
+          <DebuggerPanel
+            onClose={() => setShowDebugger(false)}
+            projectId={activeProjectId ?? undefined}
+            onSendDebugCommand={(action, args) => {
+              const prompt = `Run visual_debugger with action="${action}"${args?.file ? ` on file "${String(args.file)}"` : ""}${args?.variable ? ` for variable "${String(args.variable)}"` : ""}${args?.error ? ` analyzing error: ${String(args.error).slice(0, 100)}` : ""}`;
+              setInput(prompt);
+              setShowDebugger(false);
+            }}
+          />
+        )}
       </AnimatePresence>
 
       {/* ── Run Panel ── */}
