@@ -5224,15 +5224,102 @@ function ArtifactPreviewPanel({ onClose }: { onClose: () => void }) {
 
 /* ── Ruflo Swarm Visualization Panel ──────────────────────────────────────── */
 const ROLE_EMOJI: Record<string, string> = {
+  /* Core */
   architect: "🏗️", researcher: "🔍", coder: "💻", debugger: "🐛",
   tester: "🧪", security: "🛡️", optimizer: "⚡", planner: "📋",
   reviewer: "👁️", analyst: "📊", designer: "🎨", documenter: "📝",
+  /* Coordination (Ruflo) */
+  "adaptive-coordinator": "🔄", "byzantine-coordinator": "⚔️", "consensus-coordinator": "🤝",
+  "collective-intelligence-coordinator": "🧬", "gossip-coordinator": "📡", "hierarchical-coordinator": "🌲",
+  "mesh-coordinator": "🕸️", "queen-coordinator": "👑", "quorum-manager": "🗳️",
+  "raft-manager": "⚓", "sparc-coordinator": "✨", "sync-coordinator": "🔁",
+  "topology-optimizer": "🔭", "swarm-init": "🚀", "orchestrator-task": "🎼",
+  /* Code & Dev (Ruflo) */
+  "code-analyzer": "🔬", "code-goal-planner": "🎯", "code-review-swarm": "👁️‍🗨️",
+  "implementer-sparc-coder": "🛠️", "tdd-london-swarm": "🧪", "pseudocode": "📐",
+  "refinement": "💎", "specification": "📜",
+  /* Architecture */
+  "arch-system-design": "🏛️", "repo-architect": "📦", "v3-integration-architect": "🔌",
+  "v3-ddd-architecture": "🗺️",
+  /* GitHub & DevOps */
+  "github-pr-manager": "🐙", "github-modes": "🦑", "multi-repo-swarm": "🗂️",
+  "ops-cicd-github": "🔧", "production-validator": "✅", "release-manager": "🚀",
+  "release-swarm": "🎉", "workflow-automation": "⚙️", "hooks-automation": "🪝",
+  "project-board-sync": "📋", "pr-manager": "📬", "issue-tracker": "🐛",
+  "github-automation": "🤖", "github-code-review": "🔍", "github-multi-repo": "🗂️",
+  "github-project-management": "📊", "github-release-management": "📦", "github-workflow-automation": "⚡",
+  /* AI/ML (Ruflo) */
+  "neural-network": "🧠", "flow-nexus-neural": "⚡", "data-ml-model": "📊",
+  "sona-learning-optimizer": "🎓", "safla-neural": "🔮", "trading-predictor": "📈",
+  "neural-training": "🏋️", "agentdb-learning": "📚",
+  /* Security */
+  "security-manager": "🔐", "security-audit": "🛡️", "v3-security-architect": "🏰", "sandbox": "📦",
+  /* Memory & Data */
+  "memory-coordinator": "🧠", "swarm-memory-manager": "💾", "v3-memory-specialist": "🔮",
+  "memory-management": "🗄️", "agentdb-memory-patterns": "📐", "agentdb-vector-search": "🔎",
+  "reasoningbank-agentdb": "🏦", "reasoningbank-intelligence": "💡", "embeddings": "⚛️",
+  /* Performance */
+  "performance-benchmarker": "⏱️", "performance-optimizer": "⚡", "performance-analyzer": "📉",
+  "performance-monitor": "👁️", "matrix-optimizer": "🔢", "benchmark-suite": "🏁",
+  "pagerank-analyzer": "📈", "load-balancer": "⚖️", "resource-allocator": "🎛️",
+  "worker-specialist": "👷", "worker-benchmarks": "🏋️", "worker-integration": "🔗",
+  /* Special */
+  "scout-explorer": "🔭", "hive-mind": "🐝", "hive-mind-advanced": "🌟",
+  "swarm": "🌊", "swarm-advanced": "💫", "swarm-orchestration": "🎭",
+  "swarm-issue": "⚠️", "swarm-pr": "📬", "pair-programming": "👥",
+  "stream-chain": "🌊", "agentic-payments": "💳", "payments": "💰",
+  /* V3 */
+  "v3-queen-coordinator": "👸", "v3-performance-engineer": "⚡", "v3-cli-modernization": "💻",
+  "v3-core-implementation": "🔩", "v3-mcp-optimization": "🔌", "v3-memory-unification": "🔗",
+  "v3-performance-optimization": "🚀", "v3-security-overhaul": "🔒", "v3-swarm-coordination": "🕹️",
+  "v3-integration-deep": "🧩",
+  /* Misc */
+  "app-store": "🏪", "authentication": "🔑", "automation-smart-agent": "🤖",
+  "base-template-generator": "📋", "challenges": "🏆", "crdt-synchronizer": "🔄",
+  "dev-backend-api": "⚙️", "docs-api-openapi": "📚", "migration-plan": "🚚",
+  "spec-mobile-react-native": "📱", "user-tools": "🔧", "verification-quality": "✔️",
+  "workflow": "⚙️", "agentdb-advanced": "🗄️", "agentdb-optimization": "⚡",
+  "agentic-jujutsu": "🥋", "claims": "⚖️", "flow-nexus-platform": "☁️",
+  "flow-nexus-swarm": "🌊", "skill-builder": "🛠️", "sparc-methodology": "✨",
+  "performance-analysis": "📉", "test-long-runner": "🏃", "agent": "🤖",
 };
 const ROLE_COLOR: Record<string, string> = {
+  /* Core */
   architect: "#60a5fa", researcher: "#a78bfa", coder: "#34d399",
   debugger: "#f87171", tester: "#fbbf24", security: "#f472b6",
   optimizer: "#fb923c", planner: "#38bdf8", reviewer: "#818cf8",
   analyst: "#4ade80", designer: "#e879f9", documenter: "#94a3b8",
+  /* Coordination */
+  "adaptive-coordinator": "#22d3ee", "byzantine-coordinator": "#ef4444", "consensus-coordinator": "#10b981",
+  "collective-intelligence-coordinator": "#8b5cf6", "gossip-coordinator": "#06b6d4", "hierarchical-coordinator": "#3b82f6",
+  "mesh-coordinator": "#6366f1", "queen-coordinator": "#f59e0b", "quorum-manager": "#84cc16",
+  "raft-manager": "#64748b", "sparc-coordinator": "#ec4899", "sync-coordinator": "#14b8a6",
+  "topology-optimizer": "#0ea5e9", "swarm-init": "#22c55e", "orchestrator-task": "#a855f7",
+  /* Code */
+  "code-analyzer": "#06b6d4", "code-goal-planner": "#7c3aed", "code-review-swarm": "#818cf8",
+  "implementer-sparc-coder": "#10b981", "tdd-london-swarm": "#eab308", "pseudocode": "#64748b",
+  "refinement": "#e879f9", "specification": "#94a3b8",
+  /* Architecture */
+  "arch-system-design": "#3b82f6", "repo-architect": "#8b5cf6", "v3-integration-architect": "#6366f1",
+  "v3-ddd-architecture": "#0891b2",
+  /* GitHub */
+  "github-pr-manager": "#6d28d9", "github-modes": "#4f46e5", "multi-repo-swarm": "#7c3aed",
+  "ops-cicd-github": "#059669", "production-validator": "#16a34a", "release-manager": "#dc2626",
+  "release-swarm": "#f97316", "workflow-automation": "#64748b", "hooks-automation": "#0d9488",
+  /* AI/ML */
+  "neural-network": "#ec4899", "flow-nexus-neural": "#ef4444", "data-ml-model": "#f59e0b",
+  "sona-learning-optimizer": "#06b6d4", "safla-neural": "#8b5cf6", "trading-predictor": "#22c55e",
+  /* Security */
+  "security-manager": "#dc2626", "security-audit": "#b91c1c", "v3-security-architect": "#7f1d1d", "sandbox": "#374151",
+  /* Memory */
+  "memory-coordinator": "#059669", "swarm-memory-manager": "#0d9488", "v3-memory-specialist": "#7c3aed",
+  /* Performance */
+  "performance-benchmarker": "#f59e0b", "performance-optimizer": "#f97316", "performance-analyzer": "#ea580c",
+  "matrix-optimizer": "#0891b2", "benchmark-suite": "#16a34a", "load-balancer": "#6366f1",
+  /* Special */
+  "scout-explorer": "#22d3ee", "hive-mind": "#f59e0b", "hive-mind-advanced": "#fbbf24",
+  "swarm": "#38bdf8", "swarm-advanced": "#818cf8",
+  /* Default fallback covered by ?? "#94a3b8" */
 };
 
 function parseRufloResult(result: string): { agents: { role: string; output: string }[]; synthesis: string } {
@@ -5816,6 +5903,22 @@ export default function Chat() {
                   phone_call: `📞 Phone — ${String(tcInput?.action ?? "call")} ${String(tcInput?.number ?? "")}`,
                   iot_control: `🏠 IoT — ${String(tcInput?.action ?? "status")} ${String(tcInput?.device ?? "")}`,
                   maps_geo: `🗺️ Maps — ${String(tcInput?.action ?? "route")} ${String(tcInput?.query ?? tcInput?.destination ?? "").slice(0, 30)}`,
+                  /* ── Advanced AI & Planning (15 new tools) ── */
+                  goap_planner: `🎯 GOAP Planner — ${String(tcInput?.goal ?? "").slice(0, 40)} [${String(tcInput?.optimize_for ?? "balanced")}]`,
+                  code_review_swarm: `👁️‍🗨️ Code Review Swarm — ${String(tcInput?.language ?? "code")} | ${((tcInput?.focus as string[]) ?? ["security","perf"]).join("+")}`,
+                  autotune: `🎛️ AutoTune — ${String(tcInput?.strategy ?? "auto")} strategy`,
+                  neural_train: `🧠 Neural Train — ${String(tcInput?.action ?? "design")} ${String(tcInput?.architecture ?? "feedforward")}`,
+                  multi_agent_dispatch: `🤖 Multi-Agent — ${((tcInput?.agents as string[]) ?? ["oracle"]).join("+")} | ${String(tcInput?.mode ?? "parallel")}`,
+                  ast_search: `🔍 AST-Grep — ${String(tcInput?.action ?? "search")} \`${String(tcInput?.pattern ?? "").slice(0, 30)}\` (${String(tcInput?.language ?? "ts")})`,
+                  github_pr_manager: `🐙 GitHub PR — ${String(tcInput?.action ?? "list")} ${tcInput?.repo ? String(tcInput.repo) : ""}${tcInput?.pr_number ? ` #${String(tcInput.pr_number)}` : ""}`,
+                  benchmark_suite: `⚡ Benchmark — ${String(tcInput?.target ?? "").slice(0, 30)} | ${String(tcInput?.type ?? "latency")}`,
+                  production_validate: `🏭 Prod Validate — ${String(tcInput?.target ?? "").slice(0, 40)}`,
+                  release_manager: `🚀 Release — ${String(tcInput?.action ?? "plan")} ${tcInput?.version ? `v${String(tcInput.version)}` : ""} ${tcInput?.repo ? String(tcInput.repo) : ""}`,
+                  memory_sync: `🧠 Memory — ${String(tcInput?.action ?? "sync")} [${String(tcInput?.namespace ?? "global")}]${tcInput?.query ? ` "${String(tcInput.query).slice(0, 25)}"` : ""}`,
+                  hive_mind: `🐝 Hive Mind — ${String(tcInput?.swarm_size ?? 20)} agents | ${String(tcInput?.convergence ?? "synthesis")}`,
+                  security_audit: `🛡️ Security Audit — ${((tcInput?.scope as string[]) ?? ["sast","owasp"]).join("+")} | ${String(tcInput?.severity ?? "medium+")}`,
+                  data_pipeline: `📊 Data Pipeline — ${String(tcInput?.action ?? "etl")} | ${String(tcInput?.model_type ?? "classification")}`,
+                  workflow_automation: `⚙️ Workflow — ${String(tcInput?.action ?? "list")} ${tcInput?.workflow_name ? `"${String(tcInput.workflow_name)}"` : ""}${tcInput?.trigger ? ` [${String(tcInput.trigger)}]` : ""}`,
                 };
                 const label = TOOL_LABELS[data.tool_call.name] ?? `🔧 ${data.tool_call.name}`;
                 setOmegaLogs(prev => [...prev, { id: logId, tool: data.tool_call.name, label, status: "running", time: Date.now() }]);

@@ -55,6 +55,26 @@ A mobile-first Replit clone with two apps: **App Builder** (mobile UI matching t
   - **Arena Tab** (3rd tab): Chatbot Arena–style side-by-side battle. Pick Model A vs Model B, same prompt, parallel real calls, then vote 👈A / 🤝Tie / B👉. Builds live session leaderboard with win counts and bar chart. OpenRouter API key shared across all tabs. Backend: `POST /api/openrouter/arena`.
   - GODMODE CLASSIC, ULTRAPLINIAN (5 tiers 10–55 models), Parseltongue (6 techniques, live preview), AutoTune (EMA), STM Modules, Konami Easter egg
   - **Import from GitHub**: animated importing screen → navigates to chat
+  - **OMEGA — 45 Tools, 138 Agent Types** (`artifacts/api-server/src/routes/super-agent.ts`):
+    - **Advanced AI/Planning (15 new from zip archives)**:
+      - `goap_planner` — GOAP A* search (Ruflo agent-goal-planner): optimal action sequences, replanning
+      - `code_review_swarm` — Multi-agent parallel code review: security/perf/style/logic/tests (Ruflo)
+      - `autotune` — G0DM0D3 AutoTune: context-adaptive LLM parameters with EMA feedback loop
+      - `neural_train` — Neural network training: feedforward/LSTM/GAN/Transformer (Ruflo flow-nexus-neural)
+      - `multi_agent_dispatch` — Oracle/Librarian/Explorer/Frontend/Backend/DevOps parallel agents (oh-my-openagent)
+      - `ast_search` — AST-Grep structural code search across 25 languages with metavariables
+      - `github_pr_manager` — GitHub PR create/review/merge/label/sync-board (Ruflo agent-github-pr-manager)
+      - `benchmark_suite` — Latency/throughput/memory/CPU benchmarking with regression detection
+      - `production_validate` — Health checks, smoke tests, SLA validation post-deployment
+      - `release_manager` — Changelog, semver, git tag, npm/pypi publish, announcements (Ruflo release-swarm)
+      - `memory_sync` — Cross-session memory: sync, semantic search, compress, namespaces (claude-mem)
+      - `hive_mind` — Collective intelligence: 10-500 micro-agents + convergence synthesis (Ruflo hive-mind)
+      - `security_audit` — SAST/DAST/deps/secrets/OWASP/threat modeling (Ruflo security-audit + nanobot)
+      - `data_pipeline` — ETL, feature engineering, ML training, evaluation, deployment pipeline
+      - `workflow_automation` — n8n-style workflows, cron, webhooks, conditional branching (Ruflo)
+    - **Ruflo Swarm expanded from 12 → 138+ agent persona types** covering: coordination (byzantine, raft, gossip, mesh, queen, quorum, sparc), code (tdd-london, sparc-implementer, code-review-swarm), architecture (DDD, repo-architect), GitHub (pr-manager, multi-repo, release-swarm), AI/ML (neural-network, flow-nexus, SAFLA, SONA, trading-predictor), security (v3-security-architect), memory (agentdb, reasoningbank, embeddings), performance (matrix-optimizer, pagerank, load-balancer), V3 specialists, and more
+    - **Frontend TOOL_LABELS** updated for all 15 new tools with rich contextual labels
+    - **ROLE_EMOJI + ROLE_COLOR** maps expanded to cover all 138 Ruflo agent types with unique icons and colors
 - **Replit IDE**: Desktop IDE — code editor with syntax highlighting, file tree, AI agent, live preview, extensions store, projects page, profile page
 - **Extensions Store**: Browse/install Themes, Linters, Keymaps, AI tools, UI Libraries, State Management, Animation packages
 
