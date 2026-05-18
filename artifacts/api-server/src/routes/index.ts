@@ -27,6 +27,7 @@ import projectToolsRouter from "./project-tools";
 import geminiRouter from "./gemini";
 import ultraplinianRouter from "./ultraplinian";
 import jarvisRouter from "./jarvis";
+import superAgentRouter from "./super-agent";
 
 const router: IRouter = Router();
 
@@ -58,5 +59,6 @@ router.use("/ide-agent", ideAgentRouter);
 router.use("/gemini", geminiRouter);
 router.use("/ultraplinian", ultraplinianRouter);
 router.use("/jarvis", jarvisRouter);
+router.use("/super-agent", superAgentRouter);
 
 export default router;

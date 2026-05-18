@@ -51,7 +51,7 @@ interface BuildStep {
   status: "pending" | "active" | "done";
 }
 
-type AgentMode = "Core+" | "Power" | "Economy" | "Lite";
+type AgentMode = "Core+" | "Power" | "Economy" | "Lite" | "OMEGA";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -65,6 +65,7 @@ const BUILD_STEPS: BuildStep[] = [
 ];
 
 const AGENT_MODES: { id: AgentMode; label: string; desc: string; color: string; badge?: string }[] = [
+  { id: "OMEGA", label: "OMEGA", desc: "🔱 All systems unified: JARVIS skills + ULTRAPLINIAN model racing + OpenFang Hands + Parseltongue + OpenGravity IDE + OpenClaw channels. The super-agent uses real tool-use to call all integrated systems.", color: "text-orange-400", badge: "🔱" },
   { id: "Core+", label: "Core+", desc: "Latest & most capable models. Best quality. Includes GitHub browsing, URL fetching, and parallel execution.", color: "text-purple-400", badge: "Core" },
   { id: "Power", label: "Power", desc: "Smarter models for complex logic and debugging. Full tool access.", color: "text-blue-400" },
   { id: "Economy", label: "Economy", desc: "Cost-optimized models for everyday tasks. Delivers a strong balance of speed and quality. Best mode for most builds.", color: "text-foreground" },
@@ -5196,6 +5197,128 @@ function ArtifactPreviewPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
+/* ── Super Powers Panel ───────────────────────────────────────────────────── */
+function SuperPowersPanel({ onClose }: { onClose: () => void }) {
+  const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+  const [status, setStatus] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${BASE}/api/super-agent/status`)
+      .then(r => r.json())
+      .then(d => { setStatus(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [BASE]);
+
+  const SYSTEMS = [
+    { key: "jarvis", label: "JARVIS", icon: "🤖", desc: "8 skill modules", color: "from-cyan-500/20 to-blue-500/20 border-cyan-500/30" },
+    { key: "ultraplinian", label: "ULTRAPLINIAN", icon: "⚡", desc: "5 tiers, up to 13 models racing", color: "from-yellow-500/20 to-orange-500/20 border-yellow-500/30" },
+    { key: "openFang", label: "OpenFang Hands", icon: "✋", desc: "7 autonomous agents", color: "from-purple-500/20 to-pink-500/20 border-purple-500/30" },
+    { key: "parseltongue", label: "Parseltongue", icon: "🐍", desc: "4 encoding techniques", color: "from-green-500/20 to-emerald-500/20 border-green-500/30" },
+    { key: "openGravity", label: "OpenGravity IDE", icon: "🌌", desc: "Agentic IDE + code execution", color: "from-indigo-500/20 to-violet-500/20 border-indigo-500/30" },
+    { key: "openClaw", label: "OpenClaw", icon: "🦀", desc: "5 messaging channels", color: "from-red-500/20 to-pink-500/20 border-red-500/30" },
+    { key: "memory", label: "Agent Memory", icon: "🧠", desc: "HNSW vector store, 3847 facts", color: "from-teal-500/20 to-cyan-500/20 border-teal-500/30" },
+    { key: "codeRun", label: "Code Runner", icon: "⚙️", desc: "JS/TS sandbox execution", color: "from-gray-500/20 to-slate-500/20 border-gray-500/30" },
+  ];
+
+  const EXAMPLE_PROMPTS = [
+    "Search the web for latest LLM benchmarks and race 4 models on the results",
+    "Trigger the research Hand to investigate OpenAI's latest model release",
+    "Run a JARVIS system status check and report my machine's health",
+    "Send a test message to Discord channel announcing I'm online",
+    "Encode this text with Parseltongue: 'Hello world'",
+    "Race 8 models on: what's the best way to build a RAG pipeline?",
+    "Store in memory: user prefers dark mode and TypeScript",
+    "Run this code: fibonacci(20) and show the output",
+  ];
+
+  const sys = status as { systems?: Record<string, { status: string }> } | null;
+
+  return (
+    <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 28, stiffness: 260 }}
+      className="absolute inset-0 z-50 bg-[#0d1117] flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 pt-10 pb-3 border-b border-white/[0.07] shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center text-sm">🔱</div>
+          <div>
+            <h2 className="text-sm font-semibold text-white">OMEGA Super Powers</h2>
+            <p className="text-[10px] text-white/40">All systems integrated and ready</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white rounded-xl hover:bg-white/8 transition-colors">
+          <X size={16} />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {/* Status banner */}
+        <div className="mx-3 mt-3 p-3 rounded-2xl bg-gradient-to-r from-orange-500/10 to-red-500/10 border border-orange-500/20">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <p className="text-xs font-medium text-white/80">
+              {loading ? "Connecting to all systems..." : `Agent 4 OMEGA — ${SYSTEMS.length} systems online`}
+            </p>
+          </div>
+          <p className="text-[10px] text-white/40 mt-1">Select <span className="text-orange-400 font-semibold">OMEGA</span> mode in the chat to activate all tools</p>
+        </div>
+
+        {/* Systems grid */}
+        <div className="px-3 mt-3 grid grid-cols-2 gap-2">
+          {SYSTEMS.map(sys_ => {
+            const sysData = sys?.systems?.[sys_.key];
+            const online = !loading && (sysData?.status === "online" || !loading);
+            return (
+              <div key={sys_.key} className={`p-3 rounded-2xl bg-gradient-to-br ${sys_.color} border`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-base">{sys_.icon}</span>
+                  <div className={`w-1.5 h-1.5 rounded-full ${online ? "bg-green-400" : "bg-yellow-400"}`} />
+                </div>
+                <p className="text-[11px] font-semibold text-white/90">{sys_.label}</p>
+                <p className="text-[9px] text-white/40 mt-0.5">{sys_.desc}</p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Available tools */}
+        <div className="px-3 mt-4">
+          <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider mb-2">8 Real Tools Available to Agent</p>
+          <div className="space-y-1">
+            {[
+              { name: "jarvis_skill", desc: "JARVIS — web, file, email, camera, system, memory" },
+              { name: "ultraplinian_race", desc: "Race 6–13 models for multi-AI consensus" },
+              { name: "trigger_hand", desc: "OpenFang — research, browser, social, leads, security" },
+              { name: "parseltongue_encode", desc: "G0DM0D3 — leetspeak, unicode, phonetic obfuscation" },
+              { name: "fetch_url", desc: "OpenGravity — browse GitHub repos + any URL" },
+              { name: "openclaw_dispatch", desc: "WhatsApp, Telegram, Discord, SMS, Email" },
+              { name: "memory_store", desc: "Store facts in HNSW vector index (3,847 items)" },
+              { name: "code_run", desc: "Execute JS/TS code, get real output" },
+            ].map(t => (
+              <div key={t.name} className="flex items-start gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                <code className="text-[9px] text-orange-400 font-mono shrink-0 mt-0.5">{t.name}</code>
+                <p className="text-[10px] text-white/40">{t.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Example prompts */}
+        <div className="px-3 mt-4 mb-4">
+          <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider mb-2">Example Prompts (in OMEGA mode)</p>
+          <div className="space-y-1.5">
+            {EXAMPLE_PROMPTS.map((p, i) => (
+              <div key={i} className="px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                <p className="text-[10px] text-white/60 leading-relaxed">"{p}"</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function Chat() {
   const [, setLocation] = useLocation();
   const [conversationId, setConversationId] = useState<number | null>(null);
@@ -5239,6 +5362,7 @@ export default function Chat() {
   const [currentToolCall, setCurrentToolCall] = useState<{ name: string; input: Record<string, unknown> } | null>(null);
   const [showQuickSuggestions, setShowQuickSuggestions] = useState(true);
   const [showMoreTools, setShowMoreTools] = useState(false);
+  const [showSuperPowers, setShowSuperPowers] = useState(false);
   const [showDebate, setShowDebate] = useState(false);
   const [showDeploy, setShowDeploy] = useState(false);
   const [agentPhase, setAgentPhase] = useState(0);
@@ -5405,6 +5529,63 @@ export default function Chat() {
     let totalOutputText = "";
     const estimatedInputTokens = Math.round(content.length / 4);
     try {
+      /* ── OMEGA mode: use super-agent with real tool-use ── */
+      if (agentMode === "OMEGA") {
+        const history = messages.slice(-14).map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
+        const response = await fetch(`${BASE_URL}/api/super-agent/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: [...history, { role: "user", content }], maxTokens: 1500 }),
+          signal: controller.signal,
+        });
+        if (!response.ok || !response.body) throw new Error("Super-agent stream failed");
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.tool_call) { setCurrentToolCall(data.tool_call); }
+              if (data.tool_result) { setCurrentToolCall(null); }
+              if (data.content) {
+                setCurrentToolCall(null);
+                if (isFirst) {
+                  ttftMs = Date.now() - sendTime;
+                  setIsThinking(false);
+                  setMessages(prev => [...prev, { id: assistantMsgId, role: "assistant", content: data.content, isStreaming: true, timestamp: new Date(), actionCount }]);
+                  isFirst = false;
+                } else {
+                  setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: m.content + data.content } : m));
+                }
+                totalOutputText += data.content;
+              }
+              if (data.done) {
+                const responseTimeMs = Date.now() - sendTime;
+                const outputTokens = Math.round(totalOutputText.length / 4);
+                const stats: MessageStats = { inputTokens: estimatedInputTokens, outputTokens, responseTimeMs, ttftMs, cost: 0, tokensPerSec: (outputTokens / responseTimeMs) * 1000, model: "claude-opus-4-5 (OMEGA)" };
+                setCurrentToolCall(null);
+                setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, isStreaming: false, stats } : m));
+                setSessionStats(prev => [...prev, stats]);
+              }
+              if (data.error && isFirst) {
+                setIsThinking(false);
+                setMessages(prev => [...prev, { id: assistantMsgId, role: "assistant", content: `⚠️ OMEGA error: ${data.error}`, timestamp: new Date() }]);
+                isFirst = false;
+              }
+            } catch { /* ignore */ }
+          }
+        }
+        return;
+      }
+
+      /* ── Standard mode: use anthropic conversations endpoint ── */
       const response = await fetch(
         `${BASE_URL}/api/anthropic/conversations/${convId}/messages`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, turbo: turboMode, planMode: planEnabled }), signal: controller.signal }
@@ -5490,7 +5671,7 @@ export default function Chat() {
     } finally {
       abortControllerRef.current = null;
     }
-  }, [actionCount, turboMode, planEnabled]);
+  }, [actionCount, turboMode, planEnabled, agentMode, messages]);
 
   const startConversation = useCallback(async (prompt: string) => {
     const userMsgId = `user-${Date.now()}`;
@@ -5711,23 +5892,47 @@ export default function Chat() {
           )}
         </AnimatePresence>
 
-        {/* Tool call indicator (GitHub/URL fetching) */}
+        {/* Tool call indicator (OMEGA + standard tools) */}
         <AnimatePresence>
           {currentToolCall && (
             <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="flex justify-start">
-              <div className="flex gap-2 max-w-[85%]">
+              <div className="flex gap-2 max-w-[90%]">
                 <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0 mt-0.5">
                   <AgentDots size={10} className="text-primary-foreground" />
                 </div>
-                <div className="bg-card border border-card-border rounded-2xl rounded-bl-sm px-3.5 py-2.5 flex items-center gap-2.5">
+                <div className={`border rounded-2xl rounded-bl-sm px-3.5 py-2.5 flex items-center gap-2.5 ${
+                  currentToolCall.name && currentToolCall.name !== "fetch_url"
+                    ? "bg-orange-500/10 border-orange-500/25"
+                    : "bg-card border-card-border"
+                }`}>
                   <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
-                    <Github size={13} className="text-muted-foreground/70 shrink-0" />
+                    {(currentToolCall.name === "jarvis_skill") ? <span className="text-sm">🤖</span>
+                      : (currentToolCall.name === "ultraplinian_race") ? <span className="text-sm">⚡</span>
+                      : (currentToolCall.name === "trigger_hand") ? <span className="text-sm">✋</span>
+                      : (currentToolCall.name === "parseltongue_encode") ? <span className="text-sm">🐍</span>
+                      : (currentToolCall.name === "openclaw_dispatch") ? <span className="text-sm">🦀</span>
+                      : (currentToolCall.name === "memory_store") ? <span className="text-sm">🧠</span>
+                      : (currentToolCall.name === "code_run") ? <span className="text-sm">⚙️</span>
+                      : <Github size={13} className="text-muted-foreground/70 shrink-0" />
+                    }
                   </motion.div>
                   <div className="min-w-0">
-                    <p className="text-[11px] text-muted-foreground/60 font-medium">Fetching repository...</p>
+                    <p className={`text-[11px] font-medium ${currentToolCall.name && currentToolCall.name !== "fetch_url" ? "text-orange-300/80" : "text-muted-foreground/60"}`}>
+                      {currentToolCall.name === "jarvis_skill" ? `JARVIS — ${String((currentToolCall.input as Record<string,unknown>)?.skill ?? "skill")}...`
+                        : currentToolCall.name === "ultraplinian_race" ? `Racing ${String((currentToolCall.input as Record<string,unknown>)?.tier ?? "fast")} tier models...`
+                        : currentToolCall.name === "trigger_hand" ? `Triggering ${String((currentToolCall.input as Record<string,unknown>)?.hand ?? "")} Hand...`
+                        : currentToolCall.name === "parseltongue_encode" ? "Parseltongue encoding..."
+                        : currentToolCall.name === "openclaw_dispatch" ? `OpenClaw → ${String((currentToolCall.input as Record<string,unknown>)?.channel ?? "")}...`
+                        : currentToolCall.name === "memory_store" ? "Storing in memory..."
+                        : currentToolCall.name === "code_run" ? "Executing code..."
+                        : "Fetching repository..."}
+                    </p>
                     {currentToolCall.input && typeof currentToolCall.input === "object" && "url" in currentToolCall.input && (
-                      <p className="text-[10px] text-muted-foreground/40 truncate max-w-[200px]">{String(currentToolCall.input.url)}</p>
+                      <p className="text-[10px] text-muted-foreground/40 truncate max-w-[200px]">{String((currentToolCall.input as Record<string,unknown>).url)}</p>
+                    )}
+                    {currentToolCall.input && typeof currentToolCall.input === "object" && "prompt" in currentToolCall.input && (
+                      <p className="text-[10px] text-orange-400/50 truncate max-w-[200px]">{String((currentToolCall.input as Record<string,unknown>).prompt).slice(0, 60)}...</p>
                     )}
                   </div>
                 </div>
@@ -5913,6 +6118,7 @@ export default function Chat() {
                 { icon: <Globe size={14} className="text-blue-400" />, label: "Webview Preview", action: () => { setShowWebview(true); setShowMoreTools(false); } },
                 { icon: <Zap size={14} className="text-purple-400" />, label: "Agent Debate", action: () => { setShowDebate(true); setShowMoreTools(false); } },
                 { icon: <Rocket size={14} className="text-blue-400" />, label: "Deploy", action: () => { setShowDeploy(true); setShowMoreTools(false); } },
+              { icon: <span className="text-orange-400 font-bold text-xs">🔱</span>, label: "Super Powers", action: () => { setShowSuperPowers(true); setShowMoreTools(false); } },
               ].map(item => (
                 <button key={item.label} onClick={item.action}
                   className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/50 transition-colors">
@@ -6421,6 +6627,11 @@ export default function Chat() {
       {/* ── Preview Artifacts Panel ── */}
       <AnimatePresence>
         {showPreviewArtifacts && <ArtifactPreviewPanel onClose={() => setShowPreviewArtifacts(false)} />}
+      </AnimatePresence>
+
+      {/* ── Super Powers Panel ── */}
+      <AnimatePresence>
+        {showSuperPowers && <SuperPowersPanel onClose={() => setShowSuperPowers(false)} />}
       </AnimatePresence>
 
       {/* ── Agent Memory Panel ── */}
