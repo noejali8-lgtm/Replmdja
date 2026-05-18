@@ -44,6 +44,8 @@ import NotificationsPage from "@/pages/notifications";
 import ProfilePage from "@/pages/profile";
 import PlansPage from "@/pages/plans";
 import BountiesPage from "@/pages/bounties";
+import HandsPage from "@/pages/hands";
+import OpenGravityPage from "@/pages/opengravity";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +53,7 @@ const RUFLO_PAGES = [
   "/agents", "/agent-chat", "/swarm", "/memory", "/workers",
   "/plugins", "/providers", "/security",
   "/federation", "/goap", "/mcp", "/ruflo-install", "/g0dm0d3", "/godmode-leaderboard", "/jarvis",
+  "/hands", "/opengravity",
 ];
 
 function Router() {
@@ -94,6 +97,8 @@ function Router() {
         <Route path="/profile" component={ProfilePage} />
         <Route path="/plans" component={PlansPage} />
         <Route path="/bounties" component={BountiesPage} />
+        <Route path="/hands" component={HandsPage} />
+        <Route path="/opengravity" component={OpenGravityPage} />
 
         <Route component={NotFound} />
       </Switch>

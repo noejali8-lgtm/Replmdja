@@ -25,6 +25,8 @@ import gitRouter from "./git";
 import billingRouter from "./billing";
 import projectToolsRouter from "./project-tools";
 import geminiRouter from "./gemini";
+import ultraplinianRouter from "./ultraplinian";
+import jarvisRouter from "./jarvis";
 
 const router: IRouter = Router();
 
@@ -54,5 +56,7 @@ router.use("/system", systemRouter);
 router.use("/db-gui", dbGuiRouter);
 router.use("/ide-agent", ideAgentRouter);
 router.use("/gemini", geminiRouter);
+router.use("/ultraplinian", ultraplinianRouter);
+router.use("/jarvis", jarvisRouter);
 
 export default router;

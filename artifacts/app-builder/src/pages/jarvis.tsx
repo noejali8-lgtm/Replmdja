@@ -245,11 +245,14 @@ const PROJECT_STRUCTURE = [
 ];
 
 /* ── Page ── */
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
 export default function JarvisPage() {
   const [active, setActive] = useState(false);
   const [mode, setMode] = useState<"text" | "voice">("text");
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState(DEMO_CHAT);
+  const [isThinking, setIsThinking] = useState(false);
   const [cat, setCat] = useState("all");
   const [telemetry, setTelemetry] = useState({ cpu: 34, mem: 61, net: 22, gpu: 47 });
   const [muted, setMuted] = useState(false);
@@ -335,34 +338,69 @@ export default function JarvisPage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  /* ── Contextual JARVIS response generator ── */
-  const generateResponse = (input: string): string => {
-    const low = input.toLowerCase();
-    if (low.includes("cpu") || low.includes("memory") || low.includes("ram") || low.includes("gpu"))
-      return `CPU at ${Math.round(telemetry.cpu)}%, Memory ${Math.round(telemetry.mem)}%, GPU ${Math.round(telemetry.gpu)}%. All cores nominal. Network utilization at ${Math.round(telemetry.net)}%. No thermal anomalies detected.`;
-    if (low.includes("email") || low.includes("mail") || low.includes("inbox"))
-      return "Scanning inbox via email_ops... You have 7 unread messages — 3 GitHub notifications, 2 newsletters, 1 from Sarah (design review at 3pm), 1 calendar invite. Shall I draft a reply?";
-    if (low.includes("camera") || low.includes("photo") || low.includes("snapshot"))
-      return "Camera module online. Capturing via camera_skill... Object detection (YOLO v8) ready. Live stream available. What should I look for?";
-    if (low.includes("screenshot") || low.includes("screen"))
-      return "screenshot_ops engaged. Captured current screen state, running OCR and visual diff against last snapshot. No anomalies detected in UI layout.";
-    if (low.includes("search") || low.includes("find") || low.includes("google") || low.includes("look up"))
-      return "web_ops module activated. Querying DuckDuckGo and Google simultaneously. Cross-referencing top 5 sources. Results incoming...";
-    if (low.includes("whatsapp") || low.includes("message") || low.includes("text"))
-      return "whatsapp_skill is currently offline — token expired. Run `python skills/whatsapp_skill.py --auth` to reconnect. Alternatively, I can send via Email.";
-    if (low.includes("file") || low.includes("folder") || low.includes("directory"))
-      return "file_ops ready. I can create, read, move, rename, or watch any path. I also maintain a recursive index of your workspace. What operation?";
-    if (low.includes("remember") || low.includes("memory") || low.includes("recall"))
-      return "memory_ops active — 3,847 facts indexed in HNSW vector store. Cosine similarity search ready. What should I store or recall?";
-    if (low.includes("volume") || low.includes("brightness") || low.includes("brightness") || low.includes("system"))
-      return "system_ops module engaged. I can adjust volume, screen brightness, manage running applications, and monitor system health. What setting should I change?";
-    if (low.includes("schedule") || low.includes("alarm") || low.includes("remind") || low.includes("time"))
-      return "datetime_ops module active. Current time noted. I can set alarms, schedule tasks with cron syntax, and send reminders. What time or interval?";
-    if (low.includes("gemini") || low.includes("vision") || low.includes("multimodal"))
-      return "gemini_live_skill online. Multimodal processing available — image, video, audio streams. Advanced reasoning mode active. Feed me visual input.";
-    if (low.includes("hello") || low.includes("hey") || low.includes("jarvis") || low.includes("hi"))
-      return "Online and fully operational. 15 skill modules loaded. YOLO v8 active, Gemini Live ready, vector memory at 3,847 facts, Groq LLM engine running llama-3.3-70b. What would you like me to do?";
-    return `Understood. Routing "${input}" through skill registry... Command matched to active module. Executing and will confirm upon completion.`;
+  /* ── Real JARVIS AI — streaming from backend ── */
+  const callJarvisAI = async (userText: string): Promise<void> => {
+    setIsThinking(true);
+    setMessages(prev => [...prev, { role: "jarvis", text: "…" }]);
+
+    const history = messages.slice(-10).map(m => ({
+      role: m.role === "jarvis" ? "assistant" as const : "user" as const,
+      content: m.text,
+    }));
+
+    try {
+      const res = await fetch(`${BASE_URL}/api/jarvis/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stream: true,
+          messages: [...history, { role: "user", content: userText }],
+        }),
+      });
+
+      if (res.ok && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          for (const line of chunk.split("\n")) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6)) as { token?: string; done?: boolean; error?: string };
+                if (data.error) { fullText = `⚠️ ${data.error}`; break; }
+                if (data.token) {
+                  fullText += data.token;
+                  setMessages(prev => {
+                    const next = [...prev];
+                    if (next[next.length - 1]?.role === "jarvis") {
+                      next[next.length - 1] = { role: "jarvis", text: fullText };
+                    }
+                    return next;
+                  });
+                }
+              } catch { /* ignore */ }
+            }
+          }
+        }
+
+        if (fullText && fullText !== "…") speakText(fullText);
+      } else {
+        throw new Error(`HTTP ${res.status}`);
+      }
+    } catch (err) {
+      const fallback = `System error: ${String(err)}. Running in local simulation mode.`;
+      setMessages(prev => {
+        const next = [...prev];
+        if (next[next.length - 1]?.role === "jarvis") next[next.length - 1] = { role: "jarvis", text: fallback };
+        return next;
+      });
+      speakText(fallback);
+    }
+    setIsThinking(false);
   };
 
   /* ── Web Speech API ── */
@@ -399,11 +437,7 @@ export default function JarvisPage() {
         if (finalText) {
           setMessages(prev => [...prev, { role: "user", text: finalText }]);
           setVoiceTranscript("");
-          setTimeout(() => {
-            const response = generateResponse(finalText);
-            setMessages(prev => [...prev, { role: "jarvis", text: response }]);
-            speakText(response);
-          }, 600);
+          void callJarvisAI(finalText);
         }
       }
     };
@@ -420,14 +454,10 @@ export default function JarvisPage() {
 
   const handleSend = () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || isThinking) return;
     setMessages(prev => [...prev, { role: "user", text }]);
     setInput("");
-    setTimeout(() => {
-      const response = generateResponse(text);
-      setMessages(prev => [...prev, { role: "jarvis", text: response }]);
-      speakText(response);
-    }, 500);
+    void callJarvisAI(text);
   };
 
   const copyStep = (code: string, i: number) => {
