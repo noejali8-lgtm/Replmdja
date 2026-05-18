@@ -1,0 +1,240 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodeSpace IDE</title>
+<style>
+  :root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --bg-hover: #30363d;
+    --border: #30363d;
+    --border-light: #21262d;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #484f58;
+    --accent: #58a6ff;
+    --accent-dim: rgba(88, 166, 255, 0.15);
+    --accent-glow: rgba(88, 166, 255, 0.3);
+    --green: #3fb950;
+    --green-dim: rgba(63, 185, 80, 0.15);
+    --red: #f85149;
+    --red-dim: rgba(248, 81, 73, 0.15);
+    --yellow: #d29922;
+    --yellow-dim: rgba(210, 153, 34, 0.15);
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --cyan: #79c0ff;
+    --pink: #ff7b72;
+    --sidebar-width: 240px;
+    --toolbar-height: 48px;
+    --tabs-height: 36px;
+    --terminal-height: 220px;
+    --status-height: 24px;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ===== TOOLBAR ===== */
+  .toolbar {
+    height: var(--toolbar-height);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 8px;
+    flex-shrink: 0;
+    z-index: 100;
+  }
+
+  .toolbar-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 8px;
+    cursor: pointer;
+  }
+
+  .logo-icon {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    box-shadow: 0 0 12px var(--accent-glow);
+    flex-shrink: 0;
+  }
+
+  .logo-text {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+  }
+
+  .toolbar-divider {
+    width: 1px;
+    height: 24px;
+    background: var(--border);
+    margin: 0 4px;
+  }
+
+  .project-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+
+  .project-name:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .project-name span:first-child {
+    color: var(--text-muted);
+  }
+
+  .toolbar-spacer { flex: 1; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+    letter-spacing: 0.1px;
+    white-space: nowrap;
+  }
+
+  .btn-icon {
+    padding: 5px 8px;
+  }
+
+  .btn svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  .btn-run {
+    background: var(--green);
+    color: #000;
+    border-color: var(--green);
+    box-shadow: 0 0 12px rgba(63, 185, 80, 0.25);
+  }
+
+  .btn-run:hover {
+    background: #4cc261;
+    box-shadow: 0 0 20px rgba(63, 185, 80, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .btn-stop {
+    background: transparent;
+    color: var(--red);
+    border-color: var(--red);
+  }
+
+  .btn-stop:hover {
+    background: var(--red-dim);
+    box-shadow: 0 0 12px rgba(248, 81, 73, 0.2);
+  }
+
+  .btn-fork {
+    background: transparent;
+    color: var(--text-secondary);
+    border-color: var(--border);
+  }
+
+  .btn-fork:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+  }
+
+  .btn-share {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-color: rgba(88, 166, 255, 0.3);
+  }
+
+  .btn-share:hover {
+    background: rgba(88, 166, 255, 0.25);
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+
+  .avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #58a6ff, #bc8cff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #000;
+    cursor: pointer;
+    margin-left: 4px;
+    border: 2px solid transparent;
+    transition: border-color 0.2s;
+  }
+
+  .avatar:hover {
+    border-color: var(--accent);
+  }
+
+  /* ===== MAIN LAYOUT ===== */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ===== ACTIVITY BAR ===== */
+  .activity-bar {
+    width: 44px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 0;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .activity-btn {
+    width: 36px;

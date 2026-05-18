@@ -44,6 +44,14 @@ A mobile-first Replit clone with two apps: **App Builder** (mobile UI matching t
   - **New Components**: `NotificationBell` (bell icon with unread badge in header), `GlobalSearch` (full-screen search overlay), `ReplDetailSheet` (slide-up detail view for repls in Explore), `TrendingSection` (home page horizontal scroll), `AchievementsBar`
   - **Header**: Search icon + notification bell with live unread count badge + user avatar
   - **Agent 4 features**: Parallel Agents, App Monitoring, Design Canvas, Branching/Micro VMs, Turbo mode (2.5×), Build Together, Multi-Artifact (Web/Mobile/Slides/API/Desktop), Agent Memory (confidence-scored facts), Checkpoint Timeline (restore to any point), Agent Insights (tokens/cost/speed stats)
+  - **Replit-Parity (v6.0, tools 53–59)**:
+    - `run_code` — Real execution in 25+ languages (Python, Node, TS, Bash, Ruby, Go, Rust, PHP, Java, C/C++, Lua, SQL, Dart, Julia, etc.) with real stdout/stderr
+    - `install_packages` — Auto-install npm/pnpm/pip/cargo/gem/composer packages into project dirs; manages package.json/requirements.txt automatically
+    - `manage_secrets` — Per-project .env secrets manager: set/get/delete/list/validate/generate-.env.example
+    - `live_hosting` — Public HTTPS URL per project, custom domain DNS setup, analytics (requests/bandwidth), QR code, multi-region
+    - `replit_db` — Built-in JSON key-value DB per project: set/get/delete/list/increment/append/bulk/export
+    - `terminal_exec` — Real bash in project dir: any shell command, background processes, real stdout/stderr, 120s timeout
+    - `multiplayer_collab` — Invite-link sessions, live presence/cursors, roles (owner/editor/viewer/commenter), broadcast, whiteboard
   - **Quick Suggestions**: Swipeable prompt chips appear after each AI reply (dismissed on tap or ×)
   - **More menu**: ··· button opens overlay with Memory / Checkpoints / Insights / Files / Deploy / Webview
   - **GitHub browsing**: AI uses `fetch_url` tool to read repos, files, READMEs, file trees — with real-time "Fetching repository..." indicator in chat

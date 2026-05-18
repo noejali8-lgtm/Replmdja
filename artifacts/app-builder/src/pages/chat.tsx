@@ -5933,6 +5933,14 @@ export default function Chat() {
                   nanobot_goal: `🎯 Nanobot /goal — ${String(tcInput?.action ?? "set")}${tcInput?.goal ? `: ${String(tcInput.goal).slice(0, 40)}` : tcInput?.goal_id ? ` ${String(tcInput.goal_id)}` : ""}`,
                   antigravity_skill: `⚡ Antigravity — ${String(tcInput?.action ?? "execute")} ${tcInput?.skill ? `"${String(tcInput.skill)}"` : `[${String(tcInput?.category ?? "all")}]`}`,
                   open_design: `🎨 Open Design — ${String(tcInput?.action ?? "generate_ui")} | ${String(tcInput?.style ?? "modern")} | ${String(tcInput?.description ?? "").slice(0, 40)}`,
+                  /* ── Replit-Parity Tools (53–59) ── */
+                  run_code: `▶️ Run Code — ${String(tcInput?.language ?? "js")} ${tcInput?.projectId ? `[${String(tcInput.projectId)}]` : ""}`,
+                  install_packages: `📦 Install — ${String(tcInput?.manager ?? "npm")} ${(tcInput?.packages as string[] ?? []).slice(0, 3).join(", ")} [${String(tcInput?.action ?? "install")}]`,
+                  manage_secrets: `🔐 Secrets — ${String(tcInput?.action ?? "list")} ${tcInput?.key ? `\`${String(tcInput.key)}\`` : ""} [${String(tcInput?.projectId ?? "")}]`,
+                  live_hosting: `🌍 Hosting — ${String(tcInput?.action ?? "status")} ${tcInput?.projectId ? `\`${String(tcInput.projectId)}\`` : ""}${tcInput?.custom_domain ? ` → ${String(tcInput.custom_domain)}` : ""}`,
+                  replit_db: `🗄️ DB — ${String(tcInput?.action ?? "get")} ${tcInput?.key ? `\`${String(tcInput.key)}\`` : ""} [${String(tcInput?.projectId ?? "")}]`,
+                  terminal_exec: `💻 Terminal — \`${String(tcInput?.command ?? "").slice(0, 50)}\`${tcInput?.projectId ? ` [${String(tcInput.projectId)}]` : ""}`,
+                  multiplayer_collab: `👥 Multiplayer — ${String(tcInput?.action ?? "create_session")}${tcInput?.projectId ? ` \`${String(tcInput.projectId)}\`` : ""}${tcInput?.username ? ` → ${String(tcInput.username)}` : ""}`,
                 };
                 const label = TOOL_LABELS[data.tool_call.name] ?? `🔧 ${data.tool_call.name}`;
                 setOmegaLogs(prev => [...prev, { id: logId, tool: data.tool_call.name, label, status: "running", time: Date.now() }]);
@@ -6945,7 +6953,7 @@ export default function Chat() {
                 <span className="text-[9px] text-purple-400/70 truncate max-w-[60px]">{selectedModelData.name.split(" ").slice(-1)[0]}</span>
               )}
               {agentMode === "OMEGA"
-                ? <span className="text-[8px] bg-orange-500/30 text-orange-300 px-1 rounded-sm font-bold">52 tools</span>
+                ? <span className="text-[8px] bg-orange-500/30 text-orange-300 px-1 rounded-sm font-bold">59 tools</span>
                 : <ChevronDown size={10} className="text-white/40" />
               }
             </motion.button>
