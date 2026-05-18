@@ -60,6 +60,22 @@ interface OmegaLog {
   time: number;
 }
 
+interface RufloAgentNode {
+  role: string;
+  focus: string;
+  output: string;
+  status: "spawning" | "thinking" | "done";
+}
+
+interface RufloSwarmViz {
+  id: string;
+  objective: string;
+  topology: string;
+  agents: RufloAgentNode[];
+  synthesis: string;
+  phase: "spawning" | "thinking" | "synthesizing" | "done";
+}
+
 type AgentMode = "Core+" | "Power" | "Economy" | "Lite" | "OMEGA";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -5206,6 +5222,162 @@ function ArtifactPreviewPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
+/* ── Ruflo Swarm Visualization Panel ──────────────────────────────────────── */
+const ROLE_EMOJI: Record<string, string> = {
+  architect: "🏗️", researcher: "🔍", coder: "💻", debugger: "🐛",
+  tester: "🧪", security: "🛡️", optimizer: "⚡", planner: "📋",
+  reviewer: "👁️", analyst: "📊", designer: "🎨", documenter: "📝",
+};
+const ROLE_COLOR: Record<string, string> = {
+  architect: "#60a5fa", researcher: "#a78bfa", coder: "#34d399",
+  debugger: "#f87171", tester: "#fbbf24", security: "#f472b6",
+  optimizer: "#fb923c", planner: "#38bdf8", reviewer: "#818cf8",
+  analyst: "#4ade80", designer: "#e879f9", documenter: "#94a3b8",
+};
+
+function parseRufloResult(result: string): { agents: { role: string; output: string }[]; synthesis: string } {
+  const agents: { role: string; output: string }[] = [];
+  let synthesis = "";
+  const sections = result.split(/\n\*\*([A-Z][a-z]+)\*\* \(/);
+  for (let i = 1; i < sections.length; i += 2) {
+    const role = sections[i].toLowerCase();
+    const body = sections[i + 1] ?? "";
+    const output = body.replace(/^[^\n]*\n/, "").replace(/\n---[\s\S]*$/, "").trim();
+    if (role && output) agents.push({ role, output });
+  }
+  const synthMatch = result.match(/\*\*🎯 Synthesis:\*\*\n([\s\S]+)$/);
+  if (synthMatch) synthesis = synthMatch[1].trim();
+  return { agents, synthesis };
+}
+
+function RufloSwarmPanel({ viz, onDismiss }: { viz: RufloSwarmViz; onDismiss: () => void }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const isDone = viz.phase === "done";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -8, scale: 0.97 }}
+      transition={{ type: "spring", damping: 22, stiffness: 280 }}
+      className="mx-1 my-2 rounded-2xl border border-amber-500/25 bg-gradient-to-br from-amber-950/30 to-[#0d1117] overflow-hidden"
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+        <motion.span
+          animate={!isDone ? { scale: [1, 1.2, 1] } : {}}
+          transition={{ duration: 1.2, repeat: Infinity }}
+          className="text-base"
+        >🐝</motion.span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">Ruflo Swarm</span>
+            <span className="text-[9px] font-mono bg-amber-500/20 text-amber-400 border border-amber-400/25 px-1.5 py-0.5 rounded-full">{viz.topology}</span>
+            <span className="text-[9px] text-white/30">{viz.agents.length} agents</span>
+          </div>
+          <p className="text-[10px] text-white/40 truncate mt-0.5">{viz.objective.slice(0, 80)}</p>
+        </div>
+        {isDone && (
+          <button onClick={onDismiss} className="p-1 rounded-lg hover:bg-white/5 text-white/25 hover:text-white/60 transition-colors shrink-0">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        )}
+      </div>
+
+      {/* Agent nodes grid */}
+      <div className="px-3 pb-2 grid grid-cols-2 gap-2">
+        {viz.agents.map((agent, i) => {
+          const emoji = ROLE_EMOJI[agent.role] ?? "🤖";
+          const color = ROLE_COLOR[agent.role] ?? "#94a3b8";
+          const isExpanded = expanded === agent.role;
+          const agentDone = agent.status === "done";
+          return (
+            <motion.div
+              key={agent.role}
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: i * 0.08, type: "spring", damping: 20, stiffness: 300 }}
+              onClick={() => agentDone && setExpanded(isExpanded ? null : agent.role)}
+              className={`rounded-xl border p-2.5 transition-colors ${agentDone ? "cursor-pointer hover:bg-white/5" : ""}`}
+              style={{ borderColor: agentDone ? `${color}40` : "rgba(255,255,255,0.08)", background: agentDone ? `${color}08` : "rgba(255,255,255,0.02)" }}
+            >
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="text-sm">{emoji}</span>
+                <span className="text-[10px] font-semibold flex-1 truncate capitalize" style={{ color: agentDone ? color : "rgba(255,255,255,0.3)" }}>
+                  {agent.role}
+                </span>
+                {agentDone ? (
+                  <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-[8px] text-emerald-400">✓</motion.span>
+                ) : (
+                  <motion.div
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ background: color }}
+                    animate={{ scale: [1, 1.4, 1], opacity: [0.5, 1, 0.5] }}
+                    transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.15 }}
+                  />
+                )}
+              </div>
+              <p className="text-[9px] text-white/30 truncate">{agent.focus.slice(0, 40) || "analyzing…"}</p>
+              {/* Expanded output */}
+              <AnimatePresence>
+                {isExpanded && agentDone && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mt-2 pt-2 border-t overflow-hidden"
+                    style={{ borderColor: `${color}20` }}
+                  >
+                    <p className="text-[9px] text-white/55 leading-relaxed whitespace-pre-wrap">{agent.output.slice(0, 300)}{agent.output.length > 300 ? "…" : ""}</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Synthesis section */}
+      <AnimatePresence>
+        {viz.synthesis && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, type: "spring", damping: 22, stiffness: 260 }}
+            className="mx-3 mb-3 rounded-xl bg-gradient-to-br from-amber-500/12 to-orange-500/8 border border-amber-500/20 p-3"
+          >
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <motion.span
+                initial={{ scale: 0, rotate: -180 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: "spring", damping: 14, stiffness: 200 }}
+                className="text-sm"
+              >🎯</motion.span>
+              <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">Synthesis</span>
+              <span className="text-[9px] text-white/25">— {viz.agents.length} agents unified</span>
+            </div>
+            <p className="text-[11px] text-white/75 leading-relaxed">{viz.synthesis.slice(0, 500)}{viz.synthesis.length > 500 ? "…" : ""}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Phase indicator */}
+      {!isDone && (
+        <div className="px-3 pb-3">
+          <div className="flex items-center gap-1.5">
+            <motion.div className="w-1 h-1 rounded-full bg-amber-400" animate={{ scale: [1, 1.6, 1] }} transition={{ duration: 0.8, repeat: Infinity }} />
+            <motion.div className="w-1 h-1 rounded-full bg-amber-400" animate={{ scale: [1, 1.6, 1] }} transition={{ duration: 0.8, repeat: Infinity, delay: 0.2 }} />
+            <motion.div className="w-1 h-1 rounded-full bg-amber-400" animate={{ scale: [1, 1.6, 1] }} transition={{ duration: 0.8, repeat: Infinity, delay: 0.4 }} />
+            <span className="text-[9px] text-amber-400/60 font-mono ml-1">
+              {viz.phase === "spawning" ? "spawning agents…" : viz.phase === "synthesizing" ? "synthesizing…" : "agents thinking…"}
+            </span>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 /* ── OMEGA Status Bar ─────────────────────────────────────────────────────── */
 function OmegaStatusBar({ logs, active }: { logs: OmegaLog[]; active: boolean }) {
   if (!active && logs.length === 0) return null;
@@ -5416,6 +5588,7 @@ export default function Chat() {
   const [showMoreTools, setShowMoreTools] = useState(false);
   const [showSuperPowers, setShowSuperPowers] = useState(false);
   const [omegaLogs, setOmegaLogs] = useState<OmegaLog[]>([]);
+  const [activeSwarmViz, setActiveSwarmViz] = useState<RufloSwarmViz | null>(null);
   const [showDebate, setShowDebate] = useState(false);
   const [showDeploy, setShowDeploy] = useState(false);
   const [agentPhase, setAgentPhase] = useState(0);
@@ -5611,30 +5784,79 @@ export default function Chat() {
               const data = JSON.parse(line.slice(6));
               if (data.tool_call) {
                 const logId = `log-${Date.now()}`;
+                const tcInput = data.tool_call.input as Record<string,unknown>;
                 const TOOL_LABELS: Record<string, string> = {
-                  jarvis_skill: `🤖 JARVIS — ${String((data.tool_call.input as Record<string,unknown>)?.skill ?? "skill")}`,
-                  ultraplinian_race: `⚡ ULTRAPLINIAN — racing ${String((data.tool_call.input as Record<string,unknown>)?.tier ?? "fast")} tier`,
-                  trigger_hand: `✋ OpenFang Hand — ${String((data.tool_call.input as Record<string,unknown>)?.hand ?? "")}`,
+                  jarvis_skill: `🤖 JARVIS — ${String(tcInput?.skill ?? "skill")}`,
+                  ultraplinian_race: `⚡ ULTRAPLINIAN — racing ${String(tcInput?.tier ?? "fast")} tier`,
+                  trigger_hand: `✋ OpenFang Hand — ${String(tcInput?.hand ?? "")}`,
                   parseltongue_encode: `🐍 Parseltongue encoding`,
                   fetch_url: `🌌 OpenGravity fetch`,
-                  openclaw_dispatch: `🦀 OpenClaw → ${String((data.tool_call.input as Record<string,unknown>)?.channel ?? "")}`,
+                  openclaw_dispatch: `🦀 OpenClaw → ${String(tcInput?.channel ?? "")}`,
                   memory_store: `🧠 Memory store`,
                   code_run: `⚙️ Code runner`,
-                  ruflo_swarm: `🐝 Ruflo swarm — ${String((data.tool_call.input as Record<string,unknown>)?.topology ?? "parallel")}`,
+                  ruflo_swarm: `🐝 Ruflo swarm — ${String(tcInput?.topology ?? "parallel")}`,
                   ruflo_goal_plan: `📋 Ruflo goal planner`,
                 };
                 const label = TOOL_LABELS[data.tool_call.name] ?? `🔧 ${data.tool_call.name}`;
                 setOmegaLogs(prev => [...prev, { id: logId, tool: data.tool_call.name, label, status: "running", time: Date.now() }]);
                 setCurrentToolCall({ ...data.tool_call, _logId: logId });
+
+                /* ── Ruflo Swarm: spawn visualization panel ── */
+                if (data.tool_call.name === "ruflo_swarm") {
+                  const rawAgents = (tcInput?.agents as Array<{ role?: string; focus?: string }> | undefined) ?? [];
+                  const defaultAgents = [
+                    { role: "researcher", focus: "gather context" },
+                    { role: "architect", focus: "design approach" },
+                    { role: "coder", focus: "implementation" },
+                    { role: "reviewer", focus: "quality check" },
+                  ];
+                  const agentList = rawAgents.length > 0 ? rawAgents : defaultAgents;
+                  setActiveSwarmViz({
+                    id: logId,
+                    objective: String(tcInput?.objective ?? "analysis"),
+                    topology: String(tcInput?.topology ?? "parallel"),
+                    agents: agentList.map((a, i) => ({
+                      role: a.role ?? "agent",
+                      focus: a.focus ?? "",
+                      output: "",
+                      status: i === 0 ? "thinking" : "spawning",
+                    })),
+                    synthesis: "",
+                    phase: "spawning",
+                  });
+                  /* Stagger agent status to "thinking" */
+                  agentList.forEach((a, i) => {
+                    setTimeout(() => {
+                      setActiveSwarmViz(prev => prev ? {
+                        ...prev,
+                        phase: i === agentList.length - 1 ? "thinking" : prev.phase,
+                        agents: prev.agents.map((ag, idx) => idx <= i ? { ...ag, status: "thinking" } : ag),
+                      } : null);
+                    }, i * 200 + 100);
+                  });
+                }
               }
               if (data.tool_result) {
                 setCurrentToolCall(null);
-                const logId = (currentToolCall as (Record<string,unknown>|null))?._logId as string | undefined;
                 setOmegaLogs(prev => prev.map(l =>
                   l.tool === data.tool_result.name && l.status === "running"
                     ? { ...l, status: "done", result: String(data.tool_result.result).slice(0, 120) }
                     : l
                 ));
+
+                /* ── Ruflo Swarm: parse result and update viz panel ── */
+                if (data.tool_result.name === "ruflo_swarm") {
+                  const rawResult = String(data.tool_result.result ?? "");
+                  const parsed = parseRufloResult(rawResult);
+                  setActiveSwarmViz(prev => {
+                    if (!prev) return null;
+                    const updatedAgents = prev.agents.map(ag => {
+                      const match = parsed.agents.find(pa => pa.role === ag.role);
+                      return match ? { ...ag, output: match.output, status: "done" as const } : { ...ag, status: "done" as const };
+                    });
+                    return { ...prev, agents: updatedAgents, synthesis: parsed.synthesis, phase: "done" };
+                  });
+                }
               }
               if (data.content) {
                 setCurrentToolCall(null);
@@ -5763,6 +5985,8 @@ export default function Chat() {
     const now = new Date();
     setStartTime(now);
     setActionCount(0);
+    setActiveSwarmViz(null);
+    setOmegaLogs([]);
     setMessages([{ id: userMsgId, role: "user", content: prompt, timestamp: now }]);
     setIsThinking(true);
     try {
@@ -5971,6 +6195,17 @@ export default function Chat() {
               onQuickReply={handleQuickReply}
             />
           ))}
+        </AnimatePresence>
+
+        {/* ── Ruflo Swarm Visualization Panel ── */}
+        <AnimatePresence>
+          {activeSwarmViz && agentMode === "OMEGA" && (
+            <RufloSwarmPanel
+              key={activeSwarmViz.id}
+              viz={activeSwarmViz}
+              onDismiss={() => setActiveSwarmViz(null)}
+            />
+          )}
         </AnimatePresence>
 
         {/* Build steps */}

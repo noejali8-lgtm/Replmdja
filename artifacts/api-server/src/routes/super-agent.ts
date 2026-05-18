@@ -543,6 +543,13 @@ router.post("/chat", async (req: Request, res: Response) => {
   if (!messages?.length) { res.status(400).json({ error: "messages required" }); return; }
 
   const send = sseSetup(res);
+
+  /* ── Keep-alive heartbeat — prevents proxy/browser from timing out during
+        long tool executions (ruflo_swarm parallel calls, ultraplinian races, etc.) ── */
+  const heartbeat = setInterval(() => {
+    try { res.write(": ping\n\n"); } catch { /* ignore if already closed */ }
+  }, 5000);
+
   const anthropicMessages: MessageParam[] = messages.slice(-16).map(m => ({
     role: m.role,
     content: m.content,
@@ -556,7 +563,7 @@ router.post("/chat", async (req: Request, res: Response) => {
       loopCount++;
 
       const response = await anthropic.messages.create({
-        model: "claude-opus-4-5",
+        model: "claude-sonnet-4-6",
         max_tokens: maxTokens,
         system: system ?? SUPER_AGENT_SYSTEM,
         tools: TOOLS,
@@ -583,7 +590,11 @@ router.post("/chat", async (req: Request, res: Response) => {
 
           const result = await executeTool(toolBlock.name, toolBlock.input as Record<string, unknown>);
 
-          send({ tool_result: { name: toolBlock.name, result: result.slice(0, 500), id: toolBlock.id } });
+          /* Send full result for ruflo_swarm so the frontend can render the viz panel */
+          const resultSlice = toolBlock.name === "ruflo_swarm"
+            ? result.slice(0, 4000)
+            : result.slice(0, 500);
+          send({ tool_result: { name: toolBlock.name, result: resultSlice, id: toolBlock.id } });
 
           toolResults.push({
             type: "tool_result",
@@ -607,8 +618,10 @@ router.post("/chat", async (req: Request, res: Response) => {
     send({ done: true });
   } catch (err) {
     send({ error: String(err) });
+  } finally {
+    clearInterval(heartbeat);
+    res.end();
   }
-  res.end();
 });
 
 /* ── GET /api/super-agent/status ─────────────────────────────────────────── */
