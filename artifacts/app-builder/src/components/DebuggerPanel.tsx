@@ -23,7 +23,7 @@ export interface WatchedVariable {
 export interface CallFrame {
   index: number; fn: string; file: string; line: number; active?: boolean;
 }
-interface GitCommitNode {
+export interface GitCommitNode {
   hash: string;
   message: string;
   author: string;
@@ -46,6 +46,7 @@ interface DebuggerPanelProps {
   callStack?: CallFrame[];
   isRunning?: boolean;
   isPaused?: boolean;
+  gitCommits?: GitCommitNode[];
 }
 
 type DebugTab = "breakpoints" | "variables" | "callstack" | "console" | "git";
@@ -289,9 +290,10 @@ function GitGraph({
 }
 
 /* ─── GitHistoryTab ─── */
-function GitHistoryTab({ commits, onSend }: {
+function GitHistoryTab({ commits, onSend, isLive }: {
   commits: GitCommitNode[];
   onSend?: (action: string) => void;
+  isLive?: boolean;
 }) {
   const [selected, setSelected] = useState<number | null>(0);
   const [filter, setFilter] = useState("");
@@ -309,12 +311,13 @@ function GitHistoryTab({ commits, onSend }: {
   const selectedCommit = selected !== null ? filtered[selected] : null;
 
   /* Branch legend */
-  const branches = [
-    { label: "main", lane: 0 },
-    { label: "feature/auth", lane: 1 },
-    { label: "feature/ui", lane: 2 },
-    { label: "fix/hotfix", lane: 3 },
-  ].filter(b => commits.some(c => c.lane === b.lane));
+  const branchMap = new Map<number, string>();
+  commits.forEach(c => {
+    if (!branchMap.has(c.lane)) {
+      branchMap.set(c.lane, c.branchLabel ?? (["main","feature","ui","hotfix","develop"][c.lane] ?? `lane-${c.lane}`));
+    }
+  });
+  const branches = Array.from(branchMap.entries()).sort(([a],[b])=>a-b).map(([lane,label])=>({lane,label}));
 
   return (
     <motion.div key="git" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -328,8 +331,17 @@ function GitHistoryTab({ commits, onSend }: {
             placeholder="Search commits, branches, authors…"
             className="flex-1 bg-transparent text-[11px] text-white/70 placeholder:text-white/25 outline-none min-w-0" />
         </div>
+        {isLive ? (
+          <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/25 animate-pulse">
+            LIVE
+          </span>
+        ) : (
+          <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-white/[0.05] text-white/25 border border-white/[0.07]">
+            DEMO
+          </span>
+        )}
         <button onClick={() => onSend?.("log")}
-          className="w-7 h-7 flex items-center justify-center text-white/30 hover:text-white rounded transition-colors" title="Refresh from OMEGA">
+          className="w-7 h-7 flex items-center justify-center text-white/30 hover:text-white rounded transition-colors" title="Refresh via OMEGA git_ops">
           <RefreshCw size={11} />
         </button>
       </div>
@@ -491,7 +503,7 @@ function GitHistoryTab({ commits, onSend }: {
 export function DebuggerPanel({
   onClose, projectId = "workspace", onSendDebugCommand,
   breakpoints: bpProp, variables: varProp, callStack: stackProp,
-  isRunning = false, isPaused = true,
+  isRunning = false, isPaused = true, gitCommits,
 }: DebuggerPanelProps) {
   const [tab, setTab] = useState<DebugTab>("git");
   const [breakpoints, setBreakpoints] = useState<Breakpoint[]>(bpProp ?? DEMO_BREAKPOINTS);
@@ -621,7 +633,8 @@ export function DebuggerPanel({
           {/* ── Git History Tab ── */}
           {tab === "git" && (
             <GitHistoryTab
-              commits={DEMO_COMMITS}
+              commits={gitCommits ?? DEMO_COMMITS}
+              isLive={!!gitCommits}
               onSend={action => send(action, { projectId })}
             />
           )}

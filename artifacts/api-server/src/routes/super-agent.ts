@@ -3681,8 +3681,34 @@ Rules:
         }
 
         if (action === "log") {
-          const out = await git(`log --oneline --graph --decorate -${limit}`);
-          return `📜 **Git Log** — \`${projectId}\`\n\n\`\`\`\n${out || "No commits yet"}\n\`\`\``;
+          const display = await git(`log --oneline --graph --decorate -${limit}`);
+          let structuredJson = "[]";
+          try {
+            const detailed = await git(`log --format="%h|%s|%an|%ar|%P|%D" -${limit}`);
+            const rawLines = (detailed ?? "").split("\n").filter(Boolean);
+            const commits = rawLines.map((line: string, i: number) => {
+              const parts = line.split("|");
+              const [h, msg, author, date, parents, refs] = parts;
+              const parentHashes = (parents ?? "").trim().split(/\s+/).filter(Boolean).map((x: string) => x.slice(0, 7));
+              const tagMatches = [...(refs ?? "").matchAll(/tag: ([^,)]+)/g)];
+              const tags = tagMatches.map((m: RegExpMatchArray) => m[1].trim());
+              const headMatch = (refs ?? "").match(/HEAD -> ([^,)]+)/);
+              return {
+                hash: (h ?? `c${i}`).trim(),
+                message: (msg ?? "(no message)").trim(),
+                author: (author ?? "Unknown").trim(),
+                authorInitial: ((author ?? "?").trim()[0] ?? "?").toUpperCase(),
+                date: (date ?? "unknown").trim(),
+                parentHashes,
+                tags,
+                branchLabel: headMatch ? headMatch[1].trim() : undefined,
+                isHead: (refs ?? "").includes("HEAD ->"),
+                isMerge: parentHashes.length > 1,
+              };
+            });
+            structuredJson = JSON.stringify(commits);
+          } catch { /* fallback: emit empty structured data */ }
+          return `📜 **Git Log** — \`${projectId}\`\n\n\`\`\`\n${display || "No commits yet"}\n\`\`\`\n\n__GIT_GRAPH_DATA__${structuredJson}__END_GIT_GRAPH__`;
         }
 
         if (action === "diff") {

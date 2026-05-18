@@ -24,7 +24,7 @@ import { AIModelsPanel, ALL_MODELS } from "@/components/AIModelsPanel";
 import { AgentDebatePanel } from "@/components/AgentDebatePanel";
 import { DeploySheet } from "@/components/DeploySheet";
 import { TerminalPanel } from "@/components/TerminalPanel";
-import { DebuggerPanel } from "@/components/DebuggerPanel";
+import { DebuggerPanel, type GitCommitNode } from "@/components/DebuggerPanel";
 import ProjectIDEPanel, { type ProjectFile } from "@/components/ProjectIDEPanel";
 
 interface MessageStats {
@@ -103,6 +103,41 @@ type AgentModeExtended = AgentMode | "Turbo";
 const TURBO_BADGE = { id: "Turbo" as AgentModeExtended, label: "Turbo", desc: "2.5× faster execution. Parallel agents work simultaneously on backend, frontend, and database. Best for large builds.", color: "text-yellow-400", badge: "⚡" };
 
 /* ── Replit Agent SVG icon (3×2 grid of dots) ── */
+/* ─── Git Graph: lane-assignment for real commits returned by OMEGA git_ops(log) ─── */
+interface _RawGitCommit {
+  hash: string; message: string; author: string; authorInitial: string;
+  date: string; parentHashes: string[]; tags: string[];
+  branchLabel?: string; isHead: boolean; isMerge: boolean;
+}
+function assignLanes(raw: _RawGitCommit[]): GitCommitNode[] {
+  const hashToRow: Record<string, number> = {};
+  raw.forEach((c, i) => { if (c.hash) hashToRow[c.hash] = i; });
+  const activeLanes: Array<string | null> = [];
+  return raw.map((commit, rowIdx) => {
+    let lane = activeLanes.indexOf(commit.hash);
+    if (lane === -1) {
+      lane = activeLanes.indexOf(null);
+      if (lane === -1) lane = activeLanes.length;
+    }
+    while (activeLanes.length <= lane) activeLanes.push(null);
+    activeLanes[lane] = commit.parentHashes[0] ?? null;
+    if (commit.parentHashes[1]) {
+      const freeLane = activeLanes.findIndex((h, idx) => idx !== lane && h === null);
+      const ml = freeLane !== -1 ? freeLane : activeLanes.length;
+      while (activeLanes.length <= ml) activeLanes.push(null);
+      activeLanes[ml] = commit.parentHashes[1];
+    }
+    return {
+      hash: commit.hash, message: commit.message,
+      author: commit.author, authorInitial: commit.authorInitial, date: commit.date,
+      lane: Math.min(lane, 4),
+      parentRows: commit.parentHashes.map(h => hashToRow[h] ?? -1).filter(r => r > rowIdx),
+      tags: commit.tags, branchLabel: commit.branchLabel,
+      isHead: commit.isHead, isMerge: commit.isMerge,
+    };
+  });
+}
+
 function AgentIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
   const s = size;
   const r = s * 0.13;
@@ -5687,6 +5722,7 @@ export default function Chat() {
   const [showRun, setShowRun] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
   const [showDebugger, setShowDebugger] = useState(false);
+  const [gitGraphCommits, setGitGraphCommits] = useState<GitCommitNode[] | null>(null);
   const [showPublishing, setShowPublishing] = useState(false);
   const [showToolsSearch, setShowToolsSearch] = useState(false);
   const [showWebview, setShowWebview] = useState(false);
@@ -6075,6 +6111,22 @@ export default function Chat() {
                     const [, pid] = writtenMatch;
                     setActiveProjectId(pid);
                     /* Content was captured during tool_call event below */
+                  }
+                }
+
+                /* ── git_ops log: populate Git History graph in Debugger Panel ── */
+                if (data.tool_result.name === "git_ops") {
+                  const resultStr = String(data.tool_result.result ?? "");
+                  const match = resultStr.match(/__GIT_GRAPH_DATA__(.+?)__END_GIT_GRAPH__/s);
+                  if (match) {
+                    try {
+                      const rawCommits = JSON.parse(match[1]) as _RawGitCommit[];
+                      if (Array.isArray(rawCommits) && rawCommits.length > 0) {
+                        setGitGraphCommits(assignLanes(rawCommits));
+                        setShowDebugger(true);
+                        setTab_("git" as never);
+                      }
+                    } catch { /* ignore parse errors */ }
                   }
                 }
 
@@ -7165,6 +7217,7 @@ export default function Chat() {
               setInput(prompt);
               setShowDebugger(false);
             }}
+            gitCommits={gitGraphCommits ?? undefined}
           />
         )}
       </AnimatePresence>
