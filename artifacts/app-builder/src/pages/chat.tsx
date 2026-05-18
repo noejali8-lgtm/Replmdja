@@ -24,6 +24,7 @@ import { AIModelsPanel, ALL_MODELS } from "@/components/AIModelsPanel";
 import { AgentDebatePanel } from "@/components/AgentDebatePanel";
 import { DeploySheet } from "@/components/DeploySheet";
 import { TerminalPanel } from "@/components/TerminalPanel";
+import ProjectIDEPanel, { type ProjectFile } from "@/components/ProjectIDEPanel";
 
 interface MessageStats {
   inputTokens: number;
@@ -5712,6 +5713,11 @@ export default function Chat() {
   const [showDemoCodeDiff, setShowDemoCodeDiff] = useState(false);
   const [showDemoPackages, setShowDemoPackages] = useState(false);
   const [showDemoReview, setShowDemoReview] = useState(false);
+  /* ── Project IDE Panel state ── */
+  const [showProjectIDE, setShowProjectIDE] = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const [projectTitle, setProjectTitle] = useState<string | undefined>(undefined);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -5919,10 +5925,46 @@ export default function Chat() {
                   security_audit: `🛡️ Security Audit — ${((tcInput?.scope as string[]) ?? ["sast","owasp"]).join("+")} | ${String(tcInput?.severity ?? "medium+")}`,
                   data_pipeline: `📊 Data Pipeline — ${String(tcInput?.action ?? "etl")} | ${String(tcInput?.model_type ?? "classification")}`,
                   workflow_automation: `⚙️ Workflow — ${String(tcInput?.action ?? "list")} ${tcInput?.workflow_name ? `"${String(tcInput.workflow_name)}"` : ""}${tcInput?.trigger ? ` [${String(tcInput.trigger)}]` : ""}`,
+                  /* ── Project Builder & Autonomous Agents ── */
+                  file_manager: `📁 File Manager — ${String(tcInput?.action ?? "write")} ${tcInput?.path ? String(tcInput.path) : tcInput?.projectId ? `[${String(tcInput.projectId)}]` : ""}`,
+                  project_preview: `🌐 Project Preview — ${String(tcInput?.projectId ?? "project")}`,
+                  project_init: `🚀 Project Init — ${String(tcInput?.template ?? "html")} → ${String(tcInput?.projectId ?? "new-project")}`,
+                  agentgpt_task: `🤖 AgentGPT — ${String(tcInput?.goal ?? "").slice(0, 50)} [${String(tcInput?.mode ?? "adaptive")}]`,
+                  nanobot_goal: `🎯 Nanobot /goal — ${String(tcInput?.action ?? "set")}${tcInput?.goal ? `: ${String(tcInput.goal).slice(0, 40)}` : tcInput?.goal_id ? ` ${String(tcInput.goal_id)}` : ""}`,
+                  antigravity_skill: `⚡ Antigravity — ${String(tcInput?.action ?? "execute")} ${tcInput?.skill ? `"${String(tcInput.skill)}"` : `[${String(tcInput?.category ?? "all")}]`}`,
+                  open_design: `🎨 Open Design — ${String(tcInput?.action ?? "generate_ui")} | ${String(tcInput?.style ?? "modern")} | ${String(tcInput?.description ?? "").slice(0, 40)}`,
                 };
                 const label = TOOL_LABELS[data.tool_call.name] ?? `🔧 ${data.tool_call.name}`;
                 setOmegaLogs(prev => [...prev, { id: logId, tool: data.tool_call.name, label, status: "running", time: Date.now() }]);
                 setCurrentToolCall({ ...data.tool_call, _logId: logId });
+
+                /* ── File Manager: capture written file content immediately ── */
+                if (data.tool_call.name === "file_manager") {
+                  const fmInput = data.tool_call.input as Record<string, unknown>;
+                  if (fmInput.action === "write" && fmInput.path && fmInput.content) {
+                    const pid = (fmInput.projectId as string) ?? "";
+                    const fpath = fmInput.path as string;
+                    const fcontent = fmInput.content as string;
+                    if (pid) {
+                      setActiveProjectId(pid);
+                      setProjectFiles(prev => {
+                        const exists = prev.findIndex(f => f.path === fpath);
+                        if (exists >= 0) {
+                          return prev.map((f, i) => i === exists ? { ...f, content: fcontent } : f);
+                        }
+                        return [...prev, { path: fpath, content: fcontent }];
+                      });
+                    }
+                  }
+                }
+
+                /* ── Project Init: set title from input ── */
+                if (data.tool_call.name === "project_init") {
+                  const piInput = data.tool_call.input as Record<string, unknown>;
+                  if (piInput.title) setProjectTitle(piInput.title as string);
+                  /* Clear files for new project */
+                  setProjectFiles([]);
+                }
 
                 /* ── Ruflo Swarm: spawn visualization panel ── */
                 if (data.tool_call.name === "ruflo_swarm") {
@@ -5979,6 +6021,38 @@ export default function Chat() {
                     });
                     return { ...prev, agents: updatedAgents, synthesis: parsed.synthesis, phase: "done" };
                   });
+                }
+
+                /* ── File Manager: add file to IDE panel from tool_result ── */
+                if (data.tool_result.name === "file_manager") {
+                  const resultStr = String(data.tool_result.result ?? "");
+                  const writtenMatch = resultStr.match(/FILE_WRITTEN:([^:]+):(.+)/);
+                  if (writtenMatch) {
+                    const [, pid] = writtenMatch;
+                    setActiveProjectId(pid);
+                    /* Content was captured during tool_call event below */
+                  }
+                }
+
+                /* ── Project Init + Project Preview: open IDE panel ── */
+                if (data.tool_result.name === "project_init" || data.tool_result.name === "project_preview") {
+                  const resultStr = String(data.tool_result.result ?? "");
+                  const previewMatch = resultStr.match(/OPEN_PREVIEW:([^:]+)(?::(.+))?/);
+                  if (previewMatch) {
+                    const [, pid] = previewMatch;
+                    setActiveProjectId(pid);
+                    setShowProjectIDE(true);
+                    /* Fetch project files from API to display in IDE */
+                    fetch(`/api/super-agent/chat`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        messages: [{ role: "user", content: `list files in project ${pid}` }],
+                        system: `Use file_manager with action="list" and projectId="${pid}" and immediately return the result.`,
+                        maxTokens: 500,
+                      }),
+                    }).catch(() => { /* ignore */ });
+                  }
                 }
               }
               if (data.content) {
@@ -6871,7 +6945,7 @@ export default function Chat() {
                 <span className="text-[9px] text-purple-400/70 truncate max-w-[60px]">{selectedModelData.name.split(" ").slice(-1)[0]}</span>
               )}
               {agentMode === "OMEGA"
-                ? <span className="text-[8px] bg-orange-500/30 text-orange-300 px-1 rounded-sm font-bold">10 tools</span>
+                ? <span className="text-[8px] bg-orange-500/30 text-orange-300 px-1 rounded-sm font-bold">52 tools</span>
                 : <ChevronDown size={10} className="text-white/40" />
               }
             </motion.button>
@@ -7161,6 +7235,49 @@ export default function Chat() {
       {/* ── Deploy Sheet ── */}
       <AnimatePresence>
         {showDeploy && <DeploySheet onClose={() => setShowDeploy(false)} />}
+      </AnimatePresence>
+
+      {/* ── Project IDE Panel ── */}
+      <AnimatePresence>
+        {showProjectIDE && activeProjectId && (
+          <ProjectIDEPanel
+            projectId={activeProjectId}
+            files={projectFiles}
+            title={projectTitle}
+            onClose={() => setShowProjectIDE(false)}
+            onRefresh={() => {
+              /* Could trigger re-fetch of files */
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── View Project floating badge ── */}
+      <AnimatePresence>
+        {activeProjectId && !showProjectIDE && projectFiles.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="absolute bottom-[76px] right-4 z-40"
+          >
+            <button
+              onClick={() => setShowProjectIDE(true)}
+              className="bg-[#161b22] border border-blue-400/40 rounded-2xl px-3.5 py-2.5 flex items-center gap-2.5 shadow-xl hover:border-blue-400/70 transition-colors"
+            >
+              <div className="w-6 h-6 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center">
+                <span className="text-[11px]">💻</span>
+              </div>
+              <div className="text-left">
+                <p className="text-[11px] font-semibold text-blue-300">View Project</p>
+                <p className="text-[10px] text-white/35">{projectFiles.length} file{projectFiles.length !== 1 ? "s" : ""} · {activeProjectId}</p>
+              </div>
+              <motion.div animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+                <div className="w-2 h-2 rounded-full bg-green-400" />
+              </motion.div>
+            </button>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* ── Build Together floating badge ── */}

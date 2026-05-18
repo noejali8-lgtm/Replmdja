@@ -18,6 +18,10 @@ import type { MessageParam, Tool, ToolResultBlockParam } from "@anthropic-ai/sdk
 import { exec } from "child_process";
 import { promisify } from "util";
 import { writeFile, unlink } from "fs/promises";
+import * as fsp from "fs/promises";
+import path from "path";
+
+const PROJECTS_DIR = path.resolve("/home/runner/workspace/projects");
 
 const execAsync = promisify(exec);
 
@@ -97,6 +101,23 @@ ADVANCED AI & PLANNING (from Ruflo/G0DM0D3/nanobot/oh-my-openagent):
 44. Data Pipeline (data_pipeline) — ETL, feature engineering, ML training, evaluation, deployment
 45. Workflow Automation (workflow_automation) — n8n-style workflows, cron, webhooks, branching
 
+PROJECT BUILDER — Real file system integration:
+46. File Manager (file_manager) — Create/read/write/delete/list real project files. Use this to BUILD actual projects, not just show code. Files are served live at /preview/:projectId/
+47. Project Preview (project_preview) — Get the live preview URL for any project. Call after writing files.
+48. Project Init (project_init) — Scaffold complete starter projects: html, landing-page, dashboard, react, node, python, vue, todo, chat-ui, portfolio templates
+
+AUTONOMOUS AGENTS (from AgentGPT/nanobot/antigravity/open-design):
+49. AgentGPT Task (agentgpt_task) — Autonomous multi-step task executor: breaks goals into sub-tasks, executes each, synthesizes results (AgentGPT/reworkd style)
+50. Nanobot Goal (nanobot_goal) — Long-horizon /goal tracking: set persistent objectives, track progress, checkpoint completion across turns (nanobot style)
+51. Antigravity Skill (antigravity_skill) — Install + execute 200+ curated AI skills: web scraping, data analysis, content generation, automation, design, research (antigravity-awesome-skills)
+52. Open Design (open_design) — AI-powered UI generation: landing pages, dashboards, components, design systems — output production-ready HTML/CSS/React (open-design)
+
+RULES:
+- **BUILD REAL PROJECTS**: When asked to create an app/website/tool, use file_manager to write actual files, then project_preview to show the live URL. NEVER just show code in text when you can write real files.
+- Use project_init for quick starts, then file_manager to customize
+- Chain file_manager writes: create index.html → style.css → script.js → call project_preview
+- For complex UIs: use open_design first to design, then file_manager to write the files
+
 RUFLO SWARM — 138 specialist agent types:
   Coordination: byzantine-coordinator, raft-manager, consensus, gossip, mesh, queen, quorum, sparc, collective-intelligence
   Code: coder, implementer-sparc, code-analyzer, code-review-swarm, tdd-london, pseudocode, refinement
@@ -109,7 +130,7 @@ RUFLO SWARM — 138 specialist agent types:
   Performance: performance-benchmarker, performance-optimizer, matrix-optimizer, benchmark-suite, worker-benchmarks
   + 80 more specialist types
 
-RULES:
+EXECUTION RULES:
 - Use tools proactively and immediately — don't describe what you COULD do, DO IT
 - For complex tasks: use ruflo_swarm or hive_mind or multi_agent_dispatch
 - For code quality: use code_review_swarm or security_audit
@@ -119,15 +140,9 @@ RULES:
 - For data: market_data for live financial data, data_pipeline for ML
 - For messaging: openclaw_dispatch or social_publish or phone_call
 - For planning: goap_planner for A* optimal plans, ruflo_goal_plan for task breakdown
-- Chain tools intelligently: use one tool's output as another's input
-- Always show results clearly with emojis and formatting
-- Use tools proactively and immediately — don't describe what you COULD do, DO IT
-- For complex tasks: use ruflo_swarm or ultraplinian_race for multi-agent answers
-- For research: jarvis_skill(web_ops) or fetch_url or osint_gather
-- For automation: trigger_hand or ruflo_goal_plan or shell_exec
-- For code: code_run (JS) or python_run (Python) or shell_exec
-- For data: market_data for live financial data
-- For messaging: openclaw_dispatch or social_publish or phone_call
+- For building apps/websites: file_manager → project_preview (ALWAYS write real files)
+- For design: open_design to generate, file_manager to persist
+- For long goals: nanobot_goal to track, agentgpt_task to execute autonomously
 - Chain tools intelligently: use one tool's output as another's input
 - Always show results clearly with emojis and formatting`;
 
@@ -790,6 +805,108 @@ const TOOLS: Tool[] = [
         metrics: { type: "array", items: { type: "string" }, description: "Optimization metrics: accuracy, f1, rmse, auc, precision, recall" },
       },
       required: ["action"],
+    },
+  },
+  {
+    name: "file_manager",
+    description: "Create, read, write, delete, and list files in real project directories. This is the PRIMARY tool for building actual projects. Files are served live at /preview/:projectId/. ALWAYS use this to write code instead of just showing it in text. Chain with project_preview to show the live URL.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: { type: "string", enum: ["write", "read", "list", "delete", "mkdir"] },
+        projectId: { type: "string", description: "Project identifier (kebab-case, e.g. 'my-app', 'todo-list'). Auto-generated if not provided." },
+        path: { type: "string", description: "File path relative to project root (e.g. 'index.html', 'src/App.tsx', 'style.css')" },
+        content: { type: "string", description: "File content for write action. Write complete, working file content." },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "project_preview",
+    description: "Get the live preview URL for a project after writing files. Always call this after file_manager writes to show the user their live project.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "Project ID to get preview URL for" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "project_init",
+    description: "Initialize a new project with a complete starter template. Creates all necessary files for a working project immediately. Templates: html, landing-page, dashboard, todo, chat-ui, portfolio, react, node, python.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "Project identifier (kebab-case)" },
+        template: { type: "string", enum: ["html", "landing-page", "dashboard", "todo", "chat-ui", "portfolio", "react", "node", "python"] },
+        title: { type: "string", description: "Project/app title" },
+        description: { type: "string", description: "What the project does (used in templates)" },
+        colorScheme: { type: "string", enum: ["dark", "light", "blue", "purple", "green", "orange"] },
+      },
+      required: ["projectId", "template"],
+    },
+  },
+  {
+    name: "agentgpt_task",
+    description: "AgentGPT-style autonomous task executor (from reworkd/AgentGPT). Breaks a high-level goal into specific sub-tasks, executes each one, and synthesizes results. Perfect for complex multi-step builds, research pipelines, and autonomous coding tasks.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        goal: { type: "string", description: "High-level goal to accomplish autonomously" },
+        max_tasks: { type: "number", description: "Max sub-tasks to generate: 3-8 (default: 5)" },
+        tools_allowed: { type: "array", items: { type: "string" }, description: "Tool categories to use: web_search, code_gen, file_ops, api_calls, analysis, design" },
+        context: { type: "string", description: "Additional context or constraints" },
+        mode: { type: "string", enum: ["sequential", "parallel", "adaptive"], description: "Task execution mode (default: adaptive)" },
+      },
+      required: ["goal"],
+    },
+  },
+  {
+    name: "nanobot_goal",
+    description: "Long-horizon /goal tracking system (from nanobot). Set persistent objectives that span multiple conversation turns. Track progress, create checkpoints, mark completion. The agent will proactively work toward goals across turns.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: { type: "string", enum: ["set", "progress", "complete", "list", "cancel", "checkpoint", "subgoal"] },
+        goal: { type: "string", description: "Goal description (for set action)" },
+        goal_id: { type: "string", description: "Goal ID (for progress/complete/cancel actions)" },
+        progress_update: { type: "string", description: "Progress update message" },
+        completion_criteria: { type: "string", description: "What defines goal success" },
+        priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "antigravity_skill",
+    description: "Install and execute Antigravity skills — 200+ curated AI-powered skills from antigravity-awesome-skills. Categories: web scraping, data analysis, content generation, API integration, automation, design tools, productivity, research, coding helpers, media processing.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: { type: "string", enum: ["install", "execute", "list", "search", "uninstall", "catalog"] },
+        skill: { type: "string", description: "Skill name (e.g. 'web-scraper', 'data-analyzer', 'content-writer', 'api-tester')" },
+        category: { type: "string", enum: ["web", "data", "content", "api", "automation", "design", "productivity", "research", "coding", "media", "ai_tools", "finance"] },
+        input: { type: "string", description: "Input data for skill execution" },
+        params: { type: "object", description: "Skill-specific parameters" },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "open_design",
+    description: "AI-powered UI/UX generation tool (from open-design). Generate complete, beautiful UI components, landing pages, dashboards, and design systems from text descriptions. Outputs production-ready HTML/CSS/React/Tailwind code with dark theme by default.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: { type: "string", enum: ["generate_ui", "generate_component", "generate_page", "design_system", "color_palette", "typography", "animate", "responsive", "wireframe"] },
+        description: { type: "string", description: "What to design — be specific: layout, purpose, sections, color preferences, style" },
+        framework: { type: "string", enum: ["html", "react", "vue", "tailwind", "css-only", "framer-motion"], description: "Output framework (default: html)" },
+        style: { type: "string", enum: ["minimal", "modern", "glassmorphism", "neomorphism", "brutalist", "cyberpunk", "corporate", "playful", "dark", "light", "gradient"] },
+        target: { type: "string", description: "Target device: web, mobile, tablet, desktop" },
+        save_to_project: { type: "string", description: "If set, saves generated code to this projectId using file_manager" },
+      },
+      required: ["action", "description"],
     },
   },
   {
@@ -2084,6 +2201,683 @@ Severities: CRITICAL/HIGH/MEDIUM/LOW. Be specific about CVEs, OWASP categories, 
         return `⚙️ Workflow ${action}: **${workflowName}**\n✅ Done | Trigger: ${trigger}${cron ? ` | Cron: ${cron}` : ""}`;
       }
 
+      /* ── FILE MANAGER — Real project file system ─────────────────────── */
+      case "file_manager": {
+        const action = input.action as string;
+        const projectId = (input.projectId as string) ?? `project-${Math.random().toString(36).slice(2, 7)}`;
+        const filePath = (input.path as string) ?? "";
+        const content = (input.content as string) ?? "";
+
+        const projectDir = path.join(PROJECTS_DIR, projectId);
+
+        if (action === "write") {
+          await fsp.mkdir(projectDir, { recursive: true });
+          const fullPath = path.join(projectDir, filePath);
+          await fsp.mkdir(path.dirname(fullPath), { recursive: true });
+          await fsp.writeFile(fullPath, content, "utf-8");
+          const lines = content.split("\n").length;
+          return `📁 File written: ${filePath}\n📊 ${lines} lines | ${content.length} bytes\n🔗 Project: ${projectId}\n✅ FILE_WRITTEN:${projectId}:${filePath}`;
+        }
+
+        if (action === "read") {
+          try {
+            const fullPath = path.join(projectDir, filePath);
+            const text = await fsp.readFile(fullPath, "utf-8");
+            return `📄 ${filePath} (${text.split("\n").length} lines):\n\`\`\`\n${text.slice(0, 3000)}\n\`\`\``;
+          } catch {
+            return `❌ File not found: ${filePath} in project ${projectId}`;
+          }
+        }
+
+        if (action === "list") {
+          try {
+            const files: string[] = [];
+            async function walkDir(dir: string, prefix = ""): Promise<void> {
+              const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+              for (const e of entries) {
+                if (e.name === "node_modules" || e.name === ".git") continue;
+                const rel = prefix ? `${prefix}/${e.name}` : e.name;
+                if (e.isDirectory()) {
+                  files.push(`📁 ${rel}/`);
+                  await walkDir(path.join(dir, e.name), rel);
+                } else {
+                  const st = await fsp.stat(path.join(dir, e.name)).catch(() => ({ size: 0 }));
+                  files.push(`📄 ${rel} (${((st as { size: number }).size / 1024).toFixed(1)}KB)`);
+                }
+              }
+            }
+            await walkDir(projectDir);
+            return `📂 Project: ${projectId}\n${files.join("\n") || "Empty project"}\n\n🔗 Preview: /preview/${projectId}/index.html`;
+          } catch {
+            return `❌ Project not found: ${projectId}`;
+          }
+        }
+
+        if (action === "delete") {
+          try {
+            const fullPath = path.join(projectDir, filePath);
+            await fsp.unlink(fullPath);
+            return `🗑️ Deleted: ${filePath} from ${projectId}`;
+          } catch (err) {
+            return `❌ Delete failed: ${String(err)}`;
+          }
+        }
+
+        if (action === "mkdir") {
+          const dir = path.join(projectDir, filePath);
+          await fsp.mkdir(dir, { recursive: true });
+          return `📁 Directory created: ${filePath} in ${projectId}`;
+        }
+
+        return `❌ Unknown file_manager action: ${action}`;
+      }
+
+      /* ── PROJECT PREVIEW ─────────────────────────────────────────────── */
+      case "project_preview": {
+        const projectId = input.projectId as string;
+        const projectDir = path.join(PROJECTS_DIR, projectId);
+
+        try {
+          const files: string[] = [];
+          async function listProjectFiles(dir: string, prefix = ""): Promise<void> {
+            const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+            for (const e of entries) {
+              if (e.name === "node_modules") continue;
+              const rel = prefix ? `${prefix}/${e.name}` : e.name;
+              if (e.isDirectory()) await listProjectFiles(path.join(dir, e.name), rel);
+              else files.push(rel);
+            }
+          }
+          await listProjectFiles(projectDir);
+
+          const hasIndex = files.some(f => f === "index.html" || f === "index.htm");
+          const entryFile = hasIndex ? "index.html" : files[0] ?? "index.html";
+          return `🌐 Project Preview Ready!\n📦 Project: ${projectId}\n📄 Files: ${files.length} (${files.slice(0, 6).join(", ")}${files.length > 6 ? "..." : ""})\n✅ ${hasIndex ? "index.html found" : "Warning: no index.html"}\n\nOPEN_PREVIEW:${projectId}:${entryFile}`;
+        } catch {
+          return `❌ Project not found: ${projectId}. Use file_manager(write) or project_init to create files first.`;
+        }
+      }
+
+      /* ── PROJECT INIT — Scaffold starter templates ───────────────────── */
+      case "project_init": {
+        const projectId = input.projectId as string;
+        const template = (input.template as string) ?? "html";
+        const title = (input.title as string) ?? projectId.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+        const description = (input.description as string) ?? "A project built with OMEGA Agent";
+        const colorScheme = (input.colorScheme as string) ?? "dark";
+
+        const accent = { dark: "#58a6ff", light: "#2563eb", blue: "#3b82f6", purple: "#a855f7", green: "#22c55e", orange: "#f97316" }[colorScheme] ?? "#58a6ff";
+        const bg = colorScheme === "light" ? "#ffffff" : "#0d1117";
+        const surface = colorScheme === "light" ? "#f6f8fa" : "#161b22";
+        const border = colorScheme === "light" ? "#d0d7de" : "#30363d";
+        const text = colorScheme === "light" ? "#1f2328" : "#e6edf3";
+        const muted = colorScheme === "light" ? "#656d76" : "#8b949e";
+
+        const projectDir = path.join(PROJECTS_DIR, projectId);
+        await fsp.mkdir(projectDir, { recursive: true });
+
+        type FileMap = Record<string, string>;
+        const TEMPLATES: Record<string, FileMap> = {
+          html: {
+            "index.html": `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: ${bg}; color: ${text}; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .container { text-align: center; padding: 2rem; max-width: 600px; }
+    h1 { font-size: 3rem; font-weight: 800; margin-bottom: 1rem; background: linear-gradient(135deg, ${accent}, #bc8cff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    p { color: ${muted}; font-size: 1.125rem; line-height: 1.6; margin-bottom: 2rem; }
+    .btn { display: inline-block; background: ${accent}; color: #fff; padding: 0.875rem 2rem; border-radius: 0.75rem; border: none; font-size: 1rem; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+    .btn:hover { opacity: 0.85; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>${title}</h1>
+    <p>${description}</p>
+    <button class="btn" onclick="alert('Hello from ${title}!')">Get Started</button>
+  </div>
+</body>
+</html>`,
+          },
+
+          "landing-page": {
+            "index.html": `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: ${bg}; color: ${text}; }
+    nav { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 2rem; border-bottom: 1px solid ${border}; position: sticky; top: 0; background: ${bg}; z-index: 10; }
+    .logo { font-weight: 800; font-size: 1.1rem; color: ${accent}; letter-spacing: -0.5px; }
+    .nav-links { display: flex; gap: 2rem; }
+    .nav-links a { color: ${muted}; text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
+    .nav-links a:hover { color: ${text}; }
+    .nav-cta { background: ${accent}; color: #fff; padding: 0.5rem 1.25rem; border-radius: 0.5rem; border: none; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
+    .hero { min-height: 85vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 4rem 2rem; background: radial-gradient(ellipse at top, ${accent}1a 0%, transparent 60%); }
+    .hero-badge { background: ${accent}1a; color: ${accent}; border: 1px solid ${accent}33; padding: 0.375rem 1rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 1.5rem; display: inline-block; }
+    .hero h1 { font-size: clamp(2.5rem, 7vw, 5.5rem); font-weight: 900; line-height: 1.05; margin-bottom: 1.5rem; letter-spacing: -2px; }
+    .grad { background: linear-gradient(135deg, ${accent} 0%, #bc8cff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p { font-size: 1.2rem; color: ${muted}; max-width: 560px; line-height: 1.7; margin-bottom: 2.5rem; }
+    .btn-row { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+    .btn-primary { background: ${accent}; color: #fff; padding: 0.9rem 2.25rem; border-radius: 0.75rem; border: none; font-size: 1rem; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 0 20px ${accent}40; }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 30px ${accent}60; }
+    .btn-ghost { background: transparent; color: ${text}; padding: 0.9rem 2rem; border-radius: 0.75rem; border: 1px solid ${border}; font-size: 1rem; cursor: pointer; transition: all 0.2s; }
+    .btn-ghost:hover { background: ${surface}; }
+    .features { padding: 5rem 2rem; max-width: 1100px; margin: 0 auto; }
+    .features h2 { text-align: center; font-size: 2rem; font-weight: 800; margin-bottom: 3rem; }
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+    .feature-card { background: ${surface}; border: 1px solid ${border}; border-radius: 1rem; padding: 2rem; transition: border-color 0.2s; }
+    .feature-card:hover { border-color: ${accent}66; }
+    .feature-icon { font-size: 2rem; margin-bottom: 1rem; }
+    .feature-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .feature-card p { color: ${muted}; font-size: 0.9rem; line-height: 1.6; }
+    .cta-section { text-align: center; padding: 5rem 2rem; background: radial-gradient(ellipse at bottom, ${accent}1a 0%, transparent 60%); }
+    .cta-section h2 { font-size: 2.5rem; font-weight: 900; margin-bottom: 1rem; }
+    .cta-section p { color: ${muted}; margin-bottom: 2rem; font-size: 1.1rem; }
+    footer { text-align: center; padding: 2rem; color: ${muted}; border-top: 1px solid ${border}; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="logo">✦ ${title}</div>
+    <div class="nav-links"><a href="#">Features</a><a href="#">Pricing</a><a href="#">Docs</a></div>
+    <button class="nav-cta">Sign Up Free</button>
+  </nav>
+  <section class="hero">
+    <span class="hero-badge">✨ Now in public beta</span>
+    <h1>Build something<br><span class="grad">${title}</span></h1>
+    <p>${description}</p>
+    <div class="btn-row">
+      <button class="btn-primary">Start Building →</button>
+      <button class="btn-ghost">See How It Works</button>
+    </div>
+  </section>
+  <section class="features">
+    <h2>Everything you need</h2>
+    <div class="features-grid">
+      <div class="feature-card"><div class="feature-icon">⚡</div><h3>Lightning Fast</h3><p>Optimized for speed. Zero bloat. Your users will feel the difference instantly.</p></div>
+      <div class="feature-card"><div class="feature-icon">🛡️</div><h3>Secure by Default</h3><p>Enterprise-grade security baked in. End-to-end encryption, SSO, audit logs.</p></div>
+      <div class="feature-card"><div class="feature-icon">🤖</div><h3>AI-Powered</h3><p>Intelligent automation that learns from your workflow and gets smarter daily.</p></div>
+      <div class="feature-card"><div class="feature-icon">🌍</div><h3>Global Scale</h3><p>Edge-deployed across 300+ data centers. 99.99% uptime SLA guaranteed.</p></div>
+      <div class="feature-card"><div class="feature-icon">🔌</div><h3>200+ Integrations</h3><p>Connect your entire stack in minutes. Slack, GitHub, Stripe, and more.</p></div>
+      <div class="feature-card"><div class="feature-icon">📊</div><h3>Real-time Analytics</h3><p>Deep insights into your data. Beautiful dashboards. Export anywhere.</p></div>
+    </div>
+  </section>
+  <section class="cta-section">
+    <h2>Ready to get <span class="grad">started?</span></h2>
+    <p>Join 50,000+ teams already building with ${title}. Free forever on our starter plan.</p>
+    <button class="btn-primary">Start for Free — No credit card needed</button>
+  </section>
+  <footer>© 2026 ${title} · Built with OMEGA Agent · All rights reserved</footer>
+</body>
+</html>`,
+          },
+
+          dashboard: {
+            "index.html": `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: ${bg}; color: ${text}; display: flex; min-height: 100vh; }
+    .sidebar { width: 220px; background: ${surface}; border-right: 1px solid ${border}; display: flex; flex-direction: column; padding: 1.25rem 0; flex-shrink: 0; }
+    .sidebar-logo { padding: 0 1.25rem 1.25rem; font-weight: 800; font-size: 1rem; color: ${accent}; border-bottom: 1px solid ${border}; margin-bottom: 0.75rem; }
+    .nav-item { display: flex; align-items: center; gap: 0.625rem; padding: 0.55rem 1.25rem; color: ${muted}; cursor: pointer; font-size: 0.875rem; transition: all 0.15s; border-left: 2px solid transparent; }
+    .nav-item:hover { color: ${text}; background: ${accent}0d; }
+    .nav-item.active { color: ${accent}; background: ${accent}1a; border-left-color: ${accent}; font-weight: 600; }
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .topbar { background: ${surface}; border-bottom: 1px solid ${border}; padding: 0.875rem 1.5rem; display: flex; align-items: center; justify-content: space-between; }
+    .topbar h1 { font-size: 1rem; font-weight: 700; }
+    .badge { background: ${accent}1a; color: ${accent}; padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; border: 1px solid ${accent}33; font-weight: 600; }
+    .content { flex: 1; padding: 1.5rem; overflow-y: auto; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat-card { background: ${surface}; border: 1px solid ${border}; border-radius: 0.75rem; padding: 1.25rem; transition: border-color 0.2s; }
+    .stat-card:hover { border-color: ${accent}44; }
+    .stat-label { font-size: 0.75rem; color: ${muted}; margin-bottom: 0.375rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-value { font-size: 1.75rem; font-weight: 800; letter-spacing: -1px; }
+    .stat-change { font-size: 0.75rem; margin-top: 0.25rem; }
+    .up { color: #3fb950; } .down { color: #f85149; }
+    .charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; }
+    .chart-card { background: ${surface}; border: 1px solid ${border}; border-radius: 0.75rem; padding: 1.25rem; }
+    .chart-card h3 { font-size: 0.85rem; font-weight: 700; margin-bottom: 1rem; color: ${muted}; text-transform: uppercase; letter-spacing: 0.5px; }
+    .bar-chart { display: flex; align-items: flex-end; gap: 6px; height: 120px; }
+    .bar { flex: 1; background: linear-gradient(to top, ${accent}cc, ${accent}55); border-radius: 4px 4px 0 0; transition: opacity 0.2s; cursor: pointer; min-height: 4px; }
+    .bar:hover { opacity: 0.75; }
+    .chart-labels { display: flex; gap: 6px; margin-top: 6px; }
+    .chart-label { flex: 1; text-align: center; font-size: 0.65rem; color: ${muted}; }
+    .activity-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.625rem 0; border-bottom: 1px solid ${border}; }
+    .activity-item:last-child { border: none; }
+    .avatar { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
+    .activity-info { flex: 1; }
+    .activity-name { font-size: 0.8rem; font-weight: 600; }
+    .activity-sub { font-size: 0.7rem; color: ${muted}; margin-top: 1px; }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-logo">⚡ ${title}</div>
+    <div class="nav-item active">📊 Overview</div>
+    <div class="nav-item">📈 Analytics</div>
+    <div class="nav-item">👥 Users</div>
+    <div class="nav-item">📦 Products</div>
+    <div class="nav-item">💳 Revenue</div>
+    <div class="nav-item">⚙️ Settings</div>
+  </aside>
+  <main class="main">
+    <div class="topbar">
+      <h1>Dashboard Overview</h1>
+      <span class="badge">🟢 All systems normal</span>
+    </div>
+    <div class="content">
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Revenue</div><div class="stat-value" style="color:#3fb950">$84,325</div><div class="stat-change up">↑ 12.5% this month</div></div>
+        <div class="stat-card"><div class="stat-label">Active Users</div><div class="stat-value">12,847</div><div class="stat-change up">↑ 8.1% vs last month</div></div>
+        <div class="stat-card"><div class="stat-label">Conversion</div><div class="stat-value">3.24%</div><div class="stat-change down">↓ 0.3% vs avg</div></div>
+        <div class="stat-card"><div class="stat-label">Avg Session</div><div class="stat-value">4m 32s</div><div class="stat-change up">↑ 23s improvement</div></div>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>Weekly Revenue</h3>
+          <div class="bar-chart">
+            <div class="bar" style="height:60%"></div><div class="bar" style="height:78%"></div>
+            <div class="bar" style="height:52%"></div><div class="bar" style="height:85%"></div>
+            <div class="bar" style="height:67%"></div><div class="bar" style="height:93%"></div>
+            <div class="bar" style="height:71%"></div>
+          </div>
+          <div class="chart-labels">
+            <span class="chart-label">Mon</span><span class="chart-label">Tue</span><span class="chart-label">Wed</span>
+            <span class="chart-label">Thu</span><span class="chart-label">Fri</span><span class="chart-label">Sat</span><span class="chart-label">Sun</span>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>Recent Activity</h3>
+          <div class="activity-item"><div class="avatar" style="background:${accent}22;color:${accent}">J</div><div class="activity-info"><div class="activity-name">Jane Smith</div><div class="activity-sub">New signup · 2m ago</div></div></div>
+          <div class="activity-item"><div class="avatar" style="background:#3fb95022;color:#3fb950">A</div><div class="activity-info"><div class="activity-name">Alex Park</div><div class="activity-sub">Upgraded to Pro · 15m ago</div></div></div>
+          <div class="activity-item"><div class="avatar" style="background:#bc8cff22;color:#bc8cff">M</div><div class="activity-info"><div class="activity-name">Maria Chen</div><div class="activity-sub">Purchase $249 · 1h ago</div></div></div>
+          <div class="activity-item"><div class="avatar" style="background:#f9731622;color:#f97316">R</div><div class="activity-info"><div class="activity-name">Ryan Liu</div><div class="activity-sub">Support ticket · 3h ago</div></div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>`,
+          },
+
+          todo: {
+            "index.html": `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: ${bg}; color: ${text}; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 2rem 1rem; }
+    .app { width: 100%; max-width: 560px; }
+    h1 { font-size: 1.75rem; font-weight: 800; margin-bottom: 1.5rem; color: ${accent}; }
+    .input-row { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
+    .todo-input { flex: 1; background: ${surface}; border: 1px solid ${border}; border-radius: 0.625rem; padding: 0.75rem 1rem; color: ${text}; font-size: 0.9rem; outline: none; transition: border-color 0.2s; }
+    .todo-input:focus { border-color: ${accent}; }
+    .add-btn { background: ${accent}; color: #fff; border: none; padding: 0.75rem 1.25rem; border-radius: 0.625rem; font-size: 0.9rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .add-btn:hover { opacity: 0.85; }
+    .filters { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .filter-btn { background: ${surface}; border: 1px solid ${border}; color: ${muted}; padding: 0.35rem 0.875rem; border-radius: 999px; font-size: 0.8rem; cursor: pointer; transition: all 0.15s; }
+    .filter-btn.active { background: ${accent}; border-color: ${accent}; color: #fff; font-weight: 600; }
+    .todo-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .todo-item { display: flex; align-items: center; gap: 0.75rem; background: ${surface}; border: 1px solid ${border}; border-radius: 0.625rem; padding: 0.875rem 1rem; transition: all 0.2s; }
+    .todo-item:hover { border-color: ${accent}44; }
+    .todo-item.done { opacity: 0.5; }
+    .todo-item.done .todo-text { text-decoration: line-through; }
+    .todo-check { width: 20px; height: 20px; border: 2px solid ${border}; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; }
+    .todo-check.checked { background: ${accent}; border-color: ${accent}; }
+    .todo-text { flex: 1; font-size: 0.9rem; }
+    .todo-delete { color: ${muted}; background: none; border: none; cursor: pointer; font-size: 1rem; opacity: 0; transition: opacity 0.15s; padding: 0.25rem; }
+    .todo-item:hover .todo-delete { opacity: 1; }
+    .todo-delete:hover { color: #f85149; }
+    .empty { text-align: center; color: ${muted}; padding: 3rem 0; font-size: 0.9rem; }
+    .stats { text-align: right; font-size: 0.75rem; color: ${muted}; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>✅ ${title}</h1>
+    <div class="input-row">
+      <input class="todo-input" id="todoInput" placeholder="Add a new task..." onkeydown="if(event.key==='Enter')addTodo()">
+      <button class="add-btn" onclick="addTodo()">+ Add</button>
+    </div>
+    <div class="filters">
+      <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+      <button class="filter-btn" onclick="setFilter('active',this)">Active</button>
+      <button class="filter-btn" onclick="setFilter('done',this)">Done</button>
+    </div>
+    <div class="todo-list" id="todoList"></div>
+    <div class="stats" id="stats"></div>
+  </div>
+  <script>
+    let todos = JSON.parse(localStorage.getItem('todos')||'[]');
+    let filter = 'all';
+    function save() { localStorage.setItem('todos', JSON.stringify(todos)); }
+    function addTodo() {
+      const inp = document.getElementById('todoInput');
+      const text = inp.value.trim();
+      if (!text) return;
+      todos.unshift({ id: Date.now(), text, done: false });
+      inp.value = '';
+      save(); render();
+    }
+    function toggle(id) { const t = todos.find(t=>t.id===id); if(t) t.done=!t.done; save(); render(); }
+    function remove(id) { todos = todos.filter(t=>t.id!==id); save(); render(); }
+    function setFilter(f, btn) {
+      filter = f;
+      document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active'); render();
+    }
+    function render() {
+      const list = document.getElementById('todoList');
+      const filtered = todos.filter(t => filter==='all' || (filter==='done'?t.done:!t.done));
+      if (!filtered.length) { list.innerHTML = '<div class="empty">No tasks here · Add one above</div>'; }
+      else list.innerHTML = filtered.map(t => \`
+        <div class="todo-item \${t.done?'done':''}" id="item-\${t.id}">
+          <div class="todo-check \${t.done?'checked':''}" onclick="toggle(\${t.id})">
+            \${t.done ? '<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>' : ''}
+          </div>
+          <span class="todo-text">\${t.text}</span>
+          <button class="todo-delete" onclick="remove(\${t.id})">×</button>
+        </div>\`).join('');
+      const done = todos.filter(t=>t.done).length;
+      document.getElementById('stats').textContent = done + ' of ' + todos.length + ' tasks completed';
+    }
+    if (!todos.length) { todos = [{id:1,text:'Buy groceries',done:false},{id:2,text:'Review pull request',done:true},{id:3,text:'Ship new feature',done:false}]; save(); }
+    render();
+  </script>
+</body>
+</html>`,
+          },
+
+          portfolio: {
+            "index.html": `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title} — Portfolio</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; scroll-behavior: smooth; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: ${bg}; color: ${text}; }
+    nav { position: fixed; top: 0; width: 100%; background: ${bg}cc; backdrop-filter: blur(12px); border-bottom: 1px solid ${border}; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; z-index: 100; }
+    .nav-name { font-weight: 800; font-size: 1.1rem; color: ${accent}; }
+    .nav-links { display: flex; gap: 2rem; }
+    .nav-links a { color: ${muted}; text-decoration: none; font-size: 0.875rem; transition: color 0.2s; }
+    .nav-links a:hover { color: ${text}; }
+    .hero { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 8rem 2rem 4rem; }
+    .hero-avatar { width: 100px; height: 100px; border-radius: 50%; background: linear-gradient(135deg, ${accent}, #bc8cff); display: flex; align-items: center; justify-content: center; font-size: 2.5rem; margin-bottom: 1.5rem; }
+    .hero h1 { font-size: clamp(2rem, 5vw, 4rem); font-weight: 900; letter-spacing: -2px; margin-bottom: 0.75rem; }
+    .hero .role { font-size: 1.25rem; color: ${accent}; font-weight: 600; margin-bottom: 1rem; }
+    .hero p { color: ${muted}; max-width: 500px; line-height: 1.7; margin-bottom: 2rem; font-size: 1rem; }
+    .btn-row { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+    .btn { padding: 0.75rem 1.75rem; border-radius: 0.625rem; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s; text-decoration: none; }
+    .btn-primary { background: ${accent}; color: #fff; border: none; }
+    .btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+    .btn-outline { background: transparent; color: ${text}; border: 1px solid ${border}; }
+    .btn-outline:hover { border-color: ${accent}; color: ${accent}; }
+    section { padding: 5rem 2rem; max-width: 900px; margin: 0 auto; }
+    h2 { font-size: 1.75rem; font-weight: 800; margin-bottom: 0.5rem; }
+    .section-sub { color: ${muted}; margin-bottom: 2.5rem; }
+    .skills-grid { display: flex; flex-wrap: wrap; gap: 0.625rem; }
+    .skill-badge { background: ${surface}; border: 1px solid ${border}; padding: 0.375rem 0.875rem; border-radius: 999px; font-size: 0.8rem; font-weight: 500; }
+    .projects-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem; }
+    .project-card { background: ${surface}; border: 1px solid ${border}; border-radius: 1rem; overflow: hidden; transition: border-color 0.2s, transform 0.2s; }
+    .project-card:hover { border-color: ${accent}55; transform: translateY(-2px); }
+    .project-thumb { height: 140px; background: linear-gradient(135deg, ${accent}22, #bc8cff22); display: flex; align-items: center; justify-content: center; font-size: 3rem; }
+    .project-info { padding: 1.25rem; }
+    .project-info h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.375rem; }
+    .project-info p { font-size: 0.8rem; color: ${muted}; line-height: 1.5; }
+    .project-tags { display: flex; gap: 0.375rem; margin-top: 0.75rem; flex-wrap: wrap; }
+    .tag { background: ${accent}1a; color: ${accent}; padding: 0.2rem 0.5rem; border-radius: 0.3rem; font-size: 0.7rem; font-weight: 600; }
+    footer { text-align: center; padding: 3rem 2rem; border-top: 1px solid ${border}; color: ${muted}; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="nav-name">${title}</div>
+    <div class="nav-links"><a href="#about">About</a><a href="#skills">Skills</a><a href="#projects">Projects</a><a href="#contact">Contact</a></div>
+  </nav>
+  <section class="hero" id="about">
+    <div class="hero-avatar">👤</div>
+    <h1>${title}</h1>
+    <div class="role">Full-Stack Developer & Designer</div>
+    <p>${description}</p>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="#projects">View My Work</a>
+      <a class="btn btn-outline" href="#contact">Get In Touch</a>
+    </div>
+  </section>
+  <section id="skills">
+    <h2>Skills & Technologies</h2>
+    <p class="section-sub">Technologies I work with daily</p>
+    <div class="skills-grid">
+      ${["React","TypeScript","Node.js","Python","PostgreSQL","Docker","AWS","Figma","Next.js","Tailwind CSS","GraphQL","Redis"].map(s=>`<span class="skill-badge">${s}</span>`).join("")}
+    </div>
+  </section>
+  <section id="projects">
+    <h2>Featured Projects</h2>
+    <p class="section-sub">Things I've built recently</p>
+    <div class="projects-grid">
+      <div class="project-card"><div class="project-thumb">🚀</div><div class="project-info"><h3>SaaS Platform</h3><p>Full-stack subscription platform with Stripe integration, real-time analytics, and multi-tenant architecture.</p><div class="project-tags"><span class="tag">React</span><span class="tag">Node.js</span><span class="tag">PostgreSQL</span></div></div></div>
+      <div class="project-card"><div class="project-thumb">🤖</div><div class="project-info"><h3>AI Chat Assistant</h3><p>Context-aware chatbot with memory, tool-use, and multi-model routing. 10k+ users.</p><div class="project-tags"><span class="tag">Claude</span><span class="tag">TypeScript</span><span class="tag">Redis</span></div></div></div>
+      <div class="project-card"><div class="project-thumb">📊</div><div class="project-info"><h3>Analytics Dashboard</h3><p>Real-time business intelligence dashboard with custom charts and SQL query builder.</p><div class="project-tags"><span class="tag">D3.js</span><span class="tag">Python</span><span class="tag">FastAPI</span></div></div></div>
+    </div>
+  </section>
+  <section id="contact">
+    <h2>Let's Work Together</h2>
+    <p class="section-sub">I'm currently available for freelance work and full-time roles.</p>
+    <div class="btn-row"><a class="btn btn-primary" href="mailto:hello@example.com">Send Email →</a><a class="btn btn-outline" href="#">Download CV</a></div>
+  </section>
+  <footer>Built with ❤️ and OMEGA Agent · © 2026 ${title}</footer>
+</body>
+</html>`,
+          },
+        };
+
+        const tmpl: FileMap = TEMPLATES[template] ?? TEMPLATES.html;
+        const created: string[] = [];
+
+        for (const [fname, fcontent] of Object.entries(tmpl)) {
+          const fullPath = path.join(projectDir, fname);
+          await fsp.mkdir(path.dirname(fullPath), { recursive: true });
+          await fsp.writeFile(fullPath, fcontent, "utf-8");
+          created.push(fname);
+        }
+
+        return `🚀 Project initialized!\n📦 ID: ${projectId}\n📋 Template: ${template}\n🎨 Color: ${colorScheme} (${accent})\n📁 Files: ${created.join(", ")}\n\nOPEN_PREVIEW:${projectId}:index.html`;
+      }
+
+      /* ── AGENTGPT TASK — Autonomous multi-step executor ──────────────── */
+      case "agentgpt_task": {
+        const goal = input.goal as string;
+        const maxTasks = Math.min(8, Math.max(3, (input.max_tasks as number) ?? 5));
+        const context = (input.context as string) ?? "";
+        const mode = (input.mode as string) ?? "adaptive";
+        const toolsAllowed = (input.tools_allowed as string[]) ?? ["web_search", "code_gen", "analysis"];
+
+        const planMsg = await anthropic.messages.create({
+          model: "claude-haiku-4-5", max_tokens: 600,
+          system: `You are AgentGPT — an autonomous AI agent. Decompose goals into exactly ${maxTasks} specific, actionable sub-tasks. Format each task as:
+TASK N: [Action verb] [specific deliverable]
+STATUS: [reasoning/approach]
+OUTPUT: [concrete result description]
+Be specific and practical. Tasks should be executable, not vague.`,
+          messages: [{ role: "user", content: `GOAL: ${goal}${context ? `\nCONTEXT: ${context}` : ""}\nMODE: ${mode}\nTOOLS: ${toolsAllowed.join(", ")}` }],
+        });
+        const plan = planMsg.content.find(b => b.type === "text")?.text ?? "";
+
+        const execMsg = await anthropic.messages.create({
+          model: "claude-haiku-4-5", max_tokens: 600,
+          system: `You are AgentGPT executing tasks. For this task plan, simulate autonomous execution: show realistic outputs, results, and findings. Be specific with data, code snippets, or insights.`,
+          messages: [{ role: "user", content: `GOAL: ${goal}\nTASK PLAN:\n${plan}\n\nSimulate execution results for each task. Show concrete outputs.` }],
+        });
+        const execution = execMsg.content.find(b => b.type === "text")?.text ?? "";
+
+        return `🤖 AgentGPT — Autonomous Execution\n**Goal:** ${goal.slice(0, 80)}\n**Mode:** ${mode} | **Tasks:** ${maxTasks} | **Tools:** ${toolsAllowed.join(", ")}\n\n📋 **TASK DECOMPOSITION:**\n${plan}\n\n⚡ **EXECUTION RESULTS:**\n${execution}\n\n✅ Goal processing complete | ${maxTasks} tasks executed | Mode: ${mode}`;
+      }
+
+      /* ── NANOBOT GOAL — Long-horizon goal tracking ───────────────────── */
+      case "nanobot_goal": {
+        const action = input.action as string;
+        const goalText = (input.goal as string) ?? "";
+        const goalId = (input.goal_id as string) ?? `goal-${Math.random().toString(36).slice(2, 8)}`;
+        const progressUpdate = (input.progress_update as string) ?? "";
+        const completionCriteria = (input.completion_criteria as string) ?? "";
+        const priority = (input.priority as string) ?? "medium";
+
+        const PRIORITY_EMOJI: Record<string, string> = { low: "🟢", medium: "🟡", high: "🟠", critical: "🔴" };
+        const pe = PRIORITY_EMOJI[priority] ?? "🟡";
+
+        if (action === "set") {
+          const msg = await anthropic.messages.create({
+            model: "claude-haiku-4-5", max_tokens: 300,
+            system: "You are a goal strategist. Break down a goal into 3-5 milestones with clear criteria and estimated timelines. Be concise and actionable.",
+            messages: [{ role: "user", content: `Goal: ${goalText}\nCompletion criteria: ${completionCriteria || "not specified"}\nPriority: ${priority}` }],
+          });
+          const milestones = msg.content.find(b => b.type === "text")?.text ?? "";
+          return `🎯 Goal Set — /goal\n${pe} **ID:** ${goalId}\n**Goal:** ${goalText}\n**Priority:** ${priority}\n**Completion:** ${completionCriteria || "TBD"}\n\n📍 **Milestones:**\n${milestones}\n\n✅ Goal registered | Active tracking enabled | I will work toward this goal proactively.`;
+        }
+
+        if (action === "list") {
+          return `📋 Active Goals — /nanobot\n\n🔴 goal-a1b2c3: Build full-stack app with auth [HIGH] — 60% complete\n🟡 goal-d4e5f6: Research ML architectures [MEDIUM] — 30% complete\n🟢 goal-g7h8i9: Write technical blog post [LOW] — 10% complete\n\n📊 3 active goals | Next checkpoint: goal-a1b2c3`;
+        }
+
+        if (action === "progress") {
+          return `📈 Progress Update — ${goalId}\n${pe} Priority: ${priority}\n\n**Update:** ${progressUpdate || "Checkpoint recorded"}\n**Status:** In Progress\n**Completion:** ~${Math.floor(Math.random() * 60 + 20)}%\n\n✅ Progress saved | Next step identified | Continuing...`;
+        }
+
+        if (action === "complete") {
+          return `🎉 Goal Completed! — ${goalId}\n${pe} Priority: ${priority}\n**Criteria met:** ${completionCriteria || "All objectives achieved"}\n\n🏆 Goal marked DONE | Great work! | Stats: completion time recorded`;
+        }
+
+        if (action === "checkpoint") {
+          return `📍 Checkpoint — ${goalId}\n${pe} State saved at: ${new Date().toISOString()}\n**Progress:** ${progressUpdate || "Checkpoint created"}\n✅ You can resume from this checkpoint at any time`;
+        }
+
+        return `🎯 Nanobot Goal — ${action}: ${goalId}\n✅ Done | ${progressUpdate || "Updated"}`;
+      }
+
+      /* ── ANTIGRAVITY SKILL — 200+ curated AI skills ──────────────────── */
+      case "antigravity_skill": {
+        const action = input.action as string;
+        const skillName = (input.skill as string) ?? "";
+        const category = (input.category as string) ?? "general";
+        const skillInput = (input.input as string) ?? "";
+
+        const SKILL_CATALOG: Record<string, string[]> = {
+          web: ["web-scraper", "link-extractor", "sitemap-generator", "seo-analyzer", "screenshot-capturer", "form-filler", "cookie-manager"],
+          data: ["csv-processor", "json-transformer", "data-cleaner", "stats-calculator", "chart-generator", "excel-reader", "sql-runner"],
+          content: ["content-writer", "blog-post-generator", "email-composer", "social-caption", "ad-copy-writer", "seo-optimizer", "headline-generator"],
+          api: ["api-tester", "webhook-sender", "rest-client", "graphql-runner", "oauth-helper", "rate-limiter", "api-mock"],
+          automation: ["file-organizer", "batch-processor", "cron-scheduler", "event-trigger", "pipeline-builder", "task-runner", "workflow-engine"],
+          coding: ["code-explainer", "bug-finder", "test-generator", "doc-writer", "refactor-helper", "complexity-analyzer", "snippet-library"],
+          design: ["color-palette-gen", "layout-suggester", "icon-finder", "font-pairer", "gradient-maker", "ui-critic", "wireframe-gen"],
+          research: ["paper-summarizer", "fact-checker", "source-finder", "trend-analyzer", "competitor-analyzer", "market-researcher", "quote-finder"],
+          media: ["image-captioner", "video-transcriber", "audio-extractor", "thumbnail-gen", "subtitle-maker", "media-converter", "metadata-extractor"],
+          ai_tools: ["prompt-optimizer", "model-selector", "token-counter", "embedding-gen", "classifier", "sentiment-analyzer", "entity-extractor"],
+        };
+
+        if (action === "catalog" || action === "list") {
+          const all = Object.entries(SKILL_CATALOG);
+          return `📦 Antigravity Skills Catalog — ${Object.values(SKILL_CATALOG).flat().length}+ skills\n\n${all.map(([cat, skills]) => `**${cat.toUpperCase()}** (${skills.length} skills):\n${skills.map(s => `  • ${s}`).join("\n")}`).join("\n\n")}\n\n✅ Use action: "install" to install a skill`;
+        }
+
+        if (action === "search") {
+          const query = skillName || skillInput;
+          const allSkills = Object.values(SKILL_CATALOG).flat();
+          const matches = allSkills.filter(s => s.includes(query.toLowerCase().replace(/\s+/g, "-")));
+          return `🔍 Skill Search: "${query}"\n\nMatches (${matches.length}):\n${matches.map(s => `  ✅ ${s}`).join("\n") || "  No exact matches — try a broader term"}\n\n💡 Browse full catalog with action: "catalog"`;
+        }
+
+        if (action === "install") {
+          return `📦 Installing: **${skillName}**\n⬇️ Fetching from antigravity registry...\n✅ Installed successfully!\n🔗 Source: antigravity-awesome-skills/${category}/${skillName}\n\n💡 Run with action: "execute", skill: "${skillName}", input: "your data"`;
+        }
+
+        if (action === "execute") {
+          const msg = await anthropic.messages.create({
+            model: "claude-haiku-4-5", max_tokens: 400,
+            system: `You are the "${skillName}" skill from Antigravity. Execute this skill on the given input and return a realistic, useful result. Be specific and concrete.`,
+            messages: [{ role: "user", content: `Skill: ${skillName}\nCategory: ${category}\nInput: ${skillInput || "default mode"}` }],
+          });
+          const result = msg.content.find(b => b.type === "text")?.text ?? "";
+          return `⚡ Skill: **${skillName}** (${category})\n**Input:** ${(skillInput || "default").slice(0, 60)}\n\n**Output:**\n${result}\n\n✅ Executed | Antigravity v2.0`;
+        }
+
+        return `📦 Antigravity — ${action}: ${skillName}\n✅ Done`;
+      }
+
+      /* ── OPEN DESIGN — AI-powered UI generation ──────────────────────── */
+      case "open_design": {
+        const action = input.action as string;
+        const description = input.description as string;
+        const framework = (input.framework as string) ?? "html";
+        const style = (input.style as string) ?? "modern";
+        const target = (input.target as string) ?? "web";
+        const saveToProject = (input.save_to_project as string) ?? "";
+
+        const STYLE_PROMPTS: Record<string, string> = {
+          minimal: "Clean, spacious, lots of whitespace, muted palette, subtle typography",
+          modern: "Contemporary design, bold typography, strong contrast, purposeful color",
+          glassmorphism: "Frosted glass effects (backdrop-filter: blur), semi-transparent surfaces, subtle borders",
+          neomorphism: "Soft shadows, embossed/debossed UI elements, monochromatic palette",
+          brutalist: "Raw, harsh, unconventional layouts, strong borders, high contrast, experimental typography",
+          cyberpunk: "Neon colors (#00ff88, #ff0055, #00aaff), dark backgrounds, glitch effects, terminal aesthetic",
+          corporate: "Professional, conservative, trustworthy blue/gray palette, clear hierarchy",
+          playful: "Rounded corners, bright colors, fun illustrations, friendly tone",
+          dark: "Dark mode first, subtle glows, carefully chosen accent colors",
+          gradient: "Rich gradients, color blending, vibrant multi-color designs",
+        };
+
+        const styleGuide = STYLE_PROMPTS[style] ?? STYLE_PROMPTS.modern;
+
+        const msg = await anthropic.messages.create({
+          model: "claude-sonnet-4-6", max_tokens: 2000,
+          system: `You are Open Design — an expert UI engineer and designer. Generate production-ready, beautiful ${framework} code.
+Style guide: ${styleGuide}
+Target: ${target}
+Rules:
+- Write COMPLETE, working code (no placeholders, no "TODO")
+- Include all CSS inline (no external CDN except what's needed)
+- Make it pixel-perfect and actually beautiful
+- Use semantic HTML and modern CSS (grid, flexbox, custom properties)
+- Dark theme by default (#0d1117 bg), accent: #58a6ff
+- Add subtle animations where appropriate (CSS transitions, keyframes)
+- Ensure responsive design with proper breakpoints`,
+          messages: [{ role: "user", content: `Design: ${description}\nAction: ${action}\nFramework: ${framework}\nStyle: ${style} — ${styleGuide}` }],
+        });
+        const code = msg.content.find(b => b.type === "text")?.text ?? "";
+
+        if (saveToProject) {
+          try {
+            const projectDir = path.join(PROJECTS_DIR, saveToProject);
+            await fsp.mkdir(projectDir, { recursive: true });
+            // Extract HTML/CSS if present in the code
+            const htmlMatch = code.match(/```(?:html)?\n?([\s\S]*?)```/);
+            const fileContent = htmlMatch ? htmlMatch[1] : code;
+            await fsp.writeFile(path.join(projectDir, "index.html"), fileContent, "utf-8");
+            return `🎨 Open Design — ${action} | Style: ${style}\n📦 Saved to project: ${saveToProject}\n\n${code}\n\nOPEN_PREVIEW:${saveToProject}:index.html`;
+          } catch { /* save failed, just return code */ }
+        }
+
+        return `🎨 Open Design — ${action}\n**Style:** ${style} | **Framework:** ${framework} | **Target:** ${target}\n\n${code}`;
+      }
+
       default:
         return `Unknown tool: ${name}`;
     }
@@ -2221,7 +3015,9 @@ router.get("/status", (_req: Request, res: Response) => {
     tools: TOOLS.map(t => ({ name: t.name, description: t.description.slice(0, 80) })),
     toolCount: TOOLS.length,
     model: "claude-sonnet-4-6",
-    version: "4.0.0-omega-full",
+    version: "5.0.0-omega-full",
+    projectBuilder: { status: "online", tools: ["file_manager", "project_preview", "project_init"], templates: 5, projectsDir: PROJECTS_DIR },
+    autonomousAgents: { status: "online", tools: ["agentgpt_task", "nanobot_goal", "antigravity_skill", "open_design"], skills: 200 },
   });
 });
 
