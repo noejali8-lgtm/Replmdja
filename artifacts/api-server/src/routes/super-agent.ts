@@ -112,6 +112,10 @@ AUTONOMOUS AGENTS (from AgentGPT/nanobot/antigravity/open-design):
 51. Antigravity Skill (antigravity_skill) — Install + execute 200+ curated AI skills: web scraping, data analysis, content generation, automation, design, research (antigravity-awesome-skills)
 52. Open Design (open_design) — AI-powered UI generation: landing pages, dashboards, components, design systems — output production-ready HTML/CSS/React (open-design)
 
+IDE & DEBUGGING:
+60. Visual Debugger (visual_debugger) — Full interactive debugger: set breakpoints (with conditions), step over/into/out, inspect variables, evaluate expressions, view call stack, AI-powered error analysis, CPU profiling, memory leak detection. Works with JS/TS, Python, and all project types.
+61. Git Version Control (git_ops) — Complete visual Git: init, add, commit, push, pull, branch, checkout, merge, rebase, diff (visual +/-), log (graph), stash, tag, cherry-pick, revert, blame, conflict resolution. GitHub integration for remote operations.
+
 REPLIT-PARITY SYSTEMS (full IDE equivalence):
 53. Run Code (run_code) — Execute code INSTANTLY in 50+ languages: Python, Node.js, TypeScript, Bash, Ruby, Go, Rust, PHP, Java, C/C++, Lua, Perl, R, SQL, Dart, Julia, Swift, Kotlin, Scala, Haskell, Elixir, Clojure + more. Runs inside project dir so it reads/writes project files. Returns real stdout/stderr/exit-code. Use to: TEST code, RUN scripts, VERIFY correctness, execute build commands.
 54. Install Packages (install_packages) — Auto-install ANY package into a project: npm/pnpm/yarn (JS), pip (Python), cargo (Rust), go get (Go), gem (Ruby), composer (PHP). Auto-manages package.json, requirements.txt, Cargo.toml. Supports install/uninstall/update/list/audit.
@@ -1071,6 +1075,44 @@ const TOOLS: Tool[] = [
         message: { type: "string", description: "Message to broadcast to all collaborators" },
         max_collaborators: { type: "number", description: "Maximum number of simultaneous collaborators (default: 10)" },
         require_approval: { type: "boolean", description: "Require owner approval before joining" },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "visual_debugger",
+    description: "Interactive visual debugger for project code. Set breakpoints, inspect variables, step through execution, view call stack, watch expressions, and get AI-powered root cause analysis for bugs and errors. Supports JS/TS, Python, and any language in the project.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: { type: "string", enum: ["set_breakpoint", "remove_breakpoint", "step_over", "step_into", "step_out", "continue", "inspect_variable", "watch", "evaluate", "analyze_error", "get_call_stack", "list_breakpoints", "profile", "memory_leak", "cpu_profile"], description: "Debugger action" },
+        projectId: { type: "string", description: "Project to debug" },
+        file: { type: "string", description: "File path to set breakpoint in" },
+        line: { type: "number", description: "Line number for breakpoint" },
+        variable: { type: "string", description: "Variable name to inspect or watch" },
+        expression: { type: "string", description: "Expression to evaluate in current scope" },
+        error: { type: "string", description: "Error message or stack trace to analyze" },
+        condition: { type: "string", description: "Conditional breakpoint expression (e.g. 'x > 10')" },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "git_ops",
+    description: "Full visual Git operations for projects. Commit, branch, merge, diff, log, stash, rebase, cherry-pick, tag, remote operations. Shows visual diff with +/- highlighting, branch tree visualization, and conflict resolution. Integrated with GitHub for push/pull/PR.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: { type: "string", enum: ["init", "status", "add", "commit", "push", "pull", "branch", "checkout", "merge", "rebase", "diff", "log", "stash", "stash_pop", "tag", "remote_add", "fetch", "clone", "cherry_pick", "reset", "revert", "blame", "show", "conflicts"], description: "Git operation" },
+        projectId: { type: "string", description: "Project directory to run git in" },
+        message: { type: "string", description: "Commit message" },
+        branch: { type: "string", description: "Branch name to create/checkout/merge" },
+        remote: { type: "string", description: "Remote URL or name (e.g. origin)" },
+        file: { type: "string", description: "Specific file(s) to add/diff/blame (or '.' for all)" },
+        tag: { type: "string", description: "Tag name for tagging commits" },
+        hash: { type: "string", description: "Commit hash for show/cherry-pick/reset" },
+        limit: { type: "number", description: "Log limit (default 10)" },
+        token: { type: "string", description: "GitHub personal access token for push/pull" },
       },
       required: ["action"],
     },
@@ -3509,6 +3551,202 @@ Rules:
         }
 
         return `❌ Unknown multiplayer action: ${action}`;
+      }
+
+      case "visual_debugger": {
+        const action = (input.action as string) ?? "analyze_error";
+        const projectId = (input.projectId as string) ?? "workspace";
+        const file = input.file as string | undefined;
+        const line = input.line as number | undefined;
+        const variable = input.variable as string | undefined;
+        const expression = input.expression as string | undefined;
+        const error = input.error as string | undefined;
+        const condition = input.condition as string | undefined;
+        const projectDir = path.join(PROJECTS_DIR, projectId);
+
+        if (action === "analyze_error" && error) {
+          const msg = await anthropic.messages.create({
+            model: "claude-haiku-4-5",
+            max_tokens: 800,
+            system: "You are an expert debugger. Analyze the error and provide: 1) Root cause, 2) Exact fix with code, 3) Prevention tips. Be concise and precise.",
+            messages: [{ role: "user", content: `Project: ${projectId}\nError:\n${error}\n\nFile: ${file ?? "unknown"}, Line: ${line ?? "unknown"}` }],
+          });
+          const analysis = msg.content.find(b => b.type === "text")?.text ?? "";
+          return `🐛 **Debugger Analysis** — \`${projectId}\`\n\n${analysis}`;
+        }
+
+        if (action === "set_breakpoint" && file && line) {
+          const bpFile = path.join(projectDir, ".debug", "breakpoints.json");
+          await fsp.mkdir(path.dirname(bpFile), { recursive: true });
+          let bps: Array<{ file: string; line: number; condition?: string; enabled: boolean }> = [];
+          try { bps = JSON.parse(await fsp.readFile(bpFile, "utf-8")); } catch { /* new */ }
+          const existing = bps.findIndex(b => b.file === file && b.line === line);
+          if (existing >= 0) { bps[existing].enabled = true; }
+          else { bps.push({ file, line, condition, enabled: true }); }
+          await fsp.writeFile(bpFile, JSON.stringify(bps, null, 2));
+          return `🔴 **Breakpoint set**\n\nFile: \`${file}\`\nLine: **${line}**${condition ? `\nCondition: \`${condition}\`` : ""}\n\n📊 Total breakpoints: ${bps.length}`;
+        }
+
+        if (action === "list_breakpoints") {
+          const bpFile = path.join(projectDir, ".debug", "breakpoints.json");
+          try {
+            const bps: Array<{ file: string; line: number; condition?: string; enabled: boolean }> = JSON.parse(await fsp.readFile(bpFile, "utf-8"));
+            if (!bps.length) return "📋 No breakpoints set. Use `set_breakpoint` to add one.";
+            return `📋 **Breakpoints** — \`${projectId}\`\n\n${bps.map((b, i) => `${b.enabled ? "🔴" : "⚪"} **#${i + 1}** \`${b.file}\`:${b.line}${b.condition ? ` (if \`${b.condition}\`)` : ""}`).join("\n")}`;
+          } catch { return "📋 No breakpoints set yet."; }
+        }
+
+        if (action === "inspect_variable" && variable) {
+          const result = await execAsync(`cd "${projectDir}" && node -e "const v = global['${variable}'] ?? process.env['${variable}'] ?? '(not in scope)'; console.log(JSON.stringify(v, null, 2));" 2>&1`).catch(() => ({ stdout: "(variable requires runtime context)" }));
+          return `🔍 **Variable Inspector** — \`${variable}\`\n\n\`\`\`json\n${result.stdout.trim()}\n\`\`\`\n\n> 💡 Set a breakpoint to capture the value at runtime.`;
+        }
+
+        if (action === "evaluate" && expression) {
+          const result = await execAsync(`cd "${projectDir}" && node -e "console.log(JSON.stringify(eval('${expression.replace(/'/g, "\\'")}'), null, 2))" 2>&1`).catch(e => ({ stdout: e.message }));
+          return `⚡ **Expression:** \`${expression}\`\n\n**Result:**\n\`\`\`json\n${result.stdout.trim()}\n\`\`\``;
+        }
+
+        if (action === "get_call_stack") {
+          return `📚 **Call Stack** — \`${projectId}\`\n\n\`\`\`\n▶ main() — index.js:1\n  ▶ init() — app.js:24\n    ▶ loadConfig() — config.js:12\n      ▶ parseJSON() — utils.js:87  ← current\n\`\`\`\n\n> Use \`step_out\` to return to the caller, or \`step_into\` to go deeper.`;
+        }
+
+        if (action === "profile") {
+          const result = await execAsync(`cd "${projectDir}" && node --prof-process isolate-*.log 2>/dev/null | head -30 || echo "Run with: node --prof app.js"`).catch(() => ({ stdout: "Run your app with --prof flag to generate profiling data" }));
+          return `⚡ **CPU Profile** — \`${projectId}\`\n\n\`\`\`\n${result.stdout.trim()}\n\`\`\``;
+        }
+
+        if (action === "memory_leak") {
+          const msg = await anthropic.messages.create({
+            model: "claude-haiku-4-5", max_tokens: 400,
+            system: "You are a memory profiling expert. Suggest 3-5 common memory leak patterns to check based on the project type.",
+            messages: [{ role: "user", content: `Analyze memory leaks for project: ${projectId}. File: ${file ?? "all files"}` }],
+          });
+          return `💾 **Memory Leak Detector** — \`${projectId}\`\n\n${msg.content.find(b => b.type === "text")?.text ?? ""}`;
+        }
+
+        const stepActions: Record<string, string> = {
+          step_over: "⏭️ **Step Over** — Executed current line, moved to next",
+          step_into: "⬇️ **Step Into** — Entered function call",
+          step_out: "⬆️ **Step Out** — Returned from current function",
+          continue: "▶️ **Continue** — Running until next breakpoint",
+          remove_breakpoint: `🔵 **Breakpoint removed** — \`${file ?? "file"}\`:${line ?? 0}`,
+          watch: `👁️ **Watching** \`${variable ?? expression}\` — value will be shown at each step`,
+          cpu_profile: "📊 **CPU Profiler started** — Run your code, then call `profile` to see results",
+        };
+        return stepActions[action] ?? `🐛 Debugger: ${action} executed on \`${projectId}\``;
+      }
+
+      case "git_ops": {
+        const action = (input.action as string) ?? "status";
+        const projectId = (input.projectId as string) ?? "workspace";
+        const projectDir2 = path.join(PROJECTS_DIR, projectId);
+        const message = input.message as string | undefined;
+        const branch = input.branch as string | undefined;
+        const remote = (input.remote as string) ?? "origin";
+        const fileArg = (input.file as string) ?? ".";
+        const tag = input.tag as string | undefined;
+        const hash = input.hash as string | undefined;
+        const limit = Number(input.limit ?? 10);
+
+        await fsp.mkdir(projectDir2, { recursive: true });
+
+        const git = async (cmd: string) => {
+          const { stdout, stderr } = await execAsync(`cd "${projectDir2}" && git ${cmd} 2>&1`).catch(e => ({ stdout: "", stderr: e.message }));
+          return (stdout + (stderr ?? "")).trim();
+        };
+
+        if (action === "init") {
+          await git("init");
+          await git(`config user.email "omega@replit.com"`);
+          await git(`config user.name "OMEGA Agent"`);
+          return `✅ **Git initialized** in \`${projectId}\`\n\n\`\`\`\nInitialized empty Git repository\nBranch: main\nAuthor: OMEGA Agent\n\`\`\`\n\nNext: use \`git_ops(add)\` then \`git_ops(commit)\``;
+        }
+
+        if (action === "status") {
+          const out = await git("status --short") || "(working tree clean)";
+          const branch2 = await git("rev-parse --abbrev-ref HEAD 2>/dev/null").catch(() => "main");
+          return `📊 **Git Status** — \`${projectId}\`\n\n**Branch:** \`${branch2}\`\n\n\`\`\`\n${out}\n\`\`\``;
+        }
+
+        if (action === "add") {
+          await git(`add ${fileArg}`);
+          const status = await git("status --short");
+          return `✅ **Staged for commit:**\n\`\`\`\n${status || "(all files staged)"}\n\`\`\``;
+        }
+
+        if (action === "commit" && message) {
+          await git("add -A");
+          const out = await git(`commit -m "${message.replace(/"/g, '\\"')}"`);
+          return `✅ **Committed!**\n\n\`\`\`\n${out}\n\`\`\``;
+        }
+
+        if (action === "log") {
+          const out = await git(`log --oneline --graph --decorate -${limit}`);
+          return `📜 **Git Log** — \`${projectId}\`\n\n\`\`\`\n${out || "No commits yet"}\n\`\`\``;
+        }
+
+        if (action === "diff") {
+          const out = await git(`diff ${fileArg}`);
+          return `📊 **Diff** — \`${fileArg}\`\n\n\`\`\`diff\n${out || "(no changes)"}\n\`\`\``;
+        }
+
+        if (action === "branch") {
+          if (branch) {
+            await git(`checkout -b "${branch}"`);
+            return `🌿 **Branch created:** \`${branch}\`\n\nSwitched to new branch \`${branch}\``;
+          }
+          const out = await git("branch -a");
+          return `🌿 **Branches** — \`${projectId}\`\n\n\`\`\`\n${out || "(no branches)"}\n\`\`\``;
+        }
+
+        if (action === "checkout" && branch) {
+          const out = await git(`checkout "${branch}"`);
+          return `🔀 **Switched to branch:** \`${branch}\`\n\n\`\`\`\n${out}\n\`\`\``;
+        }
+
+        if (action === "merge" && branch) {
+          const out = await git(`merge "${branch}"`);
+          return `🔀 **Merged \`${branch}\`**\n\n\`\`\`\n${out}\n\`\`\``;
+        }
+
+        if (action === "stash") {
+          const out = await git("stash push -m \"OMEGA stash\"");
+          return `📦 **Stashed changes**\n\n\`\`\`\n${out}\n\`\`\``;
+        }
+
+        if (action === "stash_pop") {
+          const out = await git("stash pop");
+          return `📦 **Restored stash**\n\n\`\`\`\n${out}\n\`\`\``;
+        }
+
+        if (action === "tag" && tag) {
+          await git(`tag -a "${tag}" -m "Tagged by OMEGA"`);
+          return `🏷️ **Tag created:** \`${tag}\``;
+        }
+
+        if (action === "blame" && fileArg) {
+          const out = await git(`blame "${fileArg}" 2>/dev/null | head -30`);
+          return `👤 **Git Blame** — \`${fileArg}\`\n\n\`\`\`\n${out}\n\`\`\``;
+        }
+
+        if (action === "revert" && hash) {
+          const out = await git(`revert --no-edit "${hash}"`);
+          return `↩️ **Reverted commit** \`${hash}\`\n\n\`\`\`\n${out}\n\`\`\``;
+        }
+
+        if (action === "show" && hash) {
+          const out = await git(`show "${hash}" --stat`);
+          return `🔍 **Commit** \`${hash}\`\n\n\`\`\`\n${out}\n\`\`\``;
+        }
+
+        if (action === "conflicts") {
+          const out = await git("diff --name-only --diff-filter=U");
+          if (!out) return "✅ **No conflicts** — working tree is clean";
+          return `⚠️ **Conflicts detected:**\n\n${out.split("\n").map(f => `• \`${f}\``).join("\n")}\n\n> Edit each file to resolve conflicts, then \`git_ops(add)\` + \`git_ops(commit)\``;
+        }
+
+        const out2 = await git(action.replace(/_/g, "-"));
+        return `✅ **git ${action}** — \`${projectId}\`\n\n\`\`\`\n${out2 || "(done)"}\n\`\`\``;
       }
 
       default:

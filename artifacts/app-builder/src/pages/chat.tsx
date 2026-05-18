@@ -5941,6 +5941,9 @@ export default function Chat() {
                   replit_db: `🗄️ DB — ${String(tcInput?.action ?? "get")} ${tcInput?.key ? `\`${String(tcInput.key)}\`` : ""} [${String(tcInput?.projectId ?? "")}]`,
                   terminal_exec: `💻 Terminal — \`${String(tcInput?.command ?? "").slice(0, 50)}\`${tcInput?.projectId ? ` [${String(tcInput.projectId)}]` : ""}`,
                   multiplayer_collab: `👥 Multiplayer — ${String(tcInput?.action ?? "create_session")}${tcInput?.projectId ? ` \`${String(tcInput.projectId)}\`` : ""}${tcInput?.username ? ` → ${String(tcInput.username)}` : ""}`,
+                  /* ── IDE & Debugging (60–61) ── */
+                  visual_debugger: `🐛 Debugger — ${String(tcInput?.action ?? "analyze")}${tcInput?.file ? ` \`${String(tcInput.file)}\`` : ""}${tcInput?.line ? `:${String(tcInput.line)}` : ""}${tcInput?.variable ? ` → \`${String(tcInput.variable)}\`` : ""}${tcInput?.error ? ` ⚠️` : ""}`,
+                  git_ops: `🌿 Git — ${String(tcInput?.action ?? "status")}${tcInput?.branch ? ` \`${String(tcInput.branch)}\`` : ""}${tcInput?.message ? ` "${String(tcInput.message).slice(0, 35)}"` : ""}${tcInput?.file && tcInput.file !== "." ? ` \`${String(tcInput.file)}\`` : ""}`,
                 };
                 const label = TOOL_LABELS[data.tool_call.name] ?? `🔧 ${data.tool_call.name}`;
                 setOmegaLogs(prev => [...prev, { id: logId, tool: data.tool_call.name, label, status: "running", time: Date.now() }]);
